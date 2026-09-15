@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="mn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="description" content="HUS NU төлөвлөлтийн талбайг интерактив газрын зураг дээр харах веб." />
+    <title>HUS NU · Area Data</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307111f'/%3E%3Cpath d='M7 9h18v14H7z' fill='none' stroke='%2339d9ff' stroke-width='2'/%3E%3Cpath d='M11 13l4-2 6 3-2 6-7 1z' fill='%2339d9ff' fill-opacity='.35' stroke='%23fff'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="map-stage" aria-label="HUS NU талбайн газрын зураг">
+        <div id="map"></div>
+        <div id="loading" class="loading" role="status">
+          <span class="spinner" aria-hidden="true"></span>
+          Талбайн мэдээлэл уншиж байна…
+        </div>
+        <div id="error" class="error-card" role="alert" hidden>
+          <strong>Газрын зураг нээгдсэнгүй</strong>
+          <span id="error-message">Өгөгдлийг дахин ачаална уу.</span>
+          <button id="retry" type="button">Дахин оролдох</button>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="Талбайн мэдээлэл">
+        <header class="brand-row">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><path d="M5 8.5h22v15H5z"/><path d="m10 13 5-2 7 3.4-2.6 6.1-8.8.8z"/></svg>
+          </span>
+          <div>
+            <p class="eyebrow">DRONE TRACK · AREA DATA</p>
+            <h1>HUS NU төлөвлөлтийн талбай</h1>
+          </div>
+        </header>
+
+        <div class="summary-grid">
+          <div>
+            <span>Объект</span>
+            <strong id="feature-count">—</strong>
+          </div>
+          <div>
+            <span>Нийт талбай</span>
+            <strong id="total-area">—</strong>
+          </div>
+        </div>
+
+        <section class="layer-card">
+          <div class="layer-copy">
+            <span class="swatch" aria-hidden="true"></span>
+            <div>
+              <strong>hus_nu_plan</strong>
+              <span>Төлөвлөлтийн хил</span>
+            </div>
+          </div>
+          <label class="switch" title="Давхаргыг харуулах эсвэл нуух">
+            <input id="layer-toggle" type="checkbox" checked />
+            <span aria-hidden="true"></span>
+            <span class="sr-only">Төлөвлөлтийн хилийг харуулах</span>
+          </label>
+        </section>
+
+        <dl class="details">
+          <div><dt>Эх файл</dt><dd>HUS_NU_Mag_plan.gpkg</dd></div>
+          <div><dt>Эх координат</dt><dd>EPSG:32649 · UTM 49N</dd></div>
+          <div><dt>Веб координат</dt><dd>WGS 84</dd></div>
+        </dl>
+
+        <button id="fit-map" class="primary-action" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+          Талбайд төвлөрүүлэх
+        </button>
+
+        <p class="hint">Талбай дээр дарж дэлгэрэнгүй хэмжээг харна уу.</p>
+      </aside>
+
+      <div class="map-credit">© OpenStreetMap contributors</div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

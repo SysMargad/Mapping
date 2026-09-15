@@ -1,0 +1,209 @@
+"""Export polygon layers from a GeoPackage to browser-ready GeoJSON.
+
+This intentionally uses only Python's standard library so it can run on a clean
+Windows machine without installing GDAL. It supports Polygon/MultiPolygon data
+stored in WGS 84 or a WGS 84 UTM zone (EPSG:326xx / EPSG:327xx).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sqlite3
+import struct
+from pathlib import Path
+
+
+def read_uint(data: bytes, offset: int, size: int, little: bool) -> tuple[int, int]:
+    fmt = ("<" if little else ">") + ("I" if size == 4 else "Q")
+    return struct.unpack_from(fmt, data, offset)[0], offset + size
+
+
+def read_double(data: bytes, offset: int, little: bool) -> tuple[float, int]:
+    return struct.unpack_from(("<" if little else ">") + "d", data, offset)[0], offset + 8
+
+
+def read_point(data: bytes, offset: int, little: bool, dims: int) -> tuple[list[float], int]:
+    values = []
+    for _ in range(dims):
+        value, offset = read_double(data, offset, little)
+        values.append(value)
+    return values[:2], offset
+
+
+def read_wkb(data: bytes, offset: int = 0) -> tuple[dict, int]:
+    little = data[offset] == 1
+    offset += 1
+    raw_type, offset = read_uint(data, offset, 4, little)
+
+    # Handle OGC 1000/2000/3000 dimensions and EWKB Z/M flags.
+    base_type = raw_type & 0xFF
+    dims = 2
+    if raw_type >= 3000 and raw_type < 4000:
+        base_type, dims = raw_type - 3000, 4
+    elif raw_type >= 2000 and raw_type < 3000:
+        base_type, dims = raw_type - 2000, 3
+    elif raw_type >= 1000 and raw_type < 2000:
+        base_type, dims = raw_type - 1000, 3
+    elif raw_type & 0x80000000:
+        dims += 1
+    if raw_type & 0x40000000:
+        dims += 1
+
+    if base_type == 3:  # Polygon
+        ring_count, offset = read_uint(data, offset, 4, little)
+        rings = []
+        for _ in range(ring_count):
+            point_count, offset = read_uint(data, offset, 4, little)
+            ring = []
+            for _ in range(point_count):
+                point, offset = read_point(data, offset, little, dims)
+                ring.append(point)
+            rings.append(ring)
+        return {"type": "Polygon", "coordinates": rings}, offset
+
+    if base_type == 6:  # MultiPolygon
+        polygon_count, offset = read_uint(data, offset, 4, little)
+        polygons = []
+        for _ in range(polygon_count):
+            polygon, offset = read_wkb(data, offset)
+            if polygon["type"] != "Polygon":
+                raise ValueError("MultiPolygon contained a non-polygon geometry")
+            polygons.append(polygon["coordinates"])
+        return {"type": "MultiPolygon", "coordinates": polygons}, offset
+
+    raise ValueError(f"Unsupported WKB geometry type: {base_type}")
+
+
+def unpack_gpkg_geometry(blob: bytes) -> tuple[int, dict]:
+    if blob[:2] != b"GP":
+        raise ValueError("Not a GeoPackage geometry blob")
+    flags = blob[3]
+    little = bool(flags & 1)
+    srs_id = struct.unpack_from("<i" if little else ">i", blob, 4)[0]
+    envelope_code = (flags >> 1) & 7
+    envelope_doubles = {0: 0, 1: 4, 2: 6, 3: 6, 4: 8}.get(envelope_code)
+    if envelope_doubles is None:
+        raise ValueError(f"Unsupported GeoPackage envelope code: {envelope_code}")
+    geometry, _ = read_wkb(blob, 8 + envelope_doubles * 8)
+    return srs_id, geometry
+
+
+def utm_to_wgs84(easting: float, northing: float, zone: int, northern: bool) -> list[float]:
+    # USGS Bulletin 1532 inverse Transverse Mercator equations.
+    a = 6378137.0
+    ecc_sq = 0.0066943799901413165
+    ecc_prime_sq = ecc_sq / (1 - ecc_sq)
+    k0 = 0.9996
+    x = easting - 500000.0
+    y = northing if northern else northing - 10000000.0
+    m = y / k0
+    mu = m / (a * (1 - ecc_sq / 4 - 3 * ecc_sq**2 / 64 - 5 * ecc_sq**3 / 256))
+    e1 = (1 - math.sqrt(1 - ecc_sq)) / (1 + math.sqrt(1 - ecc_sq))
+    phi1 = (
+        mu
+        + (3 * e1 / 2 - 27 * e1**3 / 32) * math.sin(2 * mu)
+        + (21 * e1**2 / 16 - 55 * e1**4 / 32) * math.sin(4 * mu)
+        + (151 * e1**3 / 96) * math.sin(6 * mu)
+        + (1097 * e1**4 / 512) * math.sin(8 * mu)
+    )
+    n1 = a / math.sqrt(1 - ecc_sq * math.sin(phi1) ** 2)
+    t1 = math.tan(phi1) ** 2
+    c1 = ecc_prime_sq * math.cos(phi1) ** 2
+    r1 = a * (1 - ecc_sq) / (1 - ecc_sq * math.sin(phi1) ** 2) ** 1.5
+    d = x / (n1 * k0)
+    lat = phi1 - (n1 * math.tan(phi1) / r1) * (
+        d**2 / 2
+        - (5 + 3 * t1 + 10 * c1 - 4 * c1**2 - 9 * ecc_prime_sq) * d**4 / 24
+        + (61 + 90 * t1 + 298 * c1 + 45 * t1**2 - 252 * ecc_prime_sq - 3 * c1**2) * d**6 / 720
+    )
+    lon = (
+        d
+        - (1 + 2 * t1 + c1) * d**3 / 6
+        + (5 - 2 * c1 + 28 * t1 - 3 * c1**2 + 8 * ecc_prime_sq + 24 * t1**2) * d**5 / 120
+    ) / math.cos(phi1)
+    lon_origin = math.radians((zone - 1) * 6 - 180 + 3)
+    return [round(math.degrees(lon_origin + lon), 8), round(math.degrees(lat), 8)]
+
+
+def transform_geometry(geometry: dict, srs_id: int) -> dict:
+    if srs_id in (4326, 4979):
+        return geometry
+    if 32601 <= srs_id <= 32660:
+        zone, northern = srs_id - 32600, True
+    elif 32701 <= srs_id <= 32760:
+        zone, northern = srs_id - 32700, False
+    else:
+        raise ValueError(f"Unsupported CRS EPSG:{srs_id}; expected WGS 84 or WGS 84 / UTM")
+
+    def point(value):
+        if value and isinstance(value[0], (int, float)):
+            return utm_to_wgs84(value[0], value[1], zone, northern)
+        return [point(item) for item in value]
+
+    return {"type": geometry["type"], "coordinates": point(geometry["coordinates"])}
+
+
+def ring_area(ring: list[list[float]]) -> float:
+    return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1]))) / 2
+
+
+def geometry_area(geometry: dict) -> float | None:
+    polygons = geometry["coordinates"] if geometry["type"] == "MultiPolygon" else [geometry["coordinates"]]
+    return sum(ring_area(poly[0]) - sum(ring_area(hole) for hole in poly[1:]) for poly in polygons)
+
+
+def export(source: Path, output: Path, layer: str | None) -> None:
+    uri = f"file:{source.as_posix()}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        layers = connection.execute(
+            "SELECT c.table_name, g.column_name, g.geometry_type_name, g.srs_id "
+            "FROM gpkg_contents c JOIN gpkg_geometry_columns g ON c.table_name = g.table_name "
+            "WHERE c.data_type = 'features'"
+        ).fetchall()
+        selected = next((row for row in layers if row["table_name"] == layer), None) if layer else (layers[0] if len(layers) == 1 else None)
+        if selected is None:
+            names = ", ".join(row["table_name"] for row in layers) or "none"
+            raise ValueError(f"Choose a layer with --layer. Available layers: {names}")
+
+        table = selected["table_name"].replace('"', '""')
+        geom_column = selected["column_name"]
+        columns = [row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')]
+        property_columns = [column for column in columns if column != geom_column]
+        select_columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in columns)
+        features = []
+        for row in connection.execute(f'SELECT {select_columns} FROM "{table}"'):
+            srs_id, source_geometry = unpack_gpkg_geometry(row[geom_column])
+            properties = {column: row[column] for column in property_columns}
+            properties["layer"] = selected["table_name"]
+            properties["source_epsg"] = srs_id
+            properties["area_m2"] = round(geometry_area(source_geometry), 2)
+            features.append(
+                {
+                    "type": "Feature",
+                    "id": properties.get("fid"),
+                    "properties": properties,
+                    "geometry": transform_geometry(source_geometry, srs_id),
+                }
+            )
+    finally:
+        connection.close()
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps({"type": "FeatureCollection", "name": selected["table_name"], "features": features}, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print(f"Exported {len(features)} feature(s) from {selected['table_name']} to {output}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", type=Path)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--layer")
+    args = parser.parse_args()
+    export(args.source, args.output, args.layer)
