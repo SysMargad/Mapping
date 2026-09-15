@@ -7,8 +7,13 @@
 GeoPackage файл өөрчлөгдвөл төслийн хавтаснаас дараах командыг ажиллуулна:
 
 ```powershell
-python .\tools\export_gpkg.py "C:\Users\margad.p\Desktop\Drone Track\Area Data\HUS_NU_Mag_plan.gpkg" .\dist\data\area.geojson
+& "C:\Users\margad.p\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" `
+  .\tools\export_gpkg.py `
+  "C:\Users\margad.p\Desktop\Drone Track\Area Data\HUS_NU_Mag_plan.gpkg" `
+  .\dist\data\area.geojson
 ```
+
+Хөрвүүлэгч нь нэмэлт сан шаарддаггүй, Python-ийн стандарт сангаар ажиллана.
 
 ## Локал харах
 

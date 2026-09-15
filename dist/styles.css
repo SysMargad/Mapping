@@ -89,6 +89,7 @@ h1 { margin: 0; font-size: clamp(21px, 2vw, 27px); line-height: 1.16; letter-spa
   border: 1px solid var(--line); background: rgba(7,17,31,.94); box-shadow: var(--shadow); backdrop-filter: blur(14px);
 }
 .loading { display: flex; align-items: center; gap: 10px; padding: 13px 17px; border-radius: 999px; font-size: 14px; }
+.loading[hidden] { display: none; }
 .spinner { width: 17px; height: 17px; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--cyan); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .error-card { display: grid; width: min(340px, calc(100vw - 40px)); padding: 20px; border-radius: 18px; }
