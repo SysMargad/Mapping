@@ -22,6 +22,7 @@ button, input { font: inherit; }
 .leaflet-container { background: #142130; font: inherit; }
 .leaflet-tile-pane { filter: saturate(.72) brightness(.66) contrast(1.12) hue-rotate(168deg); }
 .leaflet-control-zoom { border: 1px solid var(--line) !important; box-shadow: var(--shadow) !important; }
+.leaflet-top.leaflet-right .leaflet-control-zoom { margin-top: 18px !important; margin-right: 18px !important; }
 .leaflet-control-zoom a {
   width: 42px !important; height: 42px !important; line-height: 40px !important;
   background: rgba(7, 17, 31, .92) !important; color: var(--ink) !important; border-color: var(--line) !important;
@@ -35,7 +36,7 @@ button, input { font: inherit; }
 .popup-value { display: block; margin-top: 2px; font-size: 17px; font-weight: 700; }
 
 .panel {
-  position: absolute; z-index: 500; top: 24px; left: 24px; width: min(390px, calc(100vw - 48px));
+  position: absolute; z-index: 500; top: 10px; left: 10px; width: min(390px, calc(100vw - 20px));
   padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--panel);
   box-shadow: var(--shadow); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
 }
@@ -54,13 +55,46 @@ h1 { margin: 0; font-size: clamp(21px, 2vw, 27px); line-height: 1.16; letter-spa
 .summary-grid > div { padding: 15px 16px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.035); }
 .summary-grid span, .layer-copy span, .details dt { color: var(--muted); font-size: 13px; }
 .summary-grid strong { display: block; margin-top: 5px; font-size: 20px; letter-spacing: -.02em; }
+.plans-section { margin: 0 0 18px; }
+.plans-section h2, .layers-section h2 { margin: 0 0 9px 2px; color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
+.plan-list { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.plan-button {
+  min-height: 34px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--plan-color) 42%, transparent);
+  border-radius: 9px; background: color-mix(in srgb, var(--plan-color) 10%, transparent); color: var(--ink);
+  font-size: 12px; font-weight: 750; cursor: pointer;
+}
+.plan-button:hover, .plan-button.is-active { background: color-mix(in srgb, var(--plan-color) 25%, transparent); }
+.plan-button.is-active { box-shadow: inset 0 0 0 1px var(--plan-color), 0 0 14px color-mix(in srgb, var(--plan-color) 22%, transparent); }
+.plan-button:focus-visible { outline: 3px solid rgba(57,217,255,.35); outline-offset: 2px; }
+.licenses-section { margin: 0 0 18px; }
+.licenses-section h2 { margin: 0 0 9px 2px; color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
+.license-list { display: grid; gap: 6px; max-height: 132px; overflow-y: auto; padding-right: 3px; scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
+.license-button {
+  padding: 8px 10px; border: 1px solid rgba(255, 209, 102, .3); border-radius: 9px;
+  background: rgba(255, 209, 102, .08); color: var(--ink); font-size: 12px; text-align: left; cursor: pointer;
+}
+.license-button:hover, .license-button.is-active { background: rgba(255, 209, 102, .2); box-shadow: inset 0 0 0 1px #ffd166; }
+.uchastic-button, .uchastic-plan-button { border-color: rgba(255, 117, 181, .5); background: rgba(255, 117, 181, .08); }
+.uchastic-button:hover, .uchastic-button.is-active, .uchastic-plan-button:hover, .uchastic-plan-button.is-active {
+  background: rgba(255, 117, 181, .2); box-shadow: inset 0 0 0 1px #ff75b5;
+}
+.uchastic-plan-button { color: #ffd8e9; font-weight: 750; }
+.license-back {
+  margin-top: 7px; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: rgba(57, 217, 255, .1); color: var(--cyan); font-size: 12px; cursor: pointer;
+}
+.license-back:hover { background: rgba(57, 217, 255, .2); }
 
-.layer-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid rgba(57, 217, 255, .24); border-radius: 14px; background: var(--cyan-soft); }
+.layers-section { margin-top: 12px; }
+.layer-list { display: grid; gap: 8px; max-height: 248px; padding-right: 3px; overflow-y: auto; scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
+.layer-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--layer-color, var(--cyan)) 34%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--layer-color, var(--cyan)) 13%, transparent); }
 .layer-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .layer-copy div { min-width: 0; }
 .layer-copy strong, .layer-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layer-copy strong { margin-bottom: 3px; font-size: 14px; }
-.swatch { width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid var(--cyan); border-radius: 4px; background: rgba(57,217,255,.32); box-shadow: 0 0 16px rgba(57,217,255,.35); }
+.swatch { width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid var(--layer-color, var(--cyan)); border-radius: 4px; background: color-mix(in srgb, var(--layer-color, var(--cyan)) 35%, transparent); box-shadow: 0 0 14px color-mix(in srgb, var(--layer-color, var(--cyan)) 38%, transparent); }
+.swatch.line { height: 4px; border-width: 0; border-radius: 999px; background: var(--layer-color, var(--cyan)); }
+.swatch.point { width: 11px; height: 11px; flex-basis: 11px; border-radius: 50%; background: var(--layer-color, var(--cyan)); }
 
 .switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -107,8 +141,11 @@ h1 { margin: 0; font-size: clamp(21px, 2vw, 27px); line-height: 1.16; letter-spa
   h1 { font-size: 20px; }
   .summary-grid { margin-top: 16px; }
   .details { display: none; }
+  .plan-list { grid-template-columns: repeat(3, 1fr); }
   .hint { display: none; }
-  .leaflet-control-zoom { margin-top: 12px !important; margin-left: 12px !important; }
+  .primary-action { position: sticky; bottom: -18px; z-index: 2; margin-top: 12px; box-shadow: 0 -10px 18px rgba(7, 17, 31, .85); }
+  .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top: 12px !important; margin-right: 12px !important; }
+  .panel { left: 10px; width: auto; }
   .map-credit { top: 8px; right: 8px; bottom: auto; }
 }
 

@@ -1,8 +1,8 @@
-"""Export polygon layers from a GeoPackage to browser-ready GeoJSON.
+"""Export GeoPackage feature layers to browser-ready GeoJSON.
 
 This intentionally uses only Python's standard library so it can run on a clean
-Windows machine without installing GDAL. It supports Polygon/MultiPolygon data
-stored in WGS 84 or a WGS 84 UTM zone (EPSG:326xx / EPSG:327xx).
+Windows machine without installing GDAL. It supports point, line and polygon
+data stored in WGS 84 or a WGS 84 UTM zone (EPSG:326xx / EPSG:327xx).
 """
 
 from __future__ import annotations
@@ -51,6 +51,18 @@ def read_wkb(data: bytes, offset: int = 0) -> tuple[dict, int]:
     if raw_type & 0x40000000:
         dims += 1
 
+    if base_type == 1:  # Point
+        point, offset = read_point(data, offset, little, dims)
+        return {"type": "Point", "coordinates": point}, offset
+
+    if base_type == 2:  # LineString
+        point_count, offset = read_uint(data, offset, 4, little)
+        points = []
+        for _ in range(point_count):
+            point, offset = read_point(data, offset, little, dims)
+            points.append(point)
+        return {"type": "LineString", "coordinates": points}, offset
+
     if base_type == 3:  # Polygon
         ring_count, offset = read_uint(data, offset, 4, little)
         rings = []
@@ -63,15 +75,29 @@ def read_wkb(data: bytes, offset: int = 0) -> tuple[dict, int]:
             rings.append(ring)
         return {"type": "Polygon", "coordinates": rings}, offset
 
-    if base_type == 6:  # MultiPolygon
-        polygon_count, offset = read_uint(data, offset, 4, little)
-        polygons = []
-        for _ in range(polygon_count):
-            polygon, offset = read_wkb(data, offset)
-            if polygon["type"] != "Polygon":
-                raise ValueError("MultiPolygon contained a non-polygon geometry")
-            polygons.append(polygon["coordinates"])
-        return {"type": "MultiPolygon", "coordinates": polygons}, offset
+    collection_types = {
+        4: ("MultiPoint", "Point"),
+        5: ("MultiLineString", "LineString"),
+        6: ("MultiPolygon", "Polygon"),
+    }
+    if base_type in collection_types:
+        output_type, child_type = collection_types[base_type]
+        geometry_count, offset = read_uint(data, offset, 4, little)
+        coordinates = []
+        for _ in range(geometry_count):
+            child, offset = read_wkb(data, offset)
+            if child["type"] != child_type:
+                raise ValueError(f"{output_type} contained a {child['type']} geometry")
+            coordinates.append(child["coordinates"])
+        return {"type": output_type, "coordinates": coordinates}, offset
+
+    if base_type == 7:  # GeometryCollection
+        geometry_count, offset = read_uint(data, offset, 4, little)
+        geometries = []
+        for _ in range(geometry_count):
+            child, offset = read_wkb(data, offset)
+            geometries.append(child)
+        return {"type": "GeometryCollection", "geometries": geometries}, offset
 
     raise ValueError(f"Unsupported WKB geometry type: {base_type}")
 
@@ -142,6 +168,11 @@ def transform_geometry(geometry: dict, srs_id: int) -> dict:
             return utm_to_wgs84(value[0], value[1], zone, northern)
         return [point(item) for item in value]
 
+    if geometry["type"] == "GeometryCollection":
+        return {
+            "type": "GeometryCollection",
+            "geometries": [transform_geometry(item, srs_id) for item in geometry["geometries"]],
+        }
     return {"type": geometry["type"], "coordinates": point(geometry["coordinates"])}
 
 
@@ -150,6 +181,8 @@ def ring_area(ring: list[list[float]]) -> float:
 
 
 def geometry_area(geometry: dict) -> float | None:
+    if geometry["type"] not in ("Polygon", "MultiPolygon"):
+        return None
     polygons = geometry["coordinates"] if geometry["type"] == "MultiPolygon" else [geometry["coordinates"]]
     return sum(ring_area(poly[0]) - sum(ring_area(hole) for hole in poly[1:]) for poly in polygons)
 
@@ -164,29 +197,45 @@ def export(source: Path, output: Path, layer: str | None) -> None:
             "FROM gpkg_contents c JOIN gpkg_geometry_columns g ON c.table_name = g.table_name "
             "WHERE c.data_type = 'features'"
         ).fetchall()
-        selected = next((row for row in layers if row["table_name"] == layer), None) if layer else (layers[0] if len(layers) == 1 else None)
-        if selected is None:
+        selected_layers = [row for row in layers if row["table_name"] == layer] if layer else list(layers)
+        if not selected_layers:
             names = ", ".join(row["table_name"] for row in layers) or "none"
-            raise ValueError(f"Choose a layer with --layer. Available layers: {names}")
+            raise ValueError(f"Layer not found. Available layers: {names}")
 
-        table = selected["table_name"].replace('"', '""')
-        geom_column = selected["column_name"]
-        columns = [row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')]
-        property_columns = [column for column in columns if column != geom_column]
-        select_columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in columns)
         features = []
-        for row in connection.execute(f'SELECT {select_columns} FROM "{table}"'):
-            srs_id, source_geometry = unpack_gpkg_geometry(row[geom_column])
-            properties = {column: row[column] for column in property_columns}
-            properties["layer"] = selected["table_name"]
-            properties["source_epsg"] = srs_id
-            properties["area_m2"] = round(geometry_area(source_geometry), 2)
-            features.append(
+        layer_summary = []
+        for selected in selected_layers:
+            table = selected["table_name"].replace('"', '""')
+            geom_column = selected["column_name"]
+            columns = [row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')]
+            property_columns = [column for column in columns if column != geom_column]
+            select_columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in columns)
+            layer_count = 0
+            for row in connection.execute(f'SELECT {select_columns} FROM "{table}"'):
+                if row[geom_column] is None:
+                    continue
+                srs_id, source_geometry = unpack_gpkg_geometry(row[geom_column])
+                properties = {column: row[column] for column in property_columns}
+                properties["layer"] = selected["table_name"]
+                properties["source_epsg"] = srs_id
+                area = geometry_area(source_geometry)
+                if area is not None:
+                    properties["area_m2"] = round(area, 2)
+                features.append(
+                    {
+                        "type": "Feature",
+                        "id": f"{selected['table_name']}:{properties.get('fid', layer_count + 1)}",
+                        "properties": properties,
+                        "geometry": transform_geometry(source_geometry, srs_id),
+                    }
+                )
+                layer_count += 1
+            layer_summary.append(
                 {
-                    "type": "Feature",
-                    "id": properties.get("fid"),
-                    "properties": properties,
-                    "geometry": transform_geometry(source_geometry, srs_id),
+                    "name": selected["table_name"],
+                    "geometry_type": selected["geometry_type_name"],
+                    "source_epsg": selected["srs_id"],
+                    "feature_count": layer_count,
                 }
             )
     finally:
@@ -194,10 +243,19 @@ def export(source: Path, output: Path, layer: str | None) -> None:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
-        json.dumps({"type": "FeatureCollection", "name": selected["table_name"], "features": features}, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "name": source.stem,
+                "layers": layer_summary,
+                "features": features,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
         encoding="utf-8",
     )
-    print(f"Exported {len(features)} feature(s) from {selected['table_name']} to {output}")
+    print(f"Exported {len(features)} feature(s) from {len(selected_layers)} layer(s) to {output}")
 
 
 if __name__ == "__main__":

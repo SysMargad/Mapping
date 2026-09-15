@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <meta name="description" content="HUS NU төлөвлөлтийн талбайг интерактив газрын зураг дээр харах веб." />
-    <title>HUS NU · Area Data</title>
+    <meta name="description" content="Drone Track талбай болон нислэгийн төлөвлөгөөг интерактив газрын зураг дээр харах веб." />
+    <title>Drone Track · Area Data</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307111f'/%3E%3Cpath d='M7 9h18v14H7z' fill='none' stroke='%2339d9ff' stroke-width='2'/%3E%3Cpath d='M11 13l4-2 6 3-2 6-7 1z' fill='%2339d9ff' fill-opacity='.35' stroke='%23fff'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="preconnect" href="https://tile.openstreetmap.org" />
@@ -14,7 +14,7 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="map-stage" aria-label="HUS NU талбайн газрын зураг">
+      <section class="map-stage" aria-label="Дорнын төмөр талбайн газрын зураг">
         <div id="map"></div>
         <div id="loading" class="loading" role="status">
           <span class="spinner" aria-hidden="true"></span>
@@ -33,39 +33,38 @@
             <svg viewBox="0 0 32 32"><path d="M5 8.5h22v15H5z"/><path d="m10 13 5-2 7 3.4-2.6 6.1-8.8.8z"/></svg>
           </span>
           <div>
-            <p class="eyebrow">DRONE TRACK · AREA DATA</p>
-            <h1>HUS NU төлөвлөлтийн талбай</h1>
+            <p class="eyebrow">DRONE TRACK · FLIGHT PLAN</p>
+            <h1>Drone Track</h1>
           </div>
         </header>
 
         <div class="summary-grid">
           <div>
-            <span>Объект</span>
-            <strong id="feature-count">—</strong>
-          </div>
-          <div>
             <span>Нийт талбай</span>
             <strong id="total-area">—</strong>
           </div>
+          <div>
+            <span>Нисгэсэн талбай</span>
+            <strong id="flown-area">—</strong>
+          </div>
         </div>
 
-        <section class="layer-card">
-          <div class="layer-copy">
-            <span class="swatch" aria-hidden="true"></span>
-            <div>
-              <strong>hus_nu_plan</strong>
-              <span>Төлөвлөлтийн хил</span>
-            </div>
-          </div>
-          <label class="switch" title="Давхаргыг харуулах эсвэл нуух">
-            <input id="layer-toggle" type="checkbox" checked />
-            <span aria-hidden="true"></span>
-            <span class="sr-only">Төлөвлөлтийн хилийг харуулах</span>
-          </label>
+        <section class="plans-section" aria-labelledby="plans-heading">
+          <h2 id="plans-heading">Нислэгийн төлөвлөгөө</h2>
+          <div id="plan-list" class="plan-list" role="group" aria-label="Нислэгийн төлөвлөгөө сонгох"></div>
+        </section>
+        <section class="licenses-section" aria-labelledby="licenses-heading">
+          <h2 id="licenses-heading">Лицензийн талбай</h2>
+          <div id="license-list" class="license-list" role="group" aria-label="Лицензийн талбай сонгох"></div>
+          <button id="license-back" class="license-back" type="button" hidden>← Лицензийн жагсаалт</button>
+        </section>
+
+        <section class="layers-section" aria-labelledby="layers-heading">
+          <h2 id="layers-heading">Давхаргууд</h2>
+          <div id="layer-list" class="layer-list"></div>
         </section>
 
         <dl class="details">
-          <div><dt>Эх файл</dt><dd>HUS_NU_Mag_plan.gpkg</dd></div>
           <div><dt>Эх координат</dt><dd>EPSG:32649 · UTM 49N</dd></div>
           <div><dt>Веб координат</dt><dd>WGS 84</dd></div>
         </dl>
@@ -75,7 +74,7 @@
           Талбайд төвлөрүүлэх
         </button>
 
-        <p class="hint">Талбай дээр дарж дэлгэрэнгүй хэмжээг харна уу.</p>
+        <p class="hint">Талбай, шугам эсвэл цэг дээр дарж дэлгэрэнгүй мэдээлэл харна уу.</p>
       </aside>
 
       <div class="map-credit">© OpenStreetMap contributors</div>
