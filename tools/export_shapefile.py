@@ -90,6 +90,9 @@ def export(source: Path, output: Path, utm: bool = False) -> None:
     features = []
     for index, (rings, properties) in enumerate(zip(polygons, records), start=1):
         properties = {key: value for key, value in properties.items() if value}
+        for key, value in properties.items():
+            if value == "Buduunhhad":
+                properties[key] = "Buduunkhad"
         properties["layer"] = "Additional_Licenses"
         coordinates = [
             [transform_point(point, utm) for point in ring]

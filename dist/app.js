@@ -47,7 +47,7 @@
     L2: { label: "L2", color: "#ffb84d", dash: "10 7" },
     L3: { label: "L3", color: "#c18cff", dash: "3 8" },
     P1: { label: "P1", color: "#71f6c1", dash: null },
-    Meduse: { label: "Meduse", color: "#ff75b5", dash: "16 5 3 5" },
+    Medusa: { label: "Medusa", color: "#ff75b5", dash: "16 5 3 5" },
     MagArrow: { label: "MagArrow", color: "#71f6c1", dash: null },
   };
   const planLayers = new Set(["Flight_Blocks", "P1_Main_50m", "P1_Tie_300m", "Track_Start_End", "Plan_Metadata"]);
