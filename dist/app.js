@@ -15,9 +15,12 @@
 
   const layerConfig = {
     HUS_NU_boundary: { label: "Лицензийн шугам", color: "#39d9ff", visible: true },
+    Survey_Area: { label: "Лицензийн шугам", color: "#39d9ff", visible: true },
     Flight_Blocks: { label: "Нислэгийн блокууд", color: "#ffb84d", visible: true },
     P1_Main_50m: { label: "Үндсэн шугам · 50 м", color: "#71f6c1", visible: true },
+    P1_Main_100m_AZ88: { label: "Үндсэн шугам · 100 м", color: "#71f6c1", visible: true },
     P1_Tie_300m: { label: "Хөндлөн шугам · 300 м", color: "#39a8ff", visible: true },
+    P1_Tie_200m_AZ178: { label: "Хөндлөн шугам · 200 м", color: "#39a8ff", visible: true },
     Track_Start_End: { label: "Эхлэл / төгсгөлийн цэг", color: "#f5fbff", visible: false },
     Plan_Metadata: { label: "Төлөвлөгөөний төв", color: "#ffe073", visible: false },
   };
@@ -50,7 +53,10 @@
     Medusa: { label: "Medusa", color: "#ff75b5", dash: "16 5 3 5" },
     MagArrow: { label: "MagArrow", color: "#71f6c1", dash: null },
   };
-  const planLayers = new Set(["Flight_Blocks", "P1_Main_50m", "P1_Tie_300m", "Track_Start_End", "Plan_Metadata"]);
+  const isBoundaryLayer = (name) => ["HUS_NU_boundary", "Survey_Area"].includes(name);
+  const isMainLineLayer = (name) => ["P1_Main_50m", "P1_Main_100m_AZ88"].includes(name);
+  const isTieLineLayer = (name) => ["P1_Tie_300m", "P1_Tie_200m_AZ178"].includes(name);
+  const isPlanLayer = (name) => !isBoundaryLayer(name);
 
   const formatArea = (squareMetres) => {
     if (!Number.isFinite(squareMetres)) return "—";
@@ -99,10 +105,11 @@
   const vectorStyle = (feature) => {
     const geometryType = feature.geometry?.type || "";
     const settings = layerSettings(feature.properties?.layer);
-    const isPlanLine = ["P1_Main_50m", "P1_Tie_300m"].includes(feature.properties?.layer);
+    const layerName = feature.properties?.layer;
+    const isPlanLine = isMainLineLayer(layerName) || isTieLineLayer(layerName);
     const selectedPlan = planConfig[activePlan];
     if (geometryType.includes("Polygon")) {
-      const isBoundary = feature.properties?.layer === "HUS_NU_boundary";
+      const isBoundary = isBoundaryLayer(layerName);
       return {
         color: settings.color,
         weight: isBoundary ? 3.5 : 1.5,
@@ -113,11 +120,11 @@
     }
     return {
       color: isPlanLine
-        ? feature.properties?.layer === "P1_Tie_300m" && activePlan === "MagArrow"
+        ? isTieLineLayer(layerName) && activePlan === "MagArrow"
           ? "#39a8ff"
           : selectedPlan.color
         : settings.color,
-      weight: isPlanLine ? (feature.properties?.layer === "P1_Main_50m" ? 2.2 : 1.5) : 1.35,
+      weight: isPlanLine ? (isMainLineLayer(layerName) ? 2.2 : 1.5) : 1.35,
       opacity: 0.95,
       dashArray: isPlanLine ? selectedPlan.dash : null,
     };
@@ -131,14 +138,14 @@
 
   const fitToArea = () => {
     if (!map) return;
-    const preferred = mapLayers.get("HUS_NU_boundary");
+    const preferred = [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
     const boundsSource = preferred || L.featureGroup([...mapLayers.values()]);
     const bounds = boundsSource.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
   };
 
   const createLayerControl = (summary, geoLayer) => {
-    if (summary.name === "HUS_NU_boundary") return;
+    if (isBoundaryLayer(summary.name)) return;
     const settings = layerSettings(summary.name);
     const card = document.createElement("div");
     card.className = "layer-card plan-layer-control";
@@ -236,7 +243,7 @@
     planButton.addEventListener("click", () => {
       for (const layer of uchasticLayers.values()) map.removeLayer(layer);
       for (const [name, layer] of mapLayers) {
-        if (name !== "HUS_NU_boundary" && layerSettings(name).visible) layer.addTo(map);
+        if (!isBoundaryLayer(name) && layerSettings(name).visible) layer.addTo(map);
       }
       fitToArea();
       for (const item of licenseList.children) item.classList.remove("is-active");
@@ -290,7 +297,7 @@
         renderPlanControls();
         updatePlanLayerControls();
         for (const [name, geoLayer] of mapLayers) {
-          if (name === "HUS_NU_boundary") continue;
+          if (isBoundaryLayer(name)) continue;
           if (activePlan === "MagArrow") {
             geoLayer.setStyle(vectorStyle);
             if (layerSettings(name).visible) geoLayer.addTo(map);
@@ -353,7 +360,7 @@
           },
         });
         mapLayers.set(summary.name, geoLayer);
-        if (settings.visible && (activePlan === "MagArrow" || !planLayers.has(summary.name))) geoLayer.addTo(map);
+        if (settings.visible && (activePlan === "MagArrow" || !isPlanLayer(summary.name))) geoLayer.addTo(map);
         createLayerControl(summary, geoLayer);
       }
       renderPlanControls();
@@ -382,11 +389,13 @@
       }
       renderLicenseControls(licenseData.features);
 
-      const boundaryFeatures = data.features.filter((feature) => feature.properties?.layer === "HUS_NU_boundary");
+      const boundaryFeatures = data.features.filter((feature) => isBoundaryLayer(feature.properties?.layer));
       const areaSum = boundaryFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0);
-      const flownAreaSum = data.features
+      const flownFeatures = data.features
         .filter((feature) => feature.properties?.layer === "Flight_Blocks")
-        .reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0);
+      const flownAreaSum = flownFeatures.length > 0
+        ? flownFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0)
+        : null;
       totalArea.textContent = formatArea(areaSum);
       flownArea.textContent = formatArea(flownAreaSum);
       fitToArea();
