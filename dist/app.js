@@ -47,6 +47,10 @@
   let licenseFeatures = [];
   let dataSignature;
   let activePlan = "MagArrow";
+  let selectedLicenseKey = "all";
+  let selectedLicenseFeature = null;
+  let selectedUchasticKey = "all";
+  let selectedUchasticFeature = null;
   const planConfig = {
     L2: { label: "L2", color: "#ffb84d", dash: "10 7" },
     L3: { label: "L3", color: "#c18cff", dash: "3 8" },
@@ -64,6 +68,28 @@
     return squareMetres >= 1_000_000
       ? `${(squareMetres / 1_000_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км²`
       : `${squareMetres.toLocaleString("mn-MN", { maximumFractionDigits: 0 })} м²`;
+  };
+
+  const geometryArea = (geometry) => {
+    if (!geometry) return 0;
+    const polygons = geometry.type === "Polygon"
+      ? [geometry.coordinates]
+      : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
+    return polygons.reduce((total, polygon) => {
+      const latitude = polygon[0]?.reduce((sum, point) => sum + point[1], 0) / (polygon[0]?.length || 1);
+      const scale = 111320 * Math.cos(latitude * Math.PI / 180);
+      const ringArea = (ring) => Math.abs(ring.reduce((sum, point, index) => {
+        const next = ring[(index + 1) % ring.length];
+        return sum + point[0] * scale * (next[1] * 111320) - next[0] * scale * (point[1] * 111320);
+      }, 0)) / 2;
+      return total + ringArea(polygon[0]) - polygon.slice(1).reduce((sum, ring) => sum + ringArea(ring), 0);
+    }, 0);
+  };
+
+  const featureArea = (feature) => Number(feature?.properties?.area_m2) || geometryArea(feature?.geometry);
+  const setTotalArea = (features) => {
+    const list = Array.isArray(features) ? features : [features];
+    totalArea.textContent = formatArea(list.reduce((sum, feature) => sum + featureArea(feature), 0));
   };
 
   const escapeHtml = (value) => String(value)
@@ -139,15 +165,29 @@
 
   const fitToArea = () => {
     if (!map) return;
-    if (activePlan === "L3" && l3Layer) {
-      const l3Bounds = l3Layer.getBounds();
-      if (l3Bounds.isValid()) map.fitBounds(l3Bounds, { padding: [36, 36], maxZoom: 15 });
-      return;
-    }
-    const preferred = [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
+    const selectedLayer = selectedUchasticKey !== "all"
+      ? uchasticLayers.get(selectedUchasticKey)
+      : selectedLicenseKey !== "all" ? licenseLayers.get(selectedLicenseKey) : null;
+    const preferred = selectedLayer || [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
     const boundsSource = preferred || L.featureGroup([...mapLayers.values()]);
     const bounds = boundsSource.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
+  };
+
+  const updatePlanVisibility = () => {
+    for (const [name, geoLayer] of mapLayers) {
+      if (isBoundaryLayer(name)) continue;
+      if (activePlan === "MagArrow") {
+        geoLayer.setStyle(vectorStyle);
+        if (layerSettings(name).visible) geoLayer.addTo(map);
+      } else map.removeLayer(geoLayer);
+    }
+    const showL3 = activePlan === "L3" && selectedLicenseKey !== "all" &&
+      (selectedLicenseFeature?.properties?.AREANAME || "").toLocaleLowerCase().includes("nergui");
+    if (l3Layer) {
+      if (showL3) l3Layer.addTo(map);
+      else map.removeLayer(l3Layer);
+    }
   };
 
   const createLayerControl = (summary, geoLayer) => {
@@ -204,9 +244,19 @@
       button.textContent = label;
       button.addEventListener("click", () => {
         if (label.toLocaleLowerCase("mn-MN").includes("nergui") || label.toLocaleLowerCase("mn-MN").includes("нэргүй")) {
+          selectedLicenseKey = key;
+          selectedLicenseFeature = feature;
+          selectedUchasticKey = "all";
+          selectedUchasticFeature = null;
+          setTotalArea(feature);
+          fitToArea();
           showUchasticList(String(features.indexOf(feature)));
           return;
         }
+        selectedLicenseKey = key;
+        selectedLicenseFeature = feature;
+        selectedUchasticKey = "all";
+        selectedUchasticFeature = null;
         for (const layer of uchasticLayers.values()) map.removeLayer(layer);
         for (const [layerKey, layer] of licenseLayers) {
           if (key === "all" || layerKey === key) layer.addTo(map);
@@ -214,6 +264,9 @@
         }
         for (const item of licenseList.children) item.classList.remove("is-active");
         button.classList.add("is-active");
+        setTotalArea(key === "all" ? features : feature);
+        updatePlanVisibility();
+        fitToArea();
       });
       licenseList.appendChild(button);
     }
@@ -251,6 +304,10 @@
       for (const [name, layer] of mapLayers) {
         if (!isBoundaryLayer(name) && layerSettings(name).visible) layer.addTo(map);
       }
+      selectedUchasticKey = "all";
+      selectedUchasticFeature = null;
+      setTotalArea(selectedLicenseFeature);
+      updatePlanVisibility();
       fitToArea();
       for (const item of licenseList.children) item.classList.remove("is-active");
       planButton.classList.add("is-active");
@@ -262,6 +319,11 @@
     allUchasticButton.textContent = "Бүгд";
     allUchasticButton.addEventListener("click", () => {
       for (const layer of uchasticLayers.values()) layer.addTo(map);
+      selectedUchasticKey = "all";
+      selectedUchasticFeature = null;
+      setTotalArea(data.features);
+      updatePlanVisibility();
+      fitToArea();
       for (const item of licenseList.children) item.classList.remove("is-active");
       allUchasticButton.classList.add("is-active");
     });
@@ -278,6 +340,11 @@
         }
         for (const item of licenseList.children) item.classList.remove("is-active");
         button.classList.add("is-active");
+        selectedUchasticKey = String(index);
+        selectedUchasticFeature = feature;
+        setTotalArea(feature);
+        updatePlanVisibility();
+        fitToArea();
       });
       licenseList.appendChild(button);
     }
@@ -287,6 +354,13 @@
     for (const layer of uchasticLayers.values()) map.removeLayer(layer);
     for (const layer of licenseLayers.values()) layer.addTo(map);
     renderLicenseControls(licenseFeatures);
+    selectedLicenseKey = "all";
+    selectedLicenseFeature = null;
+    selectedUchasticKey = "all";
+    selectedUchasticFeature = null;
+    setTotalArea(licenseFeatures);
+    updatePlanVisibility();
+    fitToArea();
   });
 
   const renderPlanControls = () => {
@@ -302,20 +376,8 @@
         activePlan = plan.label;
         renderPlanControls();
         updatePlanLayerControls();
-        for (const [name, geoLayer] of mapLayers) {
-          if (isBoundaryLayer(name)) continue;
-          if (activePlan === "MagArrow") {
-            geoLayer.setStyle(vectorStyle);
-            if (layerSettings(name).visible) geoLayer.addTo(map);
-          } else {
-            map.removeLayer(geoLayer);
-          }
-        }
-        if (l3Layer) {
-          if (activePlan === "L3") l3Layer.addTo(map);
-          else map.removeLayer(l3Layer);
-        }
-        if (activePlan === "L3") fitToArea();
+        updatePlanVisibility();
+        fitToArea();
       });
       planList.appendChild(button);
     }
@@ -417,7 +479,7 @@
       const flownAreaSum = flownFeatures.length > 0
         ? flownFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0)
         : null;
-      totalArea.textContent = formatArea(areaSum);
+      setTotalArea(licenseData.features);
       flownArea.textContent = formatArea(flownAreaSum);
       fitToArea();
       loading.hidden = true;
