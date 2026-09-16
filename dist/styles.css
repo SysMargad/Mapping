@@ -78,6 +78,7 @@ h1 { margin: 0; font-size: clamp(21px, 2vw, 27px); line-height: 1.16; letter-spa
 .summary-grid strong { display: block; margin-top: 5px; font-size: 20px; letter-spacing: -.02em; }
 .plans-section { margin: 0 0 18px; }
 .plans-section h2, .layers-section h2 { margin: 0 0 9px 2px; color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
+.plans-section .subheading { margin-top: 14px; }
 .plan-list { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .plan-button {
   min-height: 34px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--plan-color) 42%, transparent);

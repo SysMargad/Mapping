@@ -6,6 +6,7 @@
   const totalArea = document.querySelector("#total-area");
   const flownArea = document.querySelector("#flown-area");
   const planList = document.querySelector("#plan-list");
+  const lPlanList = document.querySelector("#l-plan-list");
   const licenseList = document.querySelector("#license-list");
   const licenseHeading = document.querySelector("#licenses-heading");
   const licenseBack = document.querySelector("#license-back");
@@ -43,6 +44,7 @@
   const mapLayers = new Map();
   const licenseLayers = new Map();
   const uchasticLayers = new Map();
+  const lPlanLayers = new Map();
   let l3Layer;
   let licenseFeatures = [];
   let dataSignature;
@@ -51,6 +53,7 @@
   let selectedLicenseFeature = null;
   let selectedUchasticKey = "all";
   let selectedUchasticFeature = null;
+  let selectedLPlan = "all";
   const planConfig = {
     L2: { label: "L2", color: "#ffb84d", dash: "10 7" },
     L3: { label: "L3", color: "#c18cff", dash: "3 8" },
@@ -165,13 +168,39 @@
 
   const fitToArea = () => {
     if (!map) return;
-    const selectedLayer = selectedUchasticKey !== "all"
+    const selectedLayer = selectedLPlan !== "all"
+      ? lPlanLayers.get(selectedLPlan)
+      : selectedUchasticKey !== "all"
       ? uchasticLayers.get(selectedUchasticKey)
       : selectedLicenseKey !== "all" ? licenseLayers.get(selectedLicenseKey) : null;
     const preferred = selectedLayer || [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
     const boundsSource = preferred || L.featureGroup([...mapLayers.values()]);
     const bounds = boundsSource.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
+  };
+
+  const renderLPlanControls = (plans) => {
+    lPlanList.replaceChildren();
+    const entries = [{ label: "Бүгд", date: "", key: "all" }, ...plans.map((plan) => ({
+      label: `${plan.label} · ${plan.date}`, date: plan.date, key: plan.label,
+    }))];
+    for (const entry of entries) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `license-button${entry.key === "all" ? " is-active" : ""}`;
+      button.textContent = entry.date ? `${entry.label} (${entry.date})` : entry.label;
+      button.addEventListener("click", () => {
+        selectedLPlan = entry.key;
+        for (const [key, layer] of lPlanLayers) {
+          if (entry.key === "all" || key === entry.key) layer.addTo(map);
+          else map.removeLayer(layer);
+        }
+        for (const item of lPlanList.children) item.classList.remove("is-active");
+        button.classList.add("is-active");
+        fitToArea();
+      });
+      lPlanList.appendChild(button);
+    }
   };
 
   const updatePlanVisibility = () => {
@@ -461,6 +490,22 @@
         onEachFeature(feature, layer) { layer.bindPopup(popupContent(feature)); },
       });
       if (activePlan === "L3") l3Layer.addTo(map);
+
+      const lPlanResponse = await fetch("./data/l-plans.geojson", { cache: "no-store" });
+      if (!lPlanResponse.ok) throw new Error(`L дата хүсэлт амжилтгүй (${lPlanResponse.status})`);
+      const lPlanData = await lPlanResponse.json();
+      for (const layer of lPlanLayers.values()) map.removeLayer(layer);
+      lPlanLayers.clear();
+      for (const plan of lPlanData.plans || []) {
+        const features = lPlanData.features.filter((feature) => feature.properties?.plan === plan.label);
+        const layer = L.geoJSON({ type: "FeatureCollection", features }, {
+          style: { color: "#ff9f43", weight: 2, opacity: 0.9, dashArray: "8 5" },
+          onEachFeature(feature, itemLayer) { itemLayer.bindPopup(popupContent(feature)); },
+        });
+        lPlanLayers.set(plan.label, layer);
+      }
+      renderLPlanControls(lPlanData.plans || []);
+      for (const layer of lPlanLayers.values()) layer.addTo(map);
 
       const licenseResponse = await fetch("./data/licenses.geojson", { cache: "no-store" });
       if (!licenseResponse.ok) throw new Error(`Лицензийн өгөгдлийн хүсэлт амжилтгүй (${licenseResponse.status})`);

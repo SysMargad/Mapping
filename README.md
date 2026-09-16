@@ -63,6 +63,12 @@ Private network access зөвшөөрөх эсвэл 4180 портыг зөвш�
 `L3` төлөвлөгөөний сонголтоор газрын зураг дээр харуулна. Дэмждэг DXF entity:
 `LINE`, `LWPOLYLINE`, хаалттай `LWPOLYLINE` polygon.
 
+### L01–L11 огноотой нислэгийн дата
+
+DJI WPMZ/KMZ архивуудаас гаргасан `dist/data/l-plans.geojson` файлд L01–L11
+нислэгийн шугам болон `createTime` огноо хадгалагдана. Вебийн `L дата · огноогоор`
+хэсгээс төлөвлөгөө бүрийг огноотой нь сонгож харна.
+
 ## GitHub Pages
 
 Энэ төслийн `dist` хавтсыг GitHub Pages-д нийтлэх workflow
