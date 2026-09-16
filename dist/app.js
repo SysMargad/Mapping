@@ -94,7 +94,8 @@
   };
 
   const featureArea = (feature) => Number(feature?.properties?.area_m2) || geometryArea(feature?.geometry);
-  const formatHectares = (squareMetres) => `${(squareMetres / 10_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} га`;
+  const formatSquareKilometres = (squareMetres) =>
+    `${(squareMetres / 1_000_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км²`;
   const lineLengthMetres = (feature) => {
     const coordinates = feature?.geometry?.coordinates || [];
     const lines = feature?.geometry?.type === "MultiLineString" ? coordinates : [coordinates];
@@ -111,9 +112,9 @@
       .filter((feature) => feature.properties?.plan === planKey)
       .reduce((sum, feature) => sum + lineLengthMetres(feature) * 100, 0);
   };
-  const setFlownArea = (label, squareMetres, hectares = false) => {
+  const setFlownArea = (label, squareMetres, squareKilometres = false) => {
     flownAreaLabel.textContent = label;
-    flownArea.textContent = hectares ? formatHectares(squareMetres) : formatArea(squareMetres);
+    flownArea.textContent = squareKilometres ? formatSquareKilometres(squareMetres) : formatArea(squareMetres);
   };
   const setTotalArea = (features) => {
     const list = Array.isArray(features) ? features : [features];
