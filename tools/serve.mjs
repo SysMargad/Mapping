@@ -11,8 +11,11 @@ const licenseSource = path.resolve(root, "..", "..", "Talbain license.zip");
 const licenseOutput = path.join(root, "data", "licenses.geojson");
 const uchasticSource = path.resolve(root, "..", "..", "23099_uchastic_20260806.zip");
 const uchasticOutput = path.join(root, "data", "uchastics.geojson");
+const l3Source = path.join(areaDataDirectory, "Nergui undur_L3_boundary.dxf");
+const l3Output = path.join(root, "data", "l3.geojson");
 const exporter = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "export_gpkg.py");
 const licenseExporter = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "export_shapefile.py");
+const dxfExporter = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "export_dxf.py");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
 const types = new Map([
@@ -27,6 +30,7 @@ const types = new Map([
 let syncPromise;
 let licenseSyncPromise;
 let uchasticSyncPromise;
+let l3SyncPromise;
 
 async function syncAreaData() {
   const sources = (await readdir(areaDataDirectory, { withFileTypes: true }))
@@ -133,6 +137,36 @@ async function syncUchasticData() {
   return uchasticSyncPromise;
 }
 
+async function syncL3Data() {
+  let sourceStats;
+  try {
+    sourceStats = await stat(l3Source);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  let outputStats;
+  try {
+    outputStats = await stat(l3Output);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (outputStats && outputStats.mtimeMs >= sourceStats.mtimeMs) return;
+  if (l3SyncPromise) return l3SyncPromise;
+  const python = process.env.PYTHON || (process.platform === "win32" ? "py" : "python3");
+  const args = process.platform === "win32"
+    ? ["-3", dxfExporter, l3Source, l3Output]
+    : [dxfExporter, l3Source, l3Output];
+  l3SyncPromise = new Promise((resolve, reject) => {
+    const child = spawn(python, args, { stdio: ["ignore", "inherit", "inherit"] });
+    child.once("error", reject);
+    child.once("close", (code) => code === 0 ? resolve() : reject(new Error(`L3 export failed with code ${code}`)));
+  }).finally(() => {
+    l3SyncPromise = undefined;
+  });
+  return l3SyncPromise;
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
@@ -141,6 +175,7 @@ const server = http.createServer(async (request, response) => {
     if (target === output) await syncAreaData();
     if (target === licenseOutput) await syncLicenseData();
     if (target === uchasticOutput) await syncUchasticData();
+    if (target === l3Output) await syncL3Data();
     if ((await stat(target)).isDirectory()) target = path.join(target, "index.html");
     const body = await readFile(target);
     response.writeHead(200, { "Content-Type": types.get(path.extname(target)) || "application/octet-stream" });

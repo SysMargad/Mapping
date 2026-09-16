@@ -43,6 +43,7 @@
   const mapLayers = new Map();
   const licenseLayers = new Map();
   const uchasticLayers = new Map();
+  let l3Layer;
   let licenseFeatures = [];
   let dataSignature;
   let activePlan = "MagArrow";
@@ -138,6 +139,11 @@
 
   const fitToArea = () => {
     if (!map) return;
+    if (activePlan === "L3" && l3Layer) {
+      const l3Bounds = l3Layer.getBounds();
+      if (l3Bounds.isValid()) map.fitBounds(l3Bounds, { padding: [36, 36], maxZoom: 15 });
+      return;
+    }
     const preferred = [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
     const boundsSource = preferred || L.featureGroup([...mapLayers.values()]);
     const bounds = boundsSource.getBounds();
@@ -305,6 +311,11 @@
             map.removeLayer(geoLayer);
           }
         }
+        if (l3Layer) {
+          if (activePlan === "L3") l3Layer.addTo(map);
+          else map.removeLayer(l3Layer);
+        }
+        if (activePlan === "L3") fitToArea();
       });
       planList.appendChild(button);
     }
@@ -365,6 +376,16 @@
       }
       renderPlanControls();
       updatePlanLayerControls();
+
+      const l3Response = await fetch("./data/l3.geojson", { cache: "no-store" });
+      if (!l3Response.ok) throw new Error(`L3 өгөгдлийн хүсэлт амжилтгүй (${l3Response.status})`);
+      const l3Data = await l3Response.json();
+      if (l3Layer) map.removeLayer(l3Layer);
+      l3Layer = L.geoJSON(l3Data, {
+        style: { color: "#c18cff", weight: 2.5, opacity: 1, fillColor: "#c18cff", fillOpacity: 0.12, dashArray: "4 6" },
+        onEachFeature(feature, layer) { layer.bindPopup(popupContent(feature)); },
+      });
+      if (activePlan === "L3") l3Layer.addTo(map);
 
       const licenseResponse = await fetch("./data/licenses.geojson", { cache: "no-store" });
       if (!licenseResponse.ok) throw new Error(`Лицензийн өгөгдлийн хүсэлт амжилтгүй (${licenseResponse.status})`);

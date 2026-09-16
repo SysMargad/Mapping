@@ -56,6 +56,13 @@ Private network access зөвшөөрөх эсвэл 4180 портыг зөвш�
 `Talbain license.zip` шинэчлэгдсэн үед сервер Shapefile-ийг автоматаар GeoJSON болгон хөрвүүлж,
 вебийн `Лицензийн талбай` хэсэгт нэрээр нь сонгох боломжтой болгоно.
 
+### L3 DXF
+
+`Area Data\Nergui undur_L3_boundary.dxf` файл байвал локал сервер хүсэлт ирэх үед
+түүнийг UTM Zone 49N-ээс WGS 84 GeoJSON болгон автоматаар хөрвүүлж,
+`L3` төлөвлөгөөний сонголтоор газрын зураг дээр харуулна. Дэмждэг DXF entity:
+`LINE`, `LWPOLYLINE`, хаалттай `LWPOLYLINE` polygon.
+
 ## GitHub Pages
 
 Энэ төслийн `dist` хавтсыг GitHub Pages-д нийтлэх workflow
@@ -68,5 +75,5 @@ Private network access зөвшөөрөх эсвэл 4180 портыг зөвш�
 
 GitHub Pages нь static сайт тул `Area Data` болон ZIP өөрчлөгдсөн үед локал сервер шиг
 автоматаар export хийхгүй. Шинэ өгөгдөл нийтлэхийн өмнө `dist/data/area.geojson`,
-`dist/data/licenses.geojson`, `dist/data/uchastics.geojson` файлуудыг шинэчилж repository-д
+`dist/data/licenses.geojson`, `dist/data/uchastics.geojson`, `dist/data/l3.geojson` файлуудыг шинэчилж repository-д
 хамт push хийнэ.
