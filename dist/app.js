@@ -443,9 +443,21 @@
       if (!l3Response.ok) throw new Error(`L3 өгөгдлийн хүсэлт амжилтгүй (${l3Response.status})`);
       const l3Data = await l3Response.json();
       if (l3Layer) map.removeLayer(l3Layer);
-      const l3VisibleFeatures = l3Data.features.filter((feature) => feature.geometry?.type !== "Point");
+      const l3VisibleFeatures = l3Data.features.filter((feature) =>
+        feature.geometry?.type !== "Point" || feature.properties?.layer === "BLOCK_NUM_LABELS");
       l3Layer = L.geoJSON({ ...l3Data, features: l3VisibleFeatures }, {
         style: { color: "#c18cff", weight: 2.5, opacity: 1, fillColor: "#c18cff", fillOpacity: 0.12, dashArray: "4 6" },
+        pointToLayer(feature, latlng) {
+          const text = escapeHtml(feature.properties?.text_value || "");
+          return L.marker(latlng, {
+            icon: L.divIcon({
+              className: "l3-block-label",
+              html: `<span>${text}</span>`,
+              iconSize: null,
+            }),
+            keyboard: false,
+          });
+        },
         onEachFeature(feature, layer) { layer.bindPopup(popupContent(feature)); },
       });
       if (activePlan === "L3") l3Layer.addTo(map);
