@@ -443,7 +443,8 @@
       if (!l3Response.ok) throw new Error(`L3 өгөгдлийн хүсэлт амжилтгүй (${l3Response.status})`);
       const l3Data = await l3Response.json();
       if (l3Layer) map.removeLayer(l3Layer);
-      l3Layer = L.geoJSON(l3Data, {
+      const l3VisibleFeatures = l3Data.features.filter((feature) => feature.geometry?.type !== "Point");
+      l3Layer = L.geoJSON({ ...l3Data, features: l3VisibleFeatures }, {
         style: { color: "#c18cff", weight: 2.5, opacity: 1, fillColor: "#c18cff", fillOpacity: 0.12, dashArray: "4 6" },
         onEachFeature(feature, layer) { layer.bindPopup(popupContent(feature)); },
       });
