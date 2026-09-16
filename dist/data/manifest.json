@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-16.3",
+  "version": "2026-09-16.4",
   "updated": "2026-09-16",
   "datasets": {
     "registry": "./data/datasets.json",
@@ -15,7 +15,7 @@
     "l3-survey-family": "./data/l3/metadata.json"
   },
   "hashes": {
-    "registry": "f43d2bd49a49e8a2",
+    "registry": "b1d84b5ba9fd3c7f",
     "base-licence": "f68bab4661abfe72",
     "base-uchastik": "d6672e0a0ea44496",
     "base-licence-context": "a66a54138766d058",

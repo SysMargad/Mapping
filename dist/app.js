@@ -633,12 +633,7 @@
     restoreMagArrowLayers();
   };
 
-  const flightDateColor = (date) => {
-    const palette = ["#ff75b5", "#39d9ff", "#71f6c1", "#ffd166", "#b596ff", "#ff8f66", "#63e6be", "#74a7ff", "#f783ac", "#a9e34b"];
-    const dates = state.actualCoverage?.dates || [];
-    const index = Math.max(0, dates.indexOf(date));
-    return palette[index % palette.length];
-  };
+  const flightDateColor = () => "#39d9ff";
 
   const selectedActualLayers = () => {
     if (state.selectedFlightDate === "all") return [...state.actualTrackLayers.values()];
@@ -803,7 +798,7 @@
       button.type = "button";
       button.className = `flight-date-button${state.selectedFlightDate === option.value ? " is-active" : ""}`;
       button.dataset.flightDate = option.value;
-      button.style.setProperty("--date-color", option.value === "all" ? "#ffffff" : flightDateColor(option.value));
+      button.style.setProperty("--date-color", flightDateColor());
       button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${option.count} track</small>`;
       button.addEventListener("click", () => selectFlightDate(option.value));
       flightDateList.appendChild(button);
