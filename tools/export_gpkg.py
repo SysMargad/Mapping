@@ -156,6 +156,8 @@ def utm_to_wgs84(easting: float, northing: float, zone: int, northern: bool) -> 
 def transform_geometry(geometry: dict, srs_id: int) -> dict:
     if srs_id in (4326, 4979):
         return geometry
+    if srs_id == 99999:
+        srs_id = 32649
     if 32601 <= srs_id <= 32660:
         zone, northern = srs_id - 32600, True
     elif 32701 <= srs_id <= 32760:
