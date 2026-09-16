@@ -1,7 +1,8 @@
-"""Convert an ASCII DXF boundary/line drawing to WGS84 GeoJSON.
+"""Convert a reviewed ASCII DXF base/control drawing to WGS84 GeoJSON.
 
 The exporter supports LINE, LWPOLYLINE and POLYLINE entities. Coordinates are
-assumed to be UTM Zone 49N unless another zone is supplied.
+assigned to a caller-supplied UTM zone for web display.  The output explicitly
+keeps source CRS verification false unless ``--source-crs-verified`` is passed.
 """
 
 from __future__ import annotations
@@ -67,21 +68,39 @@ def entities(path: Path) -> list[dict]:
     return result
 
 
-def export(source: Path, output: Path, zone: int) -> None:
+def export(source: Path, output: Path, zone: int, source_crs_verified: bool) -> None:
     features = []
     for index, entity in enumerate(entities(source), start=1):
         coordinates = [utm_to_wgs84(point[0], point[1], zone, True) for point in entity["points"]]
         geometry = {"type": entity["type"], "coordinates": [coordinates] if entity["type"] == "Polygon" else coordinates}
-        properties = {"layer": "L3", "entity": entity["type"], "source_epsg": 32600 + zone}
+        properties = {
+            "layer": "Base_CAD_Reference",
+            "project": "Nergui Undur",
+            "area": "Nergui Undur",
+            "sensor": "Base / Control",
+            "dataType": "cad_reference_geometry",
+            "plannedActual": "reference",
+            "status": "confirmed_geometry",
+            "entity": entity["type"],
+            "sourceFile": source.name,
+            "sourceCrs": f"EPSG:{32600 + zone}" if source_crs_verified else "UNKNOWN",
+            "source_crs_verified": source_crs_verified,
+            "displayCrs": "EPSG:4326",
+            "crsVerified": source_crs_verified,
+        }
         area = geometry_area(geometry)
         if area is not None:
             properties["area_m2"] = round(area, 2)
-        features.append({"type": "Feature", "id": f"L3:{index}", "properties": properties, "geometry": geometry})
+        features.append({"type": "Feature", "id": f"Base_CAD_Reference:{index}", "properties": properties, "geometry": geometry})
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({
-        "type": "FeatureCollection", "name": source.stem, "features": features,
+        "type": "FeatureCollection",
+        "name": "Nergui Undur Base / Control Geometry",
+        "project": "Nergui Undur",
+        "dataType": "base_control",
+        "features": features,
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"Exported {len(features)} L3 feature(s) to {output}")
+    print(f"Exported {len(features)} base/control feature(s) to {output}")
 
 
 if __name__ == "__main__":
@@ -89,5 +108,6 @@ if __name__ == "__main__":
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--utm-zone", type=int, default=49)
+    parser.add_argument("--source-crs-verified", action="store_true")
     args = parser.parse_args()
-    export(args.source, args.output, args.utm_zone)
+    export(args.source, args.output, args.utm_zone, args.source_crs_verified)

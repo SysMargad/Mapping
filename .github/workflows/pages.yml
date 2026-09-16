@@ -1,4 +1,4 @@
-name: Deploy Drone Track to GitHub Pages
+name: Deploy Nergui Undur Survey Map to GitHub Pages
 
 on:
   push:
@@ -28,6 +28,11 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
+      - name: Validate dataset registry
+        run: |
+          python tools/validate_data.py
+          node --check dist/app.js
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3

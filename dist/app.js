@@ -1,80 +1,77 @@
 (() => {
-  const loading = document.querySelector("#loading");
-  const errorCard = document.querySelector("#error");
-  const errorMessage = document.querySelector("#error-message");
-  const retryButton = document.querySelector("#retry");
-  const totalArea = document.querySelector("#total-area");
-  const flownArea = document.querySelector("#flown-area");
-  const flownAreaLabel = document.querySelector("#flown-area-label");
-  const planList = document.querySelector("#plan-list");
-  const lPlanList = document.querySelector("#l-plan-list");
-  const dailyTracksSection = document.querySelector("#daily-tracks-section");
-  const licenseList = document.querySelector("#license-list");
-  const licenseHeading = document.querySelector("#licenses-heading");
-  const licenseBack = document.querySelector("#license-back");
-  const layerList = document.querySelector("#layer-list");
-  const layersSection = document.querySelector(".layers-section");
-  const fitButton = document.querySelector("#fit-map");
+  "use strict";
 
-  const layerConfig = {
-    HUS_NU_boundary: { label: "Лицензийн шугам", color: "#39d9ff", visible: true },
-    Survey_Area: { label: "Лицензийн шугам", color: "#39d9ff", visible: true },
-    Flight_Blocks: { label: "Нислэгийн блокууд", color: "#ffb84d", visible: true },
-    P1_Main_50m: { label: "Үндсэн шугам · 50 м", color: "#71f6c1", visible: true },
-    P1_Main_100m_AZ88: { label: "Үндсэн шугам · 100 м", color: "#71f6c1", visible: true },
-    P1_Tie_300m: { label: "Хөндлөн шугам · 300 м", color: "#39a8ff", visible: true },
-    P1_Tie_200m_AZ178: { label: "Хөндлөн шугам · 200 м", color: "#39a8ff", visible: true },
-    Track_Start_End: { label: "Эхлэл / төгсгөлийн цэг", color: "#f5fbff", visible: false },
-    Plan_Metadata: { label: "Төлөвлөгөөний төв", color: "#ffe073", visible: false },
+  const PROJECT = "Nergui Undur";
+  const FORBIDDEN_PROJECTS = ["artsat", "будуун хад", "buduunkhad", "buduun khad"];
+  const $ = (selector) => document.querySelector(selector);
+  const ui = {
+    loading: $("#loading"),
+    error: $("#error"),
+    errorMessage: $("#error-message"),
+    retry: $("#retry"),
+    warnings: $("#data-warnings"),
+    manifestStatus: $("#manifest-status"),
+    primaryLabel: $("#summary-label-primary"),
+    primaryValue: $("#summary-value-primary"),
+    secondaryLabel: $("#summary-label-secondary"),
+    secondaryValue: $("#summary-value-secondary"),
+    summaryNote: $("#summary-note"),
+    baseLayers: $("#base-layer-list"),
+    sensors: $("#sensor-list"),
+    sensorPanel: $("#sensor-panel"),
+    datasetInfo: $("#dataset-info"),
+    sourceLinks: $("#source-links"),
+    fit: $("#fit-map"),
+    refresh: $("#refresh-data"),
   };
 
-  const fieldLabels = {
-    block: "Блок",
-    role: "Байрлал",
-    track_id: "Шугам",
-    type: "Төрөл",
-    direction: "Чиглэл",
-    spacing_m: "Алхам",
-    sensor_agl_m: "Мэдрэгчийн өндөр",
-    speed_mps: "Хурд",
-    point_role: "Цэгийн үүрэг",
-    plan_name: "Төлөвлөгөө",
-    note: "Тэмдэглэл",
+  const state = {
+    map: null,
+    manifest: null,
+    registry: null,
+    datasets: new Map(),
+    activeSensor: "MagArrow",
+    activeDatasetId: "magarrow-planned-survey",
+    baseLayers: new Map(),
+    planLayers: new Map(),
+    planVisibility: { boundary: true, main: true, tie: true },
+    missionLayers: new Map(),
+    selectedMissions: new Set(),
+    missionData: null,
+    missionPromise: null,
+    planArea: 0,
+    mainCoverage: 0,
+    warnings: new Set(),
   };
 
-  let map;
-  const mapLayers = new Map();
-  const licenseLayers = new Map();
-  const uchasticLayers = new Map();
-  const lPlanLayers = new Map();
-  let l3Layer;
-  let licenseFeatures = [];
-  let dataSignature;
-  let activePlan = "MagArrow";
-  let selectedLicenseKey = "all";
-  let selectedLicenseFeature = null;
-  let selectedUchasticKey = "all";
-  let selectedUchasticFeature = null;
-  let selectedLPlan = "all";
-  let l3Features = [];
-  let lPlanData = null;
-  const planConfig = {
-    L2: { label: "L2", color: "#ffb84d", dash: "10 7" },
-    L3: { label: "L3", color: "#c18cff", dash: "3 8" },
-    P1: { label: "P1", color: "#71f6c1", dash: null },
-    Medusa: { label: "Medusa", color: "#ff75b5", dash: "16 5 3 5" },
-    MagArrow: { label: "MagArrow", color: "#71f6c1", dash: null },
-  };
-  const isBoundaryLayer = (name) => ["HUS_NU_boundary", "Survey_Area"].includes(name);
-  const isMainLineLayer = (name) => ["P1_Main_50m", "P1_Main_100m_AZ88"].includes(name);
-  const isTieLineLayer = (name) => ["P1_Tie_300m", "P1_Tie_200m_AZ178"].includes(name);
-  const isPlanLayer = (name) => !isBoundaryLayer(name);
+  const sensorConfig = [
+    { id: "MagArrow", label: "MagArrow", status: "DATA AVAILABLE", tone: "available" },
+    { id: "L3", label: "L3", status: "SURVEY DATA AVAILABLE", tone: "survey" },
+    { id: "L2", label: "L2", status: "SOURCE PENDING", tone: "pending" },
+    { id: "P1", label: "P1", status: "SOURCE PENDING", tone: "pending" },
+    { id: "Medusa", label: "Medusa MS-700", status: "NO FLIGHT DATA", tone: "unavailable" },
+  ];
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
   const formatArea = (squareMetres) => {
     if (!Number.isFinite(squareMetres)) return "—";
-    return squareMetres >= 1_000_000
-      ? `${(squareMetres / 1_000_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км²`
-      : `${squareMetres.toLocaleString("mn-MN", { maximumFractionDigits: 0 })} м²`;
+    if (squareMetres >= 1_000_000) {
+      return `${(squareMetres / 1_000_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км²`;
+    }
+    return `${squareMetres.toLocaleString("mn-MN", { maximumFractionDigits: 0 })} м²`;
+  };
+
+  const formatLength = (metres) => {
+    if (!Number.isFinite(metres)) return "—";
+    return metres >= 1000
+      ? `${(metres / 1000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км`
+      : `${metres.toLocaleString("mn-MN", { maximumFractionDigits: 0 })} м`;
   };
 
   const geometryArea = (geometry) => {
@@ -82,518 +79,567 @@
     const polygons = geometry.type === "Polygon"
       ? [geometry.coordinates]
       : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
-    return polygons.reduce((total, polygon) => {
-      const latitude = polygon[0]?.reduce((sum, point) => sum + point[1], 0) / (polygon[0]?.length || 1);
-      const scale = 111320 * Math.cos(latitude * Math.PI / 180);
-      const ringArea = (ring) => Math.abs(ring.reduce((sum, point, index) => {
+    const ringArea = (ring) => {
+      if (!ring?.length) return 0;
+      const latitude = ring.reduce((sum, point) => sum + point[1], 0) / ring.length;
+      const xScale = 111320 * Math.cos(latitude * Math.PI / 180);
+      return Math.abs(ring.reduce((sum, point, index) => {
         const next = ring[(index + 1) % ring.length];
-        return sum + point[0] * scale * (next[1] * 111320) - next[0] * scale * (point[1] * 111320);
+        return sum + point[0] * xScale * next[1] * 111320 - next[0] * xScale * point[1] * 111320;
       }, 0)) / 2;
-      return total + ringArea(polygon[0]) - polygon.slice(1).reduce((sum, ring) => sum + ringArea(ring), 0);
-    }, 0);
+    };
+    return polygons.reduce((total, polygon) => (
+      total + ringArea(polygon[0]) - polygon.slice(1).reduce((sum, hole) => sum + ringArea(hole), 0)
+    ), 0);
   };
 
   const featureArea = (feature) => Number(feature?.properties?.area_m2) || geometryArea(feature?.geometry);
-  const formatSquareKilometres = (squareMetres) =>
-    `${(squareMetres / 1_000_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} км²`;
-  const lineLengthMetres = (feature) => {
-    const coordinates = feature?.geometry?.coordinates || [];
-    const lines = feature?.geometry?.type === "MultiLineString" ? coordinates : [coordinates];
-    return lines.reduce((total, line) => line.slice(1).reduce((sum, point, index) => {
+
+  const lineLength = (feature) => {
+    const geometry = feature?.geometry;
+    if (!geometry || !["LineString", "MultiLineString"].includes(geometry.type)) return 0;
+    const lines = geometry.type === "MultiLineString" ? geometry.coordinates : [geometry.coordinates];
+    return lines.reduce((total, line) => total + line.slice(1).reduce((sum, point, index) => {
       const previous = line[index];
-      const dx = (point[0] - previous[0]) * 111320 * Math.cos(point[1] * Math.PI / 180);
-      const dy = (point[1] - previous[1]) * 111320;
-      return sum + Math.hypot(dx, dy);
-    }, total), 0);
-  };
-  const dailyFlightArea = (planKey) => {
-    if (!lPlanData || planKey === "all") return 0;
-    return lPlanData.features
-      .filter((feature) => feature.properties?.plan === planKey)
-      .reduce((sum, feature) => sum + lineLengthMetres(feature) * 100, 0);
-  };
-  const setFlownArea = (label, squareMetres, squareKilometres = false) => {
-    flownAreaLabel.textContent = label;
-    flownArea.textContent = squareKilometres ? formatSquareKilometres(squareMetres) : formatArea(squareMetres);
-  };
-  const setTotalArea = (features) => {
-    const list = Array.isArray(features) ? features : [features];
-    totalArea.textContent = formatArea(list.reduce((sum, feature) => sum + featureArea(feature), 0));
+      const x = (point[0] - previous[0]) * 111320 * Math.cos(point[1] * Math.PI / 180);
+      const y = (point[1] - previous[1]) * 111320;
+      return sum + Math.hypot(x, y);
+    }, 0), 0);
   };
 
-  const escapeHtml = (value) => String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  const popup = (rows) => rows
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([label, value]) => `<span class="popup-label">${escapeHtml(label)}</span><span class="popup-value">${escapeHtml(value)}</span>`)
+    .join("");
 
-  const layerSettings = (name) => layerConfig[name] || {
-    label: name.replaceAll("_", " "),
-    color: "#9ab0c4",
-    visible: true,
+  const plannedPopup = (feature) => {
+    const props = feature.properties || {};
+    const main = props.dataType === "planned_main_line";
+    const tie = props.dataType === "planned_tie_line";
+    const type = main ? "Planned main line" : tie ? "Planned tie line" : "Planned survey geometry";
+    return popup([
+      ["Sensor", "MagArrow"],
+      ["Type", type],
+      ["Direction", props.direction || (main ? "E-W" : tie ? "N-S" : "")],
+      ["Azimuth", Number.isFinite(Number(props.azimuth_deg)) ? `${props.azimuth_deg}°` : ""],
+      ["Spacing", Number.isFinite(Number(props.spacing_m)) ? `${props.spacing_m} m` : ""],
+      ["AGL", Number.isFinite(Number(props.planned_sensor_agl_m)) ? `${props.planned_sensor_agl_m} m` : "30 m"],
+      ["Speed", Number.isFinite(Number(props.planned_speed_mps)) ? `${props.planned_speed_mps} m/s` : "6 m/s"],
+      ["Status", "Planned"],
+    ]);
   };
 
-  const popupContent = (feature) => {
-    const properties = feature.properties || {};
-    const settings = layerSettings(properties.layer);
-    const rows = [];
-    if (Number.isFinite(properties.area_m2)) rows.push(["Талбай", formatArea(properties.area_m2)]);
-    for (const [key, label] of Object.entries(fieldLabels)) {
-      const value = properties[key];
-      if (value === null || value === undefined || value === "") continue;
-      const unit = key.endsWith("_m") ? " м" : key.endsWith("_mps") ? " м/с" : "";
-      rows.push([label, `${value}${unit}`]);
-    }
-    const detailRows = rows
-      .map(([label, value]) => `<span class="popup-label">${escapeHtml(label)}</span><span class="popup-value">${escapeHtml(value)}</span>`)
-      .join("");
-    return `<span class="popup-label">Давхарга</span><span class="popup-value">${escapeHtml(settings.label)}</span>${detailRows}`;
+  const missionPopup = (feature) => {
+    const props = feature.properties || {};
+    return popup([
+      ["Sensor", "MagArrow"],
+      ["Mission", props.mission_id || props.plan],
+      ["Type", "DJI mission plan"],
+      ["Date", props.date],
+      ["Status", "Planned"],
+      ["Actual flown track", "Not represented by this geometry"],
+      ["Source", props.sourceFile],
+    ]);
   };
 
-  const licensePopup = (feature) => {
-    const properties = feature.properties || {};
-    const name = properties.AREANAME_L || properties.AREANAME || properties.LICENSE || "Лицензийн талбай";
-    return `<span class="popup-label">Лицензийн талбай</span><span class="popup-value">${escapeHtml(name)}</span>` +
-      (properties.LICENSE ? `<span class="popup-label">Лиценз</span><span class="popup-value">${escapeHtml(properties.LICENSE)}</span>` : "");
+  const basePopup = (feature) => {
+    const props = feature.properties || {};
+    const label = props.dataType === "licence_boundary" ? "Licence boundary"
+      : props.dataType === "uchastik_boundary" ? "Uchastik boundary"
+      : props.dataType === "block_boundary" ? "Block boundary"
+      : props.dataType === "block_label" ? "Block label"
+      : "CAD reference geometry";
+    return popup([
+      ["Category", "Base / Control"],
+      ["Type", label],
+      ["Name", props.AREANAME_L || props.AREANAME || props.name || props.text_value],
+      ["Licence", props.LICENSE],
+      ["Block", props.block_num],
+      ["Source", props.sourceFile || props.source_dwg],
+      ["Source CRS", props.sourceCrs || "Unknown / unverified"],
+      ["Web CRS", props.displayCrs || "EPSG:4326"],
+    ]);
   };
 
-  const vectorStyle = (feature) => {
-    const geometryType = feature.geometry?.type || "";
-    const settings = layerSettings(feature.properties?.layer);
-    const layerName = feature.properties?.layer;
-    const isPlanLine = isMainLineLayer(layerName) || isTieLineLayer(layerName);
-    const selectedPlan = planConfig[activePlan];
-    if (geometryType.includes("Polygon")) {
-      const isBoundary = isBoundaryLayer(layerName);
-      return {
-        color: settings.color,
-        weight: isBoundary ? 3.5 : 1.5,
-        opacity: 1,
-        fillColor: settings.color,
-        fillOpacity: isBoundary ? 0.08 : 0.13,
-      };
-    }
-    return {
-      color: isPlanLine
-        ? isTieLineLayer(layerName) && activePlan === "MagArrow"
-          ? "#39a8ff"
-          : selectedPlan.color
-        : settings.color,
-      weight: isPlanLine ? (isMainLineLayer(layerName) ? 2.2 : 1.5) : 1.35,
-      opacity: 0.95,
-      dashArray: isPlanLine ? selectedPlan.dash : null,
+  const ensureMap = () => {
+    if (state.map) return state.map;
+    const map = L.map("map", { zoomControl: false, preferCanvas: true });
+    state.map = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    const panes = {
+      licencePane: 430,
+      surveyPane: 440,
+      uchastikPane: 450,
+      plannedPane: 460,
+      missionPane: 470,
+      actualPane: 480,
+      measurementPane: 490,
+      labelsPane: 500,
     };
+    for (const [name, zIndex] of Object.entries(panes)) {
+      const pane = map.createPane(name);
+      pane.style.zIndex = String(zIndex);
+    }
+    map.setView([49.1, 107.5], 8);
+    return map;
   };
 
-  const showError = (message) => {
-    loading.hidden = true;
-    errorMessage.textContent = message;
-    errorCard.hidden = false;
+  const fetchJson = async (url) => {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${url} → HTTP ${response.status}`);
+    return response.json();
   };
 
-  const fitToArea = () => {
-    if (!map) return;
-    const selectedLayer = selectedLPlan !== "all"
-      ? lPlanLayers.get(selectedLPlan)
-      : selectedUchasticKey !== "all"
-      ? uchasticLayers.get(selectedUchasticKey)
-      : selectedLicenseKey !== "all" ? licenseLayers.get(selectedLicenseKey) : null;
-    const preferred = selectedLayer || [...mapLayers.entries()].find(([name]) => isBoundaryLayer(name))?.[1];
-    const boundsSource = preferred || L.featureGroup([...mapLayers.values()]);
-    const bounds = boundsSource.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
-  };
-
-  const renderLPlanControls = (plans) => {
-    lPlanList.replaceChildren();
-    const entries = [{ label: "Бүгд", date: "", key: "all" }, ...plans.map((plan) => ({
-      label: `${plan.label} · ${plan.date}`, date: plan.date, key: plan.label,
-    }))];
-    for (const entry of entries) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `license-button${entry.key === "all" ? " is-active" : ""}`;
-      button.textContent = entry.date ? `${entry.label} (${entry.date})` : entry.label;
-      button.addEventListener("click", () => {
-        selectedLPlan = entry.key;
-        for (const [key, layer] of lPlanLayers) {
-          if (entry.key === "all" || key === entry.key) layer.addTo(map);
-          else map.removeLayer(layer);
+  const assertProjectTruth = (payload, label) => {
+    const rootProject = payload?.project;
+    if (rootProject && rootProject !== PROJECT) throw new Error(`${label}: project=${rootProject}`);
+    for (const feature of payload?.features || []) {
+      const props = feature.properties || {};
+      if (props.project && props.project !== PROJECT) throw new Error(`${label}: feature ${feature.id} belongs to ${props.project}`);
+      const provenance = `${props.project || ""} ${props.sourceFile || ""}`.toLowerCase();
+      const conflict = FORBIDDEN_PROJECTS.find((token) => provenance.includes(token));
+      if (conflict) throw new Error(`${label}: cross-project marker ${conflict}`);
+      if (props.dataType === "actual_flight_track") {
+        const source = String(props.sourceFile || "").toLowerCase();
+        if (/\.(kml|kmz|wpmz|zip)$/.test(source) || props.plannedActual !== "actual") {
+          throw new Error(`${label}: a mission-plan source was classified as an actual track`);
         }
-        for (const item of lPlanList.children) item.classList.remove("is-active");
-        button.classList.add("is-active");
-        const selectedFeatures = lPlanData.features.filter((feature) => feature.properties?.plan === entry.key);
-        const squareMetres = entry.key === "all"
-          ? l3Features.filter((feature) => feature.properties?.layer === "BLOCK_BOUNDARY")
-            .reduce((sum, feature) => sum + featureArea(feature), 0)
-          : selectedFeatures.reduce((sum, feature) => sum + lineLengthMetres(feature) * 100, 0);
-        setFlownArea(entry.key === "all" ? "Нийт нислэг" : "Өдрийн нислэг", squareMetres, entry.key !== "all");
-        fitToArea();
-      });
-      lPlanList.appendChild(button);
-    }
-  };
-
-  const updatePlanVisibility = () => {
-    for (const [name, geoLayer] of mapLayers) {
-      if (isBoundaryLayer(name)) continue;
-      if (activePlan === "MagArrow") {
-        geoLayer.setStyle(vectorStyle);
-        if (layerSettings(name).visible) geoLayer.addTo(map);
-      } else map.removeLayer(geoLayer);
-    }
-    const showL3 = activePlan === "L3" && selectedLicenseKey !== "all" &&
-      (selectedLicenseFeature?.properties?.AREANAME || "").toLocaleLowerCase().includes("nergui");
-    if (l3Layer) {
-      if (showL3) l3Layer.addTo(map);
-      else map.removeLayer(l3Layer);
-    }
-    dailyTracksSection.hidden = activePlan !== "L3";
-    for (const [key, layer] of lPlanLayers) {
-      if (activePlan !== "L3" || (selectedLPlan !== "all" && key !== selectedLPlan)) map.removeLayer(layer);
-      else layer.addTo(map);
-    }
-    if (activePlan === "L3" && l3Features.length) {
-      const total = l3Features.filter((feature) => feature.properties?.layer === "BLOCK_BOUNDARY")
-        .reduce((sum, feature) => sum + featureArea(feature), 0);
-      setFlownArea(selectedLPlan === "all" ? "Нийт нислэг" : "Өдрийн нислэг",
-        selectedLPlan === "all" ? total : dailyFlightArea(selectedLPlan), selectedLPlan !== "all");
-    }
-  };
-
-  const createLayerControl = (summary, geoLayer) => {
-    if (isBoundaryLayer(summary.name)) return;
-    const settings = layerSettings(summary.name);
-    const card = document.createElement("div");
-    card.className = "layer-card plan-layer-control";
-    card.style.setProperty("--layer-color", settings.color);
-    const geometryClass = summary.geometry_type.includes("POINT")
-      ? "point"
-      : summary.geometry_type.includes("LINE") ? "line" : "polygon";
-    const controlId = `layer-${summary.name.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-    card.innerHTML = `
-      <div class="layer-copy">
-        <span class="swatch ${geometryClass}" aria-hidden="true"></span>
-        <div>
-          <strong>${escapeHtml(settings.label)}</strong>
-          <span>${summary.feature_count.toLocaleString("mn-MN")} объект · ${escapeHtml(summary.geometry_type)}</span>
-        </div>
-      </div>
-      <label class="switch" title="Давхаргыг харуулах эсвэл нуух">
-        <input id="${controlId}" type="checkbox" ${settings.visible ? "checked" : ""} />
-        <span aria-hidden="true"></span>
-        <span class="sr-only">${escapeHtml(settings.label)} давхаргыг харуулах</span>
-      </label>`;
-    const checkbox = card.querySelector("input");
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) geoLayer.addTo(map);
-      else map.removeLayer(geoLayer);
-    });
-    layerList.appendChild(card);
-  };
-
-  const updatePlanLayerControls = () => {
-    layersSection.hidden = activePlan !== "MagArrow";
-    for (const card of layerList.querySelectorAll(".plan-layer-control")) {
-      card.hidden = activePlan !== "MagArrow";
-    }
-  };
-
-  const renderLicenseControls = (features) => {
-    licenseFeatures = features;
-    licenseHeading.textContent = "Лицензийн талбай";
-    licenseBack.hidden = true;
-    licenseList.replaceChildren();
-    const entries = [["all", "Бүгд", null], ...features.map((feature, index) => {
-      const properties = feature.properties || {};
-      return [String(index), properties.AREANAME || properties.LICENSE || `Лиценз ${index + 1}`, feature];
-    })];
-    for (const [key, label, feature] of entries) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `license-button${key === "all" ? " is-active" : ""}`;
-      button.textContent = label;
-      button.addEventListener("click", () => {
-        if (label.toLocaleLowerCase("mn-MN").includes("nergui") || label.toLocaleLowerCase("mn-MN").includes("нэргүй")) {
-          selectedLicenseKey = key;
-          selectedLicenseFeature = feature;
-          selectedUchasticKey = "all";
-          selectedUchasticFeature = null;
-          setTotalArea(feature);
-          fitToArea();
-          showUchasticList(String(features.indexOf(feature)));
-          return;
-        }
-        selectedLicenseKey = key;
-        selectedLicenseFeature = feature;
-        selectedUchasticKey = "all";
-        selectedUchasticFeature = null;
-        for (const layer of uchasticLayers.values()) map.removeLayer(layer);
-        for (const [layerKey, layer] of licenseLayers) {
-          if (key === "all" || layerKey === key) layer.addTo(map);
-          else map.removeLayer(layer);
-        }
-        for (const item of licenseList.children) item.classList.remove("is-active");
-        button.classList.add("is-active");
-        setTotalArea(key === "all" ? features : feature);
-        updatePlanVisibility();
-        fitToArea();
-      });
-      licenseList.appendChild(button);
-    }
-  };
-
-  const showUchasticList = async (licenseKey) => {
-    for (const [key, layer] of licenseLayers) {
-      if (key === licenseKey) layer.addTo(map);
-      else map.removeLayer(layer);
-    }
-    const response = await fetch("./data/uchastics.geojson", { cache: "no-store" });
-    if (!response.ok) throw new Error(`Участикийн өгөгдлийн хүсэлт амжилтгүй (${response.status})`);
-    const data = await response.json();
-    for (const layer of uchasticLayers.values()) map.removeLayer(layer);
-    uchasticLayers.clear();
-    for (const [index, feature] of data.features.entries()) {
-      const layer = L.geoJSON(feature, {
-        style: { color: "#ff75b5", weight: 2, opacity: 1, fillColor: "#ff75b5", fillOpacity: 0.12 },
-        onEachFeature(item, itemLayer) {
-          const properties = item.properties || {};
-          itemLayer.bindPopup(`<span class="popup-label">Участик</span><span class="popup-value">${escapeHtml(properties.name || `Участик ${index + 1}`)}</span>`);
-        },
-      }).addTo(map);
-      uchasticLayers.set(String(index), layer);
-    }
-    licenseHeading.textContent = "Nergui Undur · участикууд";
-    licenseBack.hidden = false;
-    licenseList.replaceChildren();
-    const planButton = document.createElement("button");
-    planButton.type = "button";
-    planButton.className = "license-button uchastic-plan-button is-active";
-    planButton.textContent = "Дорнын төмөр";
-    planButton.addEventListener("click", () => {
-      for (const layer of uchasticLayers.values()) map.removeLayer(layer);
-      for (const [name, layer] of mapLayers) {
-        if (!isBoundaryLayer(name) && layerSettings(name).visible) layer.addTo(map);
       }
-      selectedUchasticKey = "all";
-      selectedUchasticFeature = null;
-      setTotalArea(selectedLicenseFeature);
-      updatePlanVisibility();
-      fitToArea();
-      for (const item of licenseList.children) item.classList.remove("is-active");
-      planButton.classList.add("is-active");
+    }
+  };
+
+  const dataset = (id) => state.datasets.get(id);
+
+  const addWarning = (key, message) => {
+    if (state.warnings.has(key)) return;
+    state.warnings.add(key);
+    const item = document.createElement("div");
+    item.className = "warning-item";
+    item.textContent = message;
+    ui.warnings.appendChild(item);
+  };
+
+  const clearWarnings = () => {
+    state.warnings.clear();
+    ui.warnings.replaceChildren();
+  };
+
+  const setSummary = (primaryLabel, primaryValue, secondaryLabel, secondaryValue, note = "") => {
+    ui.primaryLabel.textContent = primaryLabel;
+    ui.primaryValue.textContent = primaryValue;
+    ui.secondaryLabel.textContent = secondaryLabel;
+    ui.secondaryValue.textContent = secondaryValue;
+    ui.summaryNote.textContent = note;
+  };
+
+  const registerBaseControl = (id, label, detail, layer, visible, tone = "base") => {
+    state.baseLayers.set(id, { layer, visible, label });
+    if (visible) layer.addTo(state.map);
+    const row = document.createElement("label");
+    row.className = "toggle-row";
+    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4 }[id] || 99);
+    row.innerHTML = `
+      <span class="toggle-copy"><span class="mini-symbol ${tone}" aria-hidden="true"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span>
+      <span class="switch"><input type="checkbox" ${visible ? "checked" : ""} /><span aria-hidden="true"></span></span>`;
+    row.querySelector("input").addEventListener("change", (event) => {
+      state.baseLayers.get(id).visible = event.target.checked;
+      if (event.target.checked) layer.addTo(state.map);
+      else state.map.removeLayer(layer);
     });
-    licenseList.appendChild(planButton);
-    const allUchasticButton = document.createElement("button");
-    allUchasticButton.type = "button";
-    allUchasticButton.className = "license-button uchastic-button is-active";
-    allUchasticButton.textContent = "Бүгд";
-    allUchasticButton.addEventListener("click", () => {
-      for (const layer of uchasticLayers.values()) layer.addTo(map);
-      selectedUchasticKey = "all";
-      selectedUchasticFeature = null;
-      setTotalArea(data.features);
-      updatePlanVisibility();
-      fitToArea();
-      for (const item of licenseList.children) item.classList.remove("is-active");
-      allUchasticButton.classList.add("is-active");
+    ui.baseLayers.appendChild(row);
+  };
+
+  const registerUnavailableBase = (label, error) => {
+    const row = document.createElement("div");
+    row.className = "toggle-row is-disabled";
+    row.innerHTML = `<span class="toggle-copy"><span class="mini-symbol pending"></span><span><strong>${escapeHtml(label)}</strong><small>Уншигдсангүй</small></span></span>`;
+    ui.baseLayers.appendChild(row);
+    addWarning(`base-${label}`, `${label}: ${error.message}`);
+  };
+
+  const loadLicence = async () => {
+    const config = dataset("base-licence");
+    const data = await fetchJson(config.webAsset);
+    assertProjectTruth(data, "Licence");
+    const layer = L.geoJSON(data, {
+      pane: "licencePane",
+      style: { color: "#ffd166", weight: 3, fillColor: "#ffd166", fillOpacity: 0.05, dashArray: "9 5" },
+      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
     });
-    licenseList.appendChild(allUchasticButton);
-    for (const [index, feature] of data.features.entries()) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "license-button uchastic-button";
-      button.textContent = feature.properties?.name || `Участик ${index + 1}`;
-      button.addEventListener("click", () => {
-        for (const [layerIndex, layer] of uchasticLayers) {
-          if (layerIndex === String(index)) layer.addTo(map);
-          else map.removeLayer(layer);
+    registerBaseControl("licence", "Licence", `${data.features.length} polygon`, layer, true, "licence");
+  };
+
+  const loadUchastik = async () => {
+    const config = dataset("base-uchastik");
+    const data = await fetchJson(config.webAsset);
+    assertProjectTruth(data, "Uchastik");
+    const layer = L.geoJSON(data, {
+      pane: "uchastikPane",
+      style: { color: "#ff75b5", weight: 2.2, fillColor: "#ff75b5", fillOpacity: 0.08 },
+      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+    });
+    registerBaseControl("uchastik", "Uchastik", `${data.features.length} polygon`, layer, true, "uchastik");
+  };
+
+  const boundaryPoint = (feature, latlng) => {
+    const props = feature.properties || {};
+    const label = props.block_num || props.text_value || props.uchastic_id || "";
+    return L.marker(latlng, {
+      pane: "labelsPane",
+      interactive: true,
+      icon: L.divIcon({ className: "map-label", html: `<span>${escapeHtml(label)}</span>` }),
+    });
+  };
+
+  const loadBoundaries = async () => {
+    const config = dataset("base-survey-boundaries");
+    const data = await fetchJson(config.webAsset);
+    assertProjectTruth(data, "Survey boundaries");
+    const blockTypes = new Set(["block_boundary", "block_label"]);
+    const blockFeatures = data.features.filter((feature) => blockTypes.has(feature.properties?.dataType));
+    const cadFeatures = data.features.filter((feature) => !blockTypes.has(feature.properties?.dataType));
+    const blockLayer = L.geoJSON({ type: "FeatureCollection", features: blockFeatures }, {
+      pane: "surveyPane",
+      style: { color: "#ffb84d", weight: 2, fillColor: "#ffb84d", fillOpacity: 0.05, dashArray: "5 4" },
+      pointToLayer: boundaryPoint,
+      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+    });
+    const cadLayer = L.geoJSON({ type: "FeatureCollection", features: cadFeatures }, {
+      pane: "surveyPane",
+      style: { color: "#91a6bb", weight: 1.2, fillColor: "#91a6bb", fillOpacity: 0.025, dashArray: "2 6" },
+      pointToLayer: boundaryPoint,
+      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+    });
+    registerBaseControl("blocks", "Block boundaries", `${blockFeatures.length} DWG-derived feature`, blockLayer, false, "block");
+    registerBaseControl("cad", "Other CAD reference", `${cadFeatures.length} DWG-derived feature`, cadLayer, false, "cad");
+  };
+
+  const loadMagArrowPlan = async () => {
+    const config = dataset("magarrow-planned-survey");
+    const data = await fetchJson(config.webAsset);
+    assertProjectTruth(data, "MagArrow planned survey");
+    const boundaryFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_survey_boundary");
+    const mainFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_main_line");
+    const tieFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_tie_line");
+    state.planArea = boundaryFeatures.reduce((sum, feature) => sum + featureArea(feature), 0);
+    state.mainCoverage = mainFeatures.reduce((sum, feature) => sum + lineLength(feature) * (Number(feature.properties?.spacing_m) || 100), 0);
+    const boundary = L.geoJSON({ type: "FeatureCollection", features: boundaryFeatures }, {
+      pane: "surveyPane",
+      style: { color: "#39d9ff", weight: 2.6, fillColor: "#39d9ff", fillOpacity: 0.035 },
+      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
+    });
+    const main = L.geoJSON({ type: "FeatureCollection", features: mainFeatures }, {
+      pane: "plannedPane",
+      style: { color: "#71f6c1", weight: 2.2, opacity: 0.94 },
+      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
+    });
+    const tie = L.geoJSON({ type: "FeatureCollection", features: tieFeatures }, {
+      pane: "plannedPane",
+      style: { color: "#39a8ff", weight: 1.7, opacity: 0.9, dashArray: "8 6" },
+      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
+    });
+    state.planLayers.set("boundary", boundary);
+    state.planLayers.set("main", main);
+    state.planLayers.set("tie", tie);
+    restoreMagArrowLayers();
+  };
+
+  const restoreMagArrowLayers = () => {
+    if (state.activeSensor !== "MagArrow") return;
+    for (const [id, layer] of state.planLayers) {
+      if (state.planVisibility[id]) layer.addTo(state.map);
+    }
+    for (const [id, layer] of state.missionLayers) {
+      if (state.selectedMissions.has(id)) layer.addTo(state.map);
+    }
+  };
+
+  const hideSensorLayers = () => {
+    for (const layer of state.planLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
+  };
+
+  const loadMissionPlans = async () => {
+    if (state.missionData) return state.missionData;
+    if (state.missionPromise) return state.missionPromise;
+    const config = dataset("magarrow-mission-plans");
+    state.missionPromise = fetchJson(config.webAsset).then((data) => {
+      assertProjectTruth(data, "MagArrow mission plans");
+      state.missionData = data;
+      for (const plan of data.plans || []) {
+        const features = data.features.filter((feature) => (feature.properties?.mission_id || feature.properties?.plan) === plan.label);
+        const layer = L.geoJSON({ type: "FeatureCollection", features }, {
+          pane: "missionPane",
+          style: { color: "#ff9f43", weight: 2.4, opacity: 0.96, dashArray: "11 6" },
+          onEachFeature(feature, item) { item.bindPopup(missionPopup(feature)); },
+        });
+        state.missionLayers.set(plan.label, layer);
+      }
+      return data;
+    }).catch((error) => {
+      state.missionPromise = null;
+      throw error;
+    });
+    return state.missionPromise;
+  };
+
+  const updateMagArrowSummary = () => {
+    if (state.selectedMissions.size && state.missionData) {
+      const selected = state.missionData.features.filter((feature) => state.selectedMissions.has(feature.properties?.mission_id || feature.properties?.plan));
+      const estimatedCoverage = selected.reduce((sum, feature) => sum + lineLength(feature) * 100, 0);
+      setSummary(
+        "Нийт талбай",
+        formatArea(state.planArea),
+        "Төлөвлөсөн хамрах талбай",
+        formatArea(estimatedCoverage),
+        "DJI mission plan шугамын урт × 100 м — төлөвлөсөн estimate; verified flown area биш."
+      );
+      state.activeDatasetId = "magarrow-mission-plans";
+    } else {
+      setSummary(
+        "Нийт талбай",
+        formatArea(state.planArea),
+        "Төлөвлөсөн хамрах талбай",
+        formatArea(state.mainCoverage),
+        "Approved main-line length × 100 м. Actual track/covered area гэж тооцоогүй."
+      );
+      state.activeDatasetId = "magarrow-planned-survey";
+    }
+    renderDatasetInfo();
+  };
+
+  const makeToggle = (label, detail, checked, onChange, className = "") => {
+    const row = document.createElement("label");
+    row.className = `toggle-row ${className}`.trim();
+    row.innerHTML = `<span class="toggle-copy"><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span><span class="switch"><input type="checkbox" ${checked ? "checked" : ""}/><span aria-hidden="true"></span></span>`;
+    row.querySelector("input").addEventListener("change", (event) => onChange(event.target.checked, event.target));
+    return row;
+  };
+
+  const renderMagArrowPanel = () => {
+    const missions = dataset("magarrow-mission-plans")?.missions || [];
+    ui.sensorPanel.innerHTML = `
+      <div class="sensor-heading"><div><strong>MagArrow</strong><span>Heseg Uul hoid</span></div><span class="status-badge available">CONFIRMED</span></div>
+      <h3>Planned Survey Lines</h3>
+      <div id="plan-toggles" class="control-list"></div>
+      <details class="nested-panel">
+        <summary>DJI Mission Plans <span>${missions.length}</span></summary>
+        <p class="panel-note">L01–L11 нь planned WPMZ/KMZ route. Actual flown track биш.</p>
+        <div id="mission-list" class="mission-list"></div>
+      </details>
+      <h3>Actual Data</h3>
+      <button class="status-row" type="button" data-dataset="magarrow-actual-tracks"><span>Actual tracks</span><em>PENDING INGESTION</em></button>
+      <button class="status-row" type="button" data-dataset="magarrow-measurements"><span>10 Hz measurements</span><em>OFF · PENDING</em></button>
+      <p class="panel-note">Local 10 Hz CSV байхгүй тул track/measurement geometry зохиогоогүй.</p>`;
+    const planToggles = ui.sensorPanel.querySelector("#plan-toggles");
+    const planRows = [
+      ["boundary", "Survey boundary", "Approved footprint"],
+      ["main", "Main lines", "E-W · 100 м · AZ≈88°/268°"],
+      ["tie", "Tie lines", "N-S · 200 м · AZ≈178°/358°"],
+    ];
+    for (const [id, label, detail] of planRows) {
+      planToggles.appendChild(makeToggle(label, detail, state.planVisibility[id], (checked) => {
+        state.planVisibility[id] = checked;
+        const layer = state.planLayers.get(id);
+        if (!layer) return;
+        if (checked) layer.addTo(state.map);
+        else state.map.removeLayer(layer);
+      }));
+    }
+    const missionList = ui.sensorPanel.querySelector("#mission-list");
+    for (const mission of missions) {
+      missionList.appendChild(makeToggle(`${mission.id} · ${mission.date}`, "DJI mission plan · Planned", state.selectedMissions.has(mission.id), async (checked, input) => {
+        input.disabled = true;
+        try {
+          await loadMissionPlans();
+          const layer = state.missionLayers.get(mission.id);
+          if (checked) {
+            state.selectedMissions.add(mission.id);
+            if (state.activeSensor === "MagArrow") layer?.addTo(state.map);
+          } else {
+            state.selectedMissions.delete(mission.id);
+            if (layer) state.map.removeLayer(layer);
+          }
+          updateMagArrowSummary();
+        } catch (error) {
+          input.checked = false;
+          addWarning("mission-plans", `Mission plans: ${error.message}`);
+        } finally {
+          input.disabled = false;
         }
-        for (const item of licenseList.children) item.classList.remove("is-active");
-        button.classList.add("is-active");
-        selectedUchasticKey = String(index);
-        selectedUchasticFeature = feature;
-        setTotalArea(feature);
-        updatePlanVisibility();
-        fitToArea();
-      });
-      licenseList.appendChild(button);
+      }));
     }
+    for (const button of ui.sensorPanel.querySelectorAll("[data-dataset]")) {
+      button.addEventListener("click", () => {
+        state.activeDatasetId = button.dataset.dataset;
+        renderDatasetInfo();
+      });
+    }
+    updateMagArrowSummary();
   };
 
-  licenseBack.addEventListener("click", () => {
-    for (const layer of uchasticLayers.values()) map.removeLayer(layer);
-    for (const layer of licenseLayers.values()) layer.addTo(map);
-    renderLicenseControls(licenseFeatures);
-    selectedLicenseKey = "all";
-    selectedLicenseFeature = null;
-    selectedUchasticKey = "all";
-    selectedUchasticFeature = null;
-    setTotalArea(licenseFeatures);
-    updatePlanVisibility();
-    fitToArea();
-  });
+  const renderStatusPanel = (sensor) => {
+    const mapping = {
+      L3: {
+        datasetId: "l3-survey-family",
+        title: "Zenmuse L3",
+        badge: "CONFIRMED SURVEY DATA",
+        tone: "survey",
+        body: "Sant Uul survey family, metadata болон derived products баталгаажсан.",
+        extra: `<div class="block-grid">${["N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9"].map((block) => `<span>${block}</span>`).join("")}</div><p class="truth-note">Actual trajectory: NOT AVAILABLE / NOT CONFIRMED</p>`,
+        summary: ["Survey blocks", "N1–N9", "Data status", "Available"],
+      },
+      L2: {
+        datasetId: "l2-source", title: "Zenmuse L2", badge: "SOURCE PENDING", tone: "pending",
+        body: "Canonical LiDAR source structure байна. Nergui Undur actual flight track баталгаажаагүй.", extra: "",
+        summary: ["Data status", "Pending", "Flight track", "Not confirmed"],
+      },
+      P1: {
+        datasetId: "p1-source", title: "Zenmuse P1", badge: "SOURCE PENDING", tone: "pending",
+        body: "Canonical RGB photogrammetry source байна. Raw mission/trajectory баталгаажаагүй.", extra: "",
+        summary: ["Data status", "Pending", "Flight track", "Not confirmed"],
+      },
+      Medusa: {
+        datasetId: "medusa-source", title: "Medusa MS-700", badge: "NO FLIGHT DATA INGESTED", tone: "unavailable",
+        body: "SOP/specification баримт байна. Actual field-flight/acquisition data баталгаажаагүй.", extra: "",
+        summary: ["Data status", "Pending", "Flight data", "Not ingested"],
+      },
+    };
+    const config = mapping[sensor];
+    state.activeDatasetId = config.datasetId;
+    ui.sensorPanel.innerHTML = `<div class="sensor-heading"><div><strong>${escapeHtml(config.title)}</strong><span>Nergui Undur</span></div><span class="status-badge ${config.tone}">${escapeHtml(config.badge)}</span></div><p class="status-copy">${escapeHtml(config.body)}</p>${config.extra}`;
+    setSummary(...config.summary, "Missing data-г zero гэж үзээгүй; баталгаажаагүй track харуулахгүй.");
+    renderDatasetInfo();
+  };
 
-  const renderPlanControls = () => {
-    planList.replaceChildren();
-    for (const plan of Object.values(planConfig)) {
+  const renderSensorButtons = () => {
+    ui.sensors.replaceChildren();
+    for (const sensor of sensorConfig) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `plan-button${plan.label === activePlan ? " is-active" : ""}`;
-      button.style.setProperty("--plan-color", plan.color);
-      button.textContent = plan.label;
-      button.setAttribute("aria-pressed", String(plan.label === activePlan));
-      button.addEventListener("click", () => {
-        activePlan = plan.label;
-        renderPlanControls();
-        updatePlanLayerControls();
-        updatePlanVisibility();
-        fitToArea();
-      });
-      planList.appendChild(button);
+      button.className = `sensor-button${state.activeSensor === sensor.id ? " is-active" : ""}`;
+      button.dataset.sensor = sensor.id;
+      button.innerHTML = `<span>${escapeHtml(sensor.label)}</span><small class="${sensor.tone}">${escapeHtml(sensor.status)}</small>`;
+      button.addEventListener("click", () => selectSensor(sensor.id));
+      ui.sensors.appendChild(button);
     }
   };
 
-  async function start(showLoading = true) {
-    errorCard.hidden = true;
-    if (showLoading) loading.hidden = false;
+  const selectSensor = (sensor) => {
+    state.activeSensor = sensor;
+    hideSensorLayers();
+    renderSensorButtons();
+    if (sensor === "MagArrow") {
+      restoreMagArrowLayers();
+      renderMagArrowPanel();
+    } else {
+      renderStatusPanel(sensor);
+    }
+  };
 
-    if (!window.L) {
-      showError("Газрын зургийн сан ачаалагдсангүй. Интернэт холболтоо шалгана уу.");
+  const renderDatasetInfo = () => {
+    const config = dataset(state.activeDatasetId);
+    if (!config) {
+      ui.datasetInfo.replaceChildren();
+      ui.sourceLinks.replaceChildren();
       return;
     }
+    const verified = config.crsVerified === true ? "VERIFIED" : config.crsVerified === false ? "REVIEW / UNVERIFIED" : "N/A";
+    const rows = [
+      ["Dataset", config.id],
+      ["Type", config.dataType],
+      ["State", config.plannedActual],
+      ["Source CRS", config.sourceCrs || "Not published"],
+      ["Web CRS", config.displayCrs || "No web geometry"],
+      ["CRS status", verified],
+    ];
+    ui.datasetInfo.innerHTML = rows.map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
+    const links = [...state.datasets.values()].filter((item) => item.sensor === state.activeSensor && item.sourceUrl);
+    const unique = new Map(links.map((item) => [item.sourceUrl, item]));
+    ui.sourceLinks.innerHTML = [...unique.values()].map((item) => `<a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.dataType.replaceAll("_", " "))}<span>↗</span></a>`).join("");
+  };
 
+  const visibleLayers = () => {
+    const layers = [];
+    for (const item of state.baseLayers.values()) if (item.visible) layers.push(item.layer);
+    if (state.activeSensor === "MagArrow") {
+      for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
+      for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
+    }
+    return layers;
+  };
+
+  const fitMap = () => {
+    const group = L.featureGroup(visibleLayers());
+    const bounds = group.getBounds();
+    if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+  };
+
+  const removeAllDataLayers = () => {
+    for (const item of state.baseLayers.values()) state.map.removeLayer(item.layer);
+    hideSensorLayers();
+    state.baseLayers.clear();
+    state.planLayers.clear();
+    state.missionLayers.clear();
+    state.selectedMissions.clear();
+    state.missionData = null;
+    state.missionPromise = null;
+    state.planArea = 0;
+    state.mainCoverage = 0;
+    ui.baseLayers.replaceChildren();
+  };
+
+  const load = async () => {
+    ensureMap();
+    ui.loading.hidden = false;
+    ui.error.hidden = true;
+    clearWarnings();
+    removeAllDataLayers();
     try {
-      if (!map) {
-        map = L.map("map", { zoomControl: false, attributionControl: false, preferCanvas: true });
-        L.control.zoom({ position: "topright" }).addTo(map);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap contributors",
-        }).addTo(map);
-      }
+      const [manifest, registry] = await Promise.all([
+        fetchJson("./data/manifest.json"),
+        fetchJson("./data/datasets.json"),
+      ]);
+      if (registry.project !== PROJECT) throw new Error(`Registry project must be ${PROJECT}`);
+      state.manifest = manifest;
+      state.registry = registry;
+      state.datasets = new Map(registry.datasets.map((item) => [item.id, item]));
+      ui.manifestStatus.textContent = `Data ${manifest.version} · ${manifest.updated}`;
 
-      const response = await fetch("./data/area.geojson", { cache: "no-store" });
-      if (!response.ok) throw new Error(`Өгөгдлийн хүсэлт амжилтгүй (${response.status})`);
-      const data = await response.json();
-      const nextSignature = JSON.stringify(data);
-      if (nextSignature === dataSignature) return;
-      dataSignature = nextSignature;
-
-      for (const geoLayer of mapLayers.values()) map.removeLayer(geoLayer);
-      mapLayers.clear();
-      layerList.replaceChildren();
-
-      for (const summary of data.layers || []) {
-        const settings = layerSettings(summary.name);
-        const features = data.features.filter((feature) => feature.properties?.layer === summary.name);
-        const geoLayer = L.geoJSON({ type: "FeatureCollection", features }, {
-          style: vectorStyle,
-          pointToLayer(feature, latlng) {
-            const isMetadata = feature.properties?.layer === "Plan_Metadata";
-            return L.circleMarker(latlng, {
-              radius: isMetadata ? 7 : 3.5,
-              color: "#07111f",
-              weight: 1,
-              fillColor: settings.color,
-              fillOpacity: 0.95,
-            });
-          },
-          onEachFeature(feature, layer) {
-            layer.bindPopup(popupContent(feature));
-          },
-        });
-        mapLayers.set(summary.name, geoLayer);
-        if (settings.visible && (activePlan === "MagArrow" || !isPlanLayer(summary.name))) geoLayer.addTo(map);
-        createLayerControl(summary, geoLayer);
-      }
-      renderPlanControls();
-      updatePlanLayerControls();
-
-      const l3Response = await fetch("./data/l3.geojson", { cache: "no-store" });
-      if (!l3Response.ok) throw new Error(`L3 өгөгдлийн хүсэлт амжилтгүй (${l3Response.status})`);
-      const l3Data = await l3Response.json();
-      l3Features = l3Data.features;
-      if (l3Layer) map.removeLayer(l3Layer);
-      const l3VisibleFeatures = l3Data.features.filter((feature) =>
-        feature.geometry?.type !== "Point" || feature.properties?.layer === "BLOCK_NUM_LABELS");
-      l3Layer = L.geoJSON({ ...l3Data, features: l3VisibleFeatures }, {
-        style: { color: "#c18cff", weight: 2.5, opacity: 1, fillColor: "#c18cff", fillOpacity: 0.12, dashArray: "4 6" },
-        pointToLayer(feature, latlng) {
-          const text = escapeHtml(feature.properties?.text_value || "");
-          return L.marker(latlng, {
-            icon: L.divIcon({
-              className: "l3-block-label",
-              html: `<span>${text}</span>`,
-              iconSize: null,
-            }),
-            keyboard: false,
-          });
-        },
-        onEachFeature(feature, layer) { layer.bindPopup(popupContent(feature)); },
+      const jobs = [
+        ["Licence", loadLicence],
+        ["Uchastik", loadUchastik],
+        ["Survey boundaries", loadBoundaries],
+        ["MagArrow planned survey", loadMagArrowPlan],
+      ];
+      const results = await Promise.allSettled(jobs.map(([, task]) => task()));
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          const label = jobs[index][0];
+          if (index < 3) registerUnavailableBase(label, result.reason);
+          else addWarning("magarrow-plan", `${label}: ${result.reason.message}`);
+        }
       });
-      if (activePlan === "L3") l3Layer.addTo(map);
-
-      const lPlanResponse = await fetch("./data/l-plans.geojson", { cache: "no-store" });
-      if (!lPlanResponse.ok) throw new Error(`L дата хүсэлт амжилтгүй (${lPlanResponse.status})`);
-      const lPlanDataPayload = await lPlanResponse.json();
-      for (const layer of lPlanLayers.values()) map.removeLayer(layer);
-      lPlanLayers.clear();
-      for (const plan of lPlanDataPayload.plans || []) {
-        const features = lPlanDataPayload.features.filter((feature) => feature.properties?.plan === plan.label);
-        const layer = L.geoJSON({ type: "FeatureCollection", features }, {
-          style: { color: "#ff9f43", weight: 2, opacity: 0.9, dashArray: "8 5" },
-          onEachFeature(feature, itemLayer) { itemLayer.bindPopup(popupContent(feature)); },
-        });
-        lPlanLayers.set(plan.label, layer);
-      }
-      lPlanData = lPlanDataPayload;
-      renderLPlanControls(lPlanDataPayload.plans || []);
-
-      const licenseResponse = await fetch("./data/licenses.geojson", { cache: "no-store" });
-      if (!licenseResponse.ok) throw new Error(`Лицензийн өгөгдлийн хүсэлт амжилтгүй (${licenseResponse.status})`);
-      const licenseData = await licenseResponse.json();
-      for (const layer of licenseLayers.values()) map.removeLayer(layer);
-      licenseLayers.clear();
-      for (const [index, feature] of licenseData.features.entries()) {
-        const layer = L.geoJSON(feature, {
-          style: {
-            color: "#ffd166",
-            weight: 1.8,
-            opacity: 0.95,
-            fillColor: "#ffd166",
-            fillOpacity: 0.08,
-            dashArray: "7 5",
-          },
-          onEachFeature(item, itemLayer) {
-            itemLayer.bindPopup(licensePopup(item));
-          },
-        }).addTo(map);
-        licenseLayers.set(String(index), layer);
-      }
-      renderLicenseControls(licenseData.features);
-
-      const boundaryFeatures = data.features.filter((feature) => isBoundaryLayer(feature.properties?.layer));
-      const areaSum = boundaryFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0);
-      const flownFeatures = data.features
-        .filter((feature) => feature.properties?.layer === "Flight_Blocks")
-      const flownAreaSum = flownFeatures.length > 0
-        ? flownFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0)
-        : null;
-      setTotalArea(licenseData.features);
-      setFlownArea("Нийт нислэг", flownAreaSum || 0);
-      flownArea.textContent = formatArea(flownAreaSum);
-      fitToArea();
-      loading.hidden = true;
+      renderSensorButtons();
+      selectSensor(state.activeSensor);
+      fitMap();
+      const usable = state.baseLayers.size + state.planLayers.size;
+      if (!usable) throw new Error("No base or active sensor layers could be loaded.");
     } catch (error) {
       console.error(error);
-      if (showLoading) showError("Шинэчилсэн GeoJSON мэдээллийг уншиж чадсангүй.");
+      ui.errorMessage.textContent = error.message || "Registry/manifest уншигдсангүй.";
+      ui.error.hidden = false;
+    } finally {
+      ui.loading.hidden = true;
     }
-  }
+  };
 
-  fitButton.addEventListener("click", fitToArea);
-  retryButton.addEventListener("click", start);
-  start();
-  setInterval(() => start(false), 30000);
+  ui.fit.addEventListener("click", fitMap);
+  ui.refresh.addEventListener("click", load);
+  ui.retry.addEventListener("click", load);
+  load();
 })();

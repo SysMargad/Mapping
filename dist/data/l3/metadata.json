@@ -1,0 +1,12 @@
+{
+  "project": "Nergui Undur",
+  "area": "Sant Uul",
+  "sensor": "L3",
+  "status": "confirmed_survey_family",
+  "actualFlightTrackAvailable": false,
+  "sourceUrl": "https://drive.google.com/drive/folders/1ildIQALeRUZc07AxeOw0lZJfarCujf1d",
+  "surveyBlocks": ["N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9"],
+  "additionalFolders": ["sant laz"],
+  "metadataPattern": "NerguiUndur_SantUul_Bxx_Survey_Metadata_M400_L3_2026",
+  "notes": "Survey metadata and derived products are confirmed. An explicit GNSS/trajectory/flight-route source has not been confirmed."
+}

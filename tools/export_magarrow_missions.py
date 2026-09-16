@@ -1,4 +1,9 @@
-"""Export downloaded DJI WPMZ/KMZ mission archives to one GeoJSON file."""
+"""Export Nergui Undur MagArrow DJI WPMZ/KMZ mission plans to GeoJSON.
+
+The LineString in ``template.kml`` is a planned DJI mission route.  It is not
+an actual flown trajectory.  This exporter deliberately writes explicit
+provenance and planned/actual metadata so the two concepts cannot be mixed.
+"""
 
 from __future__ import annotations
 
@@ -46,7 +51,23 @@ def read_archive(source: Path, label: str) -> list[dict]:
         features.append({
             "type": "Feature",
             "id": f"{label}:{len(features) + 1}",
-            "properties": {"layer": "L_Plan", "plan": label, "date": date},
+            "properties": {
+                "layer": "MagArrow_Mission",
+                "project": "Nergui Undur",
+                "area": "Heseg Uul hoid",
+                "sensor": "MagArrow",
+                "dataType": "mission_plan",
+                "plannedActual": "planned",
+                "status": "confirmed",
+                "mission_id": label,
+                "plan": label,
+                "date": date,
+                "sourceFile": source.name,
+                "sourceUrl": "https://drive.google.com/drive/folders/1n5C1QrH1ZQfuFOOpDfpGk_4hgrwBdlXS",
+                "sourceCrs": "EPSG:4326",
+                "displayCrs": "EPSG:4326",
+                "crsVerified": True,
+            },
             "geometry": {"type": "LineString", "coordinates": points},
         })
     return features
@@ -62,12 +83,25 @@ def export(source_dir: Path, output: Path) -> None:
             continue
         date = plan_features[0]["properties"]["date"]
         features.extend(plan_features)
-        plans.append({"label": label, "date": date, "feature_count": len(plan_features)})
+        plans.append({
+            "label": label,
+            "mission_id": label,
+            "date": date,
+            "sourceFile": source.name,
+            "feature_count": len(plan_features),
+        })
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({
-        "type": "FeatureCollection", "name": "L flight plans", "plans": plans, "features": features,
+        "type": "FeatureCollection",
+        "name": "MagArrow DJI Mission Plans",
+        "project": "Nergui Undur",
+        "sensor": "MagArrow",
+        "dataType": "mission_plan",
+        "plannedActual": "planned",
+        "plans": plans,
+        "features": features,
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"Exported {len(features)} L-plan feature(s) from {len(plans)} plans to {output}")
+    print(f"Exported {len(features)} MagArrow mission-plan feature(s) from {len(plans)} plans to {output}")
 
 
 if __name__ == "__main__":

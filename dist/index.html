@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07111f" />
-    <meta name="description" content="Drone Track талбай болон нислэгийн төлөвлөгөөг интерактив газрын зураг дээр харах веб." />
-    <title>Drone Track · Area Data</title>
+    <meta name="description" content="Nergui Undur survey datasets, controls and verified source provenance." />
+    <title>Nergui Undur · Survey Map</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307111f'/%3E%3Cpath d='M7 9h18v14H7z' fill='none' stroke='%2339d9ff' stroke-width='2'/%3E%3Cpath d='M11 13l4-2 6 3-2 6-7 1z' fill='%2339d9ff' fill-opacity='.35' stroke='%23fff'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="preconnect" href="https://tile.openstreetmap.org" />
@@ -14,71 +14,88 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="map-stage" aria-label="Дорнын төмөр талбайн газрын зураг">
+      <section class="map-stage" aria-label="Nergui Undur survey map">
         <div id="map"></div>
         <div id="loading" class="loading" role="status">
           <span class="spinner" aria-hidden="true"></span>
-          Талбайн мэдээлэл уншиж байна…
+          Баталгаажсан өгөгдөл уншиж байна…
         </div>
+        <div id="data-warnings" class="warning-stack" aria-live="polite"></div>
         <div id="error" class="error-card" role="alert" hidden>
           <strong>Газрын зураг нээгдсэнгүй</strong>
-          <span id="error-message">Өгөгдлийг дахин ачаална уу.</span>
+          <span id="error-message">Үндсэн өгөгдлийг дахин ачаална уу.</span>
           <button id="retry" type="button">Дахин оролдох</button>
         </div>
       </section>
 
-      <aside class="panel" aria-label="Талбайн мэдээлэл">
+      <aside class="panel" aria-label="Nergui Undur survey controls">
         <header class="brand-row">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 32 32"><path d="M5 8.5h22v15H5z"/><path d="m10 13 5-2 7 3.4-2.6 6.1-8.8.8z"/></svg>
           </span>
           <div>
-            <p class="eyebrow">DRONE TRACK · FLIGHT PLAN</p>
-            <h1>Drone Track</h1>
+            <p class="eyebrow">NERGUI UNDUR SURVEY MAP</p>
+            <h1>Өгөгдлийн хяналтын зураг</h1>
+            <p id="manifest-status" class="build-status">Registry уншиж байна…</p>
           </div>
         </header>
 
-        <div class="summary-grid">
+        <section class="summary-grid" aria-label="Идэвхтэй өгөгдлийн хураангуй">
           <div>
-            <span>Нийт талбай</span>
-            <strong id="total-area">—</strong>
+            <span id="summary-label-primary">Нийт талбай</span>
+            <strong id="summary-value-primary">—</strong>
           </div>
           <div>
-            <span id="flown-area-label">Нийт нислэг</span>
-            <strong id="flown-area">—</strong>
+            <span id="summary-label-secondary">Төлөвлөсөн хамрах талбай</span>
+            <strong id="summary-value-secondary">—</strong>
           </div>
+        </section>
+        <p id="summary-note" class="summary-note"></p>
+
+        <section class="control-section" aria-labelledby="base-heading">
+          <div class="section-heading-row">
+            <h2 id="base-heading">BASE / CONTROL</h2>
+            <span class="section-kicker">Sensor-оос тусдаа</span>
+          </div>
+          <div id="base-layer-list" class="control-list"></div>
+        </section>
+
+        <section class="control-section" aria-labelledby="sensor-heading">
+          <h2 id="sensor-heading">SENSOR DATA</h2>
+          <div id="sensor-list" class="sensor-list" role="group" aria-label="Sensor сонгох"></div>
+        </section>
+
+        <section id="sensor-panel" class="sensor-panel" aria-live="polite"></section>
+
+        <section class="control-section info-section" aria-labelledby="dataset-heading">
+          <h2 id="dataset-heading">SELECTED DATASET</h2>
+          <dl id="dataset-info" class="details"></dl>
+          <div id="source-links" class="source-links"></div>
+        </section>
+
+        <details class="legend-panel">
+          <summary>Тэмдэглэгээ</summary>
+          <div class="legend-grid">
+            <span class="legend-symbol licence"></span><span>Licence boundary</span>
+            <span class="legend-symbol uchastik"></span><span>Uchastik</span>
+            <span class="legend-symbol block"></span><span>Block boundary</span>
+            <span class="legend-symbol main-line"></span><span>MagArrow planned main</span>
+            <span class="legend-symbol tie-line"></span><span>MagArrow planned tie</span>
+            <span class="legend-symbol mission-line"></span><span>DJI mission plan</span>
+            <span class="legend-symbol actual-line"></span><span>Actual track</span>
+            <span class="legend-symbol measurement"></span><span>10 Hz measurement</span>
+            <span class="legend-symbol pending"></span><span>Pending / unavailable</span>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="fit-map" class="primary-action" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+            Төвлөрүүлэх
+          </button>
+          <button id="refresh-data" class="secondary-action" type="button" title="Manifest болон өгөгдлийг гараар шинэчлэх">↻</button>
         </div>
-
-        <section class="plans-section" aria-labelledby="plans-heading">
-          <h2 id="plans-heading">Нислэгийн төлөвлөгөө</h2>
-          <div id="plan-list" class="plan-list" role="group" aria-label="Нислэгийн төлөвлөгөө сонгох"></div>
-          <div id="daily-tracks-section" hidden>
-            <h2 class="subheading">Daily Tracks</h2>
-            <div id="l-plan-list" class="license-list" role="group" aria-label="Daily Tracks сонгох"></div>
-          </div>
-        </section>
-        <section class="licenses-section" aria-labelledby="licenses-heading">
-          <h2 id="licenses-heading">Лицензийн талбай</h2>
-          <div id="license-list" class="license-list" role="group" aria-label="Лицензийн талбай сонгох"></div>
-          <button id="license-back" class="license-back" type="button" hidden>← Лицензийн жагсаалт</button>
-        </section>
-
-        <section class="layers-section" aria-labelledby="layers-heading">
-          <h2 id="layers-heading">Давхаргууд</h2>
-          <div id="layer-list" class="layer-list"></div>
-        </section>
-
-        <dl class="details">
-          <div><dt>Эх координат</dt><dd>EPSG:32649 · UTM 49N</dd></div>
-          <div><dt>Веб координат</dt><dd>WGS 84</dd></div>
-        </dl>
-
-        <button id="fit-map" class="primary-action" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
-          Талбайд төвлөрүүлэх
-        </button>
-
-        <p class="hint">Талбай, шугам эсвэл цэг дээр дарж дэлгэрэнгүй мэдээлэл харна уу.</p>
+        <p class="hint">Base/control layer нь sensor солиход хэвээр үлдэнэ. Pending sensor дээр дарж эх сурвалж, статусыг харна уу.</p>
       </aside>
 
       <div class="map-credit">© OpenStreetMap contributors</div>

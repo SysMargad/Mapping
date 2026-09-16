@@ -1,85 +1,79 @@
-# Drone Track · Area Data map
+# Nergui Undur Survey Map
 
-`Area Data` хавтас дахь хамгийн сүүлд шинэчлэгдсэн GeoPackage-ийн талбай, нислэгийн блок,
-үндсэн болон хөндлөн шугам, эхлэл/төгсгөлийн цэгийг интерактив газрын зураг болгон харуулна.
-`Talbain license.zip` доторх нэмэлт лицензийн талбайнуудыг мөн нэрээр нь сонгон газрын зураг дээр харуулна.
+Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө болон sensor бүрийн баталгаажсан төлөвийг харуулдаг static Leaflet map.
 
-## Өгөгдлийг шинэчлэх
+Public URL: <https://sysmargad.github.io/Mapping/>
 
-GeoPackage файл өөрчлөгдвөл сервер хүсэлт ирэх үед хамгийн сүүлд шинэчлэгдсэн `.gpkg` файлыг
-автоматаар сонгон GeoJSON болгон хөрвүүлнэ. Гараар хөрвүүлэх шаардлагатай бол:
+## Data truth model
 
-```powershell
-& "C:\Users\margad.p\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" `
-  .\tools\export_gpkg.py `
-  "C:\Users\margad.p\Desktop\Drone Track\Area Data\NU_DT_MagArrow_FlightPlan_P1.gpkg" `
-  .\dist\data\area.geojson
-```
+- `dist/data/datasets.json` — dataset registry ба canonical metadata.
+- `dist/data/manifest.json` — build version, шинэчлэгдсэн огноо, asset hash.
+- `dist/data/base/` — licence, uchastik, DWG/CAD-аас гарсан base/control geometry. Sensor track биш.
+- `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
+- `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
+- `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
+- `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
-Хөрвүүлэгч нь нэмэлт сан шаарддаггүй, Python-ийн стандарт сангаар ажиллана.
+Өөр төслийн Artsat/Buduunkhad мэдээлэл орох ёсгүй. `tools/validate_data.py` энэ тусгаарлалтыг шалгана.
 
-## Локал харах
-
-Файлыг шууд давхар дарж биш, жижиг веб серверээр нээнэ:
+## Local preview
 
 ```powershell
 node .\tools\serve.mjs
 ```
 
-Дараа нь браузерт `http://127.0.0.1:4173` хаягийг нээнэ.
+Дараа нь <http://127.0.0.1:4173> хаягийг нээнэ. Сервер зөвхөн яг нэрлэсэн `NU_DR_MagArrow_Plan.gpkg`-ийг MagArrow plan болгон шинэчилнэ; `NU_DT_L3_PLAN.gpkg`-ийг fallback болгон сонгохгүй. Page өөрөө 30 секунд тутам refresh хийхгүй; UI дахь refresh товчийг хэрэглэнэ.
 
-## Өөр компьютерээс нээх
+## Export commands
 
-`127.0.0.1` нь зөвхөн сервер ажиллаж байгаа компьютерийг заадаг. Серверийг сүлжээнд
-харагдахаар ажиллуулаад тухайн компьютерийн IPv4 хаягийг ашиглана:
+Энэ компьютерийн Codex Python runtime:
 
 ```powershell
-$env:PORT = "4180"
-node .\tools\serve.mjs
+$python = "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 ```
 
-Сервер ажиллаж байгаа компьютер дээр `ipconfig` ажиллуулж `IPv4 Address` хаягийг олно.
-Жишээ нь `192.168.1.25` байвал нөгөө компьютерийн браузерт:
+MagArrow plan:
 
-```text
-http://192.168.1.25:4180
+```powershell
+& $python .\tools\export_gpkg.py `
+  "C:\Users\margad.p\Desktop\Drone Track\Area Data\NU_DR_MagArrow_Plan.gpkg" `
+  .\dist\data\magarrow\planned-survey.geojson `
+  --profile magarrow-plan
 ```
 
-Хоёр компьютер нэг Wi-Fi/LAN сүлжээнд байх ёстой. Windows Firewall асуувал Node.js-д
-Private network access зөвшөөрөх эсвэл 4180 портыг зөвшөөрнө. Интернэтээр, өөр сүлжээнээс
-хандах бол LAN IP хангалтгүй бөгөөд серверийг public hosting/VPS дээр байрлуулах шаардлагатай.
+Nergui Undur licence only:
 
-Сервер ажиллаж байх үед `Area Data` хавтасны GeoPackage шинэчлэгдсэн эсэхийг шалгана.
-Шинэчлэгдсэн бол веб хүсэлт ирэхэд GeoJSON автоматаар дахин үүсэж, браузер 30 секунд тутамд
-мэдээллээ дахин уншин газрын зураг болон талбайн нийлбэрийг шинэчилнэ.
+```powershell
+& $python .\tools\export_shapefile.py `
+  "C:\Users\margad.p\Desktop\Drone Track\Talbain license.zip" `
+  .\dist\data\base\licenses.geojson `
+  --only-nergui-undur
+```
 
-`Talbain license.zip` шинэчлэгдсэн үед сервер Shapefile-ийг автоматаар GeoJSON болгон хөрвүүлж,
-вебийн `Лицензийн талбай` хэсэгт нэрээр нь сонгох боломжтой болгоно.
+Uchastik:
 
-### L3 DXF
+```powershell
+& $python .\tools\export_shapefile.py `
+  "C:\Users\margad.p\Desktop\Drone Track\23099_uchastic_20260806.zip" `
+  .\dist\data\base\uchastics.geojson `
+  --utm-zone-49n --dataset-type uchastik
+```
 
-`Area Data\Nergui undur_L3_boundary.dxf` файл байвал локал сервер хүсэлт ирэх үед
-түүнийг UTM Zone 49N-ээс WGS 84 GeoJSON болгон автоматаар хөрвүүлж,
-`L3` төлөвлөгөөний сонголтоор газрын зураг дээр харуулна. Дэмждэг DXF entity:
-`LINE`, `LWPOLYLINE`, хаалттай `LWPOLYLINE` polygon.
+Actual MagArrow tracks are accepted only from locally verified 10 Hz CSV headers:
 
-### L01–L11 огноотой нислэгийн дата
+```powershell
+& $python .\tools\export_magarrow_tracks.py <csv-folder> .\dist\data\magarrow\actual-tracks.geojson
+```
 
-DJI WPMZ/KMZ архивуудаас гаргасан `dist/data/l-plans.geojson` файлд L01–L11
-нислэгийн шугам болон `createTime` огноо хадгалагдана. Вебийн `L дата · огноогоор`
-хэсгээс төлөвлөгөө бүрийг огноотой нь сонгож харна.
+The exporter stops instead of guessing ambiguous coordinate or time columns.
 
-## GitHub Pages
+## Validation and release
 
-Энэ төслийн `dist` хавтсыг GitHub Pages-д нийтлэх workflow
-`.github/workflows/pages.yml` дотор байна. Repository-д push хийсний дараа GitHub дээр:
+```powershell
+& $python .\tools\normalise_assets.py
+& $python .\tools\validate_data.py
+& $python .\tools\build_manifest.py --version 2026-09-16.1 --updated 2026-09-16
+node --check .\dist\app.js
+```
 
-1. **Settings → Pages** рүү орно.
-2. **Build and deployment → Source** хэсгээс **GitHub Actions** сонгоно.
-3. `Deploy Drone Track to GitHub Pages` workflow дууссаны дараа
-   `https://sysmargad.github.io/Mapping/` хаягийг нээнэ.
-
-GitHub Pages нь static сайт тул `Area Data` болон ZIP өөрчлөгдсөн үед локал сервер шиг
-автоматаар export хийхгүй. Шинэ өгөгдөл нийтлэхийн өмнө `dist/data/area.geojson`,
-`dist/data/licenses.geojson`, `dist/data/uchastics.geojson`, `dist/data/l3.geojson` файлуудыг шинэчилж repository-д
-хамт push хийнэ.
+`main` branch руу push хийхэд `.github/workflows/pages.yml` нь `dist/`-ийг GitHub Pages-д deploy хийнэ. Static Pages deploy хийхийн өмнө registry, GeoJSON, manifest-ийг нэг commit-д хамт шинэчилнэ.

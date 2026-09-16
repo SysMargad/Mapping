@@ -72,7 +72,13 @@ def transform_point(point: list[float], utm: bool) -> list[float]:
     return utm_to_wgs84(point[0], point[1], 49, True)
 
 
-def export(source: Path, output: Path, utm: bool = False) -> None:
+def export(
+    source: Path,
+    output: Path,
+    utm: bool = False,
+    dataset_type: str = "license",
+    only_nergui_undur: bool = False,
+) -> None:
     with zipfile.ZipFile(source) as archive:
         names = {Path(name).suffix.lower(): name for name in archive.namelist()}
         with archive.open(names[".shp"]) as shp, archive.open(names[".dbf"]) as dbf:
@@ -93,14 +99,31 @@ def export(source: Path, output: Path, utm: bool = False) -> None:
         for key, value in properties.items():
             if value == "Buduunhhad":
                 properties[key] = "Buduunkhad"
-        properties["layer"] = "Additional_Licenses"
+        if only_nergui_undur:
+            english = str(properties.get("AREANAME", "")).strip().lower()
+            mongolian = str(properties.get("AREANAME_L", "")).strip().lower()
+            if english != "nergui undur" and "нэргүй" not in mongolian:
+                continue
+        properties["project"] = "Nergui Undur"
+        properties["sensor"] = "Base / Control"
+        properties["plannedActual"] = "reference"
+        properties["status"] = "confirmed"
+        properties["displayCrs"] = "EPSG:4326"
+        properties["sourceCrs"] = "EPSG:32649" if utm else "EPSG:4326"
+        properties["crsVerified"] = True
+        if dataset_type == "uchastik":
+            properties["layer"] = "Base_Uchastik_Boundary"
+            properties["dataType"] = "uchastik_boundary"
+        else:
+            properties["layer"] = "Base_Licence_Boundary"
+            properties["dataType"] = "licence_boundary"
         coordinates = [
             [transform_point(point, utm) for point in ring]
             for ring in rings
         ]
         features.append({
             "type": "Feature",
-            "id": f"license:{index}",
+            "id": f"{dataset_type}:{index}",
             "properties": properties,
             "geometry": {"type": "Polygon", "coordinates": coordinates},
         })
@@ -118,5 +141,7 @@ if __name__ == "__main__":
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--utm-zone-49n", action="store_true")
+    parser.add_argument("--dataset-type", choices=("license", "uchastik"), default="license")
+    parser.add_argument("--only-nergui-undur", action="store_true")
     args = parser.parse_args()
-    export(args.source, args.output, args.utm_zone_49n)
+    export(args.source, args.output, args.utm_zone_49n, args.dataset_type, args.only_nergui_undur)

@@ -15,6 +15,14 @@ import struct
 from pathlib import Path
 
 
+MAGARROW_LAYER_NAMES = {
+    "P1_Main_50m": "MagArrow_Main_50m",
+    "P1_Main_100m_AZ88": "MagArrow_Main_100m_AZ88",
+    "P1_Tie_300m": "MagArrow_Tie_300m",
+    "P1_Tie_200m_AZ178": "MagArrow_Tie_200m_AZ178",
+}
+
+
 def read_uint(data: bytes, offset: int, size: int, little: bool) -> tuple[int, int]:
     fmt = ("<" if little else ">") + ("I" if size == 4 else "Q")
     return struct.unpack_from(fmt, data, offset)[0], offset + size
@@ -153,11 +161,16 @@ def utm_to_wgs84(easting: float, northing: float, zone: int, northern: bool) -> 
     return [round(math.degrees(lon_origin + lon), 8), round(math.degrees(lat), 8)]
 
 
-def transform_geometry(geometry: dict, srs_id: int) -> dict:
+def transform_geometry(geometry: dict, srs_id: int, assigned_epsg: int | None = None) -> dict:
     if srs_id in (4326, 4979):
         return geometry
     if srs_id == 99999:
-        srs_id = 32649
+        if assigned_epsg is None:
+            raise ValueError(
+                "GeoPackage uses unverified SRS 99999. Pass --assign-epsg only after "
+                "explicitly reviewing the coordinate system."
+            )
+        srs_id = assigned_epsg
     if 32601 <= srs_id <= 32660:
         zone, northern = srs_id - 32600, True
     elif 32701 <= srs_id <= 32760:
@@ -173,7 +186,7 @@ def transform_geometry(geometry: dict, srs_id: int) -> dict:
     if geometry["type"] == "GeometryCollection":
         return {
             "type": "GeometryCollection",
-            "geometries": [transform_geometry(item, srs_id) for item in geometry["geometries"]],
+            "geometries": [transform_geometry(item, srs_id, assigned_epsg) for item in geometry["geometries"]],
         }
     return {"type": geometry["type"], "coordinates": point(geometry["coordinates"])}
 
@@ -189,7 +202,7 @@ def geometry_area(geometry: dict) -> float | None:
     return sum(ring_area(poly[0]) - sum(ring_area(hole) for hole in poly[1:]) for poly in polygons)
 
 
-def export(source: Path, output: Path, layer: str | None) -> None:
+def export(source: Path, output: Path, layer: str | None, profile: str, assigned_epsg: int | None) -> None:
     uri = f"file:{source.as_posix()}?mode=ro"
     connection = sqlite3.connect(uri, uri=True)
     connection.row_factory = sqlite3.Row
@@ -218,23 +231,46 @@ def export(source: Path, output: Path, layer: str | None) -> None:
                     continue
                 srs_id, source_geometry = unpack_gpkg_geometry(row[geom_column])
                 properties = {column: row[column] for column in property_columns}
-                properties["layer"] = selected["table_name"]
-                properties["source_epsg"] = srs_id
+                source_layer = selected["table_name"]
+                output_layer = MAGARROW_LAYER_NAMES.get(source_layer, source_layer)
+                properties["layer"] = output_layer
+                properties["project"] = "Nergui Undur"
+                properties["display_epsg"] = 4326
+                if profile == "magarrow-plan":
+                    properties.update({
+                        "area": "Heseg Uul hoid",
+                        "sensor": "MagArrow",
+                        "plannedActual": "planned",
+                        "status": "confirmed",
+                        "source_epsg": srs_id,
+                        "crs_verified": srs_id == 32649,
+                    })
+                    if output_layer.startswith("MagArrow_Main"):
+                        properties["dataType"] = "planned_main_line"
+                    elif output_layer.startswith("MagArrow_Tie"):
+                        properties["dataType"] = "planned_tie_line"
+                    elif output_layer == "Survey_Area":
+                        properties["dataType"] = "planned_survey_boundary"
+                    else:
+                        properties["dataType"] = "planned_support"
+                else:
+                    properties["source_epsg"] = srs_id if srs_id != 99999 else None
+                    properties["crs_verified"] = srs_id != 99999
                 area = geometry_area(source_geometry)
                 if area is not None:
                     properties["area_m2"] = round(area, 2)
                 features.append(
                     {
                         "type": "Feature",
-                        "id": f"{selected['table_name']}:{properties.get('fid', layer_count + 1)}",
+                        "id": f"{output_layer}:{properties.get('fid', layer_count + 1)}",
                         "properties": properties,
-                        "geometry": transform_geometry(source_geometry, srs_id),
+                        "geometry": transform_geometry(source_geometry, srs_id, assigned_epsg),
                     }
                 )
                 layer_count += 1
             layer_summary.append(
                 {
-                    "name": selected["table_name"],
+                    "name": MAGARROW_LAYER_NAMES.get(selected["table_name"], selected["table_name"]),
                     "geometry_type": selected["geometry_type_name"],
                     "source_epsg": selected["srs_id"],
                     "feature_count": layer_count,
@@ -265,5 +301,7 @@ if __name__ == "__main__":
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--layer")
+    parser.add_argument("--profile", choices=("generic", "magarrow-plan"), default="generic")
+    parser.add_argument("--assign-epsg", type=int)
     args = parser.parse_args()
-    export(args.source, args.output, args.layer)
+    export(args.source, args.output, args.layer, args.profile, args.assign_epsg)
