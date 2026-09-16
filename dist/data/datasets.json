@@ -34,6 +34,23 @@
       "defaultVisible": true
     },
     {
+      "id": "base-licence-context",
+      "project": "External licence reference",
+      "scope": "external_reference",
+      "area": "Multiple licence areas",
+      "sensor": "Base / Control",
+      "dataType": "licence_context",
+      "plannedActual": "reference",
+      "status": "confirmed_source",
+      "sourceFile": "Talbain license.zip",
+      "webAsset": "./data/context/licenses.geojson",
+      "sourceCrs": "EPSG:4326",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "External licence context is isolated from Nergui Undur project data and is shown only after explicit selection."
+    },
+    {
       "id": "base-survey-boundaries",
       "project": "Nergui Undur",
       "area": "Nergui Undur",
@@ -47,7 +64,7 @@
       "displayCrs": "EPSG:4326",
       "crsVerified": false,
       "defaultVisible": false,
-      "notes": "DWG-derived uchastik, block, label, line and ellipse geometry. Source CRS metadata is unverified; web geometry is retained because it aligns visually. This is not L3 flight data."
+      "notes": "DWG-derived uchastik, block, label, line and ellipse geometry. Source CRS metadata is unverified. References renders 114 reviewed uchastik boundaries; 98 labels are hidden to avoid map clutter, and 33 unlocated 0_LINES/0_ELLIPSES features are retained in the asset but not rendered. This is not L3 flight data."
     },
     {
       "id": "magarrow-planned-survey",

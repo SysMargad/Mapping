@@ -1,10 +1,11 @@
 {
-  "version": "2026-09-16.1",
+  "version": "2026-09-16.2",
   "updated": "2026-09-16",
   "datasets": {
     "registry": "./data/datasets.json",
     "base-licence": "./data/base/licenses.geojson",
     "base-uchastik": "./data/base/uchastics.geojson",
+    "base-licence-context": "./data/context/licenses.geojson",
     "base-survey-boundaries": "./data/base/survey-boundaries.geojson",
     "magarrow-planned-survey": "./data/magarrow/planned-survey.geojson",
     "magarrow-mission-plans": "./data/magarrow/mission-plans.geojson",
@@ -13,9 +14,10 @@
     "l3-survey-family": "./data/l3/metadata.json"
   },
   "hashes": {
-    "registry": "b879cf7b0ca5addf",
+    "registry": "b818ea3350e330b1",
     "base-licence": "f68bab4661abfe72",
     "base-uchastik": "d6672e0a0ea44496",
+    "base-licence-context": "a66a54138766d058",
     "base-survey-boundaries": "d09a3752dd958ebd",
     "magarrow-planned-survey": "b1a1ee9107e19404",
     "magarrow-mission-plans": "c048af9d5e81c37d",

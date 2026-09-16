@@ -17,6 +17,9 @@
     secondaryValue: $("#summary-value-secondary"),
     summaryNote: $("#summary-note"),
     baseLayers: $("#base-layer-list"),
+    licenseCount: $("#license-count"),
+    licenseContextList: $("#license-context-list"),
+    clearLicenseContext: $("#clear-license-context"),
     sensors: $("#sensor-list"),
     sensorPanel: $("#sensor-panel"),
     datasetInfo: $("#dataset-info"),
@@ -33,6 +36,9 @@
     activeSensor: "MagArrow",
     activeDatasetId: "magarrow-planned-survey",
     baseLayers: new Map(),
+    licenseContextLayers: new Map(),
+    licenseContextData: null,
+    selectedContextLicense: null,
     planLayers: new Map(),
     planVisibility: { boundary: true, main: true, tie: true },
     missionLayers: new Map(),
@@ -107,6 +113,22 @@
     }, 0), 0);
   };
 
+  const geometryWithinNergui = (geometry) => {
+    let seen = false;
+    let valid = true;
+    const visit = (value) => {
+      if (!valid || !Array.isArray(value)) return;
+      if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
+        seen = true;
+        valid = value[0] >= 112 && value[0] <= 115 && value[1] >= 47 && value[1] <= 51;
+        return;
+      }
+      value.forEach(visit);
+    };
+    visit(geometry?.coordinates);
+    return seen && valid;
+  };
+
   const popup = (rows) => rows
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .map(([label, value]) => `<span class="popup-label">${escapeHtml(label)}</span><span class="popup-value">${escapeHtml(value)}</span>`)
@@ -144,7 +166,7 @@
 
   const basePopup = (feature) => {
     const props = feature.properties || {};
-    const label = props.dataType === "licence_boundary" ? "Licence boundary"
+    const label = ["licence_boundary", "licence_context"].includes(props.dataType) ? "Licence boundary"
       : props.dataType === "uchastik_boundary" ? "Uchastik boundary"
       : props.dataType === "block_boundary" ? "Block boundary"
       : props.dataType === "block_label" ? "Block label"
@@ -212,6 +234,18 @@
     }
   };
 
+  const assertLicenceContext = (payload) => {
+    if (payload?.scope !== "external_reference" || payload?.project !== "External licence reference") {
+      throw new Error("Licence context must be isolated as an external reference dataset");
+    }
+    for (const feature of payload.features || []) {
+      const props = feature.properties || {};
+      if (props.dataType !== "licence_context" || props.contextOnly !== true) {
+        throw new Error(`Licence context feature ${feature.id} is not marked context-only`);
+      }
+    }
+  };
+
   const dataset = (id) => state.datasets.get(id);
 
   const addWarning = (key, message) => {
@@ -273,6 +307,67 @@
     registerBaseControl("licence", "Licence", `${data.features.length} polygon`, layer, true, "licence");
   };
 
+  const clearLicenceContext = () => {
+    for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
+    state.selectedContextLicense = null;
+    ui.clearLicenseContext.hidden = true;
+    for (const button of ui.licenseContextList.querySelectorAll("button")) button.classList.remove("is-active");
+  };
+
+  const fitSingleLayer = (layer) => {
+    const bounds = layer?.getBounds?.();
+    if (bounds?.isValid()) state.map.fitBounds(bounds, { padding: [44, 44], maxZoom: 15 });
+  };
+
+  const selectLicenceContext = (key, button) => {
+    clearLicenceContext();
+    state.selectedContextLicense = key;
+    button.classList.add("is-active");
+    ui.clearLicenseContext.hidden = false;
+    if (key === "all") {
+      for (const layer of state.licenseContextLayers.values()) layer.addTo(state.map);
+      fitSingleLayer(L.featureGroup([...state.licenseContextLayers.values()]));
+    } else {
+      const layer = state.licenseContextLayers.get(key);
+      layer?.addTo(state.map);
+      fitSingleLayer(layer);
+    }
+    state.activeDatasetId = "base-licence-context";
+    renderDatasetInfo();
+  };
+
+  const loadLicenceContext = async () => {
+    const config = dataset("base-licence-context");
+    const data = await fetchJson(config.webAsset);
+    assertLicenceContext(data);
+    state.licenseContextData = data;
+    ui.licenseCount.textContent = `${data.features.length} талбай`;
+    ui.licenseContextList.replaceChildren();
+    const entries = [{ key: "all", label: "Бүх лиценз", licence: `${data.features.length} талбай`, feature: null }]
+      .concat(data.features.map((feature) => ({
+        key: String(feature.id),
+        label: feature.properties?.AREANAME_L || feature.properties?.AREANAME || feature.id,
+        licence: feature.properties?.LICENSE || "Licence number unavailable",
+        feature,
+      })));
+    for (const entry of entries) {
+      if (entry.feature) {
+        const layer = L.geoJSON(entry.feature, {
+          pane: "licencePane",
+          style: { color: "#ffe08a", weight: 3.2, opacity: 1, fillColor: "#ffd166", fillOpacity: 0.12, dashArray: "10 5" },
+          onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+        });
+        state.licenseContextLayers.set(entry.key, layer);
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "license-context-button";
+      button.innerHTML = `<strong>${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.licence)}</small>`;
+      button.addEventListener("click", () => selectLicenceContext(entry.key, button));
+      ui.licenseContextList.appendChild(button);
+    }
+  };
+
   const loadUchastik = async () => {
     const config = dataset("base-uchastik");
     const data = await fetchJson(config.webAsset);
@@ -302,20 +397,41 @@
     const blockTypes = new Set(["block_boundary", "block_label"]);
     const blockFeatures = data.features.filter((feature) => blockTypes.has(feature.properties?.dataType));
     const cadFeatures = data.features.filter((feature) => !blockTypes.has(feature.properties?.dataType));
+    const referenceFeatures = cadFeatures.filter((feature) => (
+      feature.properties?.dataType === "uchastik_boundary" && geometryWithinNergui(feature.geometry)
+    ));
+    const hiddenLabelCount = cadFeatures.filter((feature) => feature.properties?.dataType === "uchastik_label").length;
+    const unlocatedCadCount = cadFeatures.filter((feature) => !geometryWithinNergui(feature.geometry)).length;
     const blockLayer = L.geoJSON({ type: "FeatureCollection", features: blockFeatures }, {
       pane: "surveyPane",
       style: { color: "#ffb84d", weight: 2, fillColor: "#ffb84d", fillOpacity: 0.05, dashArray: "5 4" },
       pointToLayer: boundaryPoint,
       onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
     });
-    const cadLayer = L.geoJSON({ type: "FeatureCollection", features: cadFeatures }, {
+    const cadLayer = L.geoJSON({ type: "FeatureCollection", features: referenceFeatures }, {
       pane: "surveyPane",
-      style: { color: "#91a6bb", weight: 1.2, fillColor: "#91a6bb", fillOpacity: 0.025, dashArray: "2 6" },
+      style(feature) {
+        const type = feature.properties?.dataType;
+        if (type === "cad_reference_geometry") {
+          return { color: "#f4f7fb", weight: 2.8, opacity: 0.98, fillColor: "#dbeafe", fillOpacity: 0.055 };
+        }
+        if (type === "uchastik_boundary") {
+          return { color: "#d6a5ff", weight: 2.1, opacity: 0.9, fillColor: "#d6a5ff", fillOpacity: 0.035 };
+        }
+        return { color: "#c5d2df", weight: 1.8, opacity: 0.9, fillColor: "#c5d2df", fillOpacity: 0.025 };
+      },
       pointToLayer: boundaryPoint,
       onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
     });
     registerBaseControl("blocks", "Block boundaries", `${blockFeatures.length} DWG-derived feature`, blockLayer, false, "block");
-    registerBaseControl("cad", "Other CAD reference", `${cadFeatures.length} DWG-derived feature`, cadLayer, false, "cad");
+    registerBaseControl(
+      "cad",
+      "References",
+      `${referenceFeatures.length} boundary · ${hiddenLabelCount} label hidden · ${unlocatedCadCount} unlocated`,
+      cadLayer,
+      false,
+      "cad",
+    );
   };
 
   const loadMagArrowPlan = async () => {
@@ -558,7 +674,7 @@
       ["CRS status", verified],
     ];
     ui.datasetInfo.innerHTML = rows.map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
-    const links = [...state.datasets.values()].filter((item) => item.sensor === state.activeSensor && item.sourceUrl);
+    const links = [...state.datasets.values()].filter((item) => item.sensor === config.sensor && item.sourceUrl);
     const unique = new Map(links.map((item) => [item.sourceUrl, item]));
     ui.sourceLinks.innerHTML = [...unique.values()].map((item) => `<a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.dataType.replaceAll("_", " "))}<span>↗</span></a>`).join("");
   };
@@ -566,6 +682,7 @@
   const visibleLayers = () => {
     const layers = [];
     for (const item of state.baseLayers.values()) if (item.visible) layers.push(item.layer);
+    for (const layer of state.licenseContextLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
@@ -581,8 +698,12 @@
 
   const removeAllDataLayers = () => {
     for (const item of state.baseLayers.values()) state.map.removeLayer(item.layer);
+    for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
     hideSensorLayers();
     state.baseLayers.clear();
+    state.licenseContextLayers.clear();
+    state.licenseContextData = null;
+    state.selectedContextLicense = null;
     state.planLayers.clear();
     state.missionLayers.clear();
     state.selectedMissions.clear();
@@ -591,6 +712,9 @@
     state.planArea = 0;
     state.mainCoverage = 0;
     ui.baseLayers.replaceChildren();
+    ui.licenseContextList.replaceChildren();
+    ui.licenseCount.textContent = "—";
+    ui.clearLicenseContext.hidden = true;
   };
 
   const load = async () => {
@@ -611,17 +735,18 @@
       ui.manifestStatus.textContent = `Data ${manifest.version} · ${manifest.updated}`;
 
       const jobs = [
-        ["Licence", loadLicence],
-        ["Uchastik", loadUchastik],
-        ["Survey boundaries", loadBoundaries],
-        ["MagArrow planned survey", loadMagArrowPlan],
+        { label: "Licence", task: loadLicence, errorType: "base" },
+        { label: "Uchastik", task: loadUchastik, errorType: "base" },
+        { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
+        { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
+        { label: "Licence context", task: loadLicenceContext, errorType: "warning" },
       ];
-      const results = await Promise.allSettled(jobs.map(([, task]) => task()));
+      const results = await Promise.allSettled(jobs.map(({ task }) => task()));
       results.forEach((result, index) => {
         if (result.status === "rejected") {
-          const label = jobs[index][0];
-          if (index < 3) registerUnavailableBase(label, result.reason);
-          else addWarning("magarrow-plan", `${label}: ${result.reason.message}`);
+          const job = jobs[index];
+          if (job.errorType === "base") registerUnavailableBase(job.label, result.reason);
+          else addWarning(job.label.toLowerCase().replaceAll(" ", "-"), `${job.label}: ${result.reason.message}`);
         }
       });
       renderSensorButtons();
@@ -639,6 +764,11 @@
   };
 
   ui.fit.addEventListener("click", fitMap);
+  ui.clearLicenseContext.addEventListener("click", () => {
+    clearLicenceContext();
+    selectSensor(state.activeSensor);
+    fitMap();
+  });
   ui.refresh.addEventListener("click", load);
   ui.retry.addEventListener("click", load);
   load();

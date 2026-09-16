@@ -78,7 +78,11 @@ def export(
     utm: bool = False,
     dataset_type: str = "license",
     only_nergui_undur: bool = False,
+    context_only: bool = False,
 ) -> None:
+    if context_only and dataset_type != "license":
+        raise ValueError("--context-only is supported only for licence data")
+    output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(source) as archive:
         names = {Path(name).suffix.lower(): name for name in archive.namelist()}
         with archive.open(names[".shp"]) as shp, archive.open(names[".dbf"]) as dbf:
@@ -104,10 +108,11 @@ def export(
             mongolian = str(properties.get("AREANAME_L", "")).strip().lower()
             if english != "nergui undur" and "нэргүй" not in mongolian:
                 continue
-        properties["project"] = "Nergui Undur"
+        properties["project"] = "External licence reference" if context_only else "Nergui Undur"
         properties["sensor"] = "Base / Control"
         properties["plannedActual"] = "reference"
         properties["status"] = "confirmed"
+        properties["contextOnly"] = context_only
         properties["displayCrs"] = "EPSG:4326"
         properties["sourceCrs"] = "EPSG:32649" if utm else "EPSG:4326"
         properties["crsVerified"] = True
@@ -115,22 +120,24 @@ def export(
             properties["layer"] = "Base_Uchastik_Boundary"
             properties["dataType"] = "uchastik_boundary"
         else:
-            properties["layer"] = "Base_Licence_Boundary"
-            properties["dataType"] = "licence_boundary"
+            properties["layer"] = "Context_Licence_Boundary" if context_only else "Base_Licence_Boundary"
+            properties["dataType"] = "licence_context" if context_only else "licence_boundary"
         coordinates = [
             [transform_point(point, utm) for point in ring]
             for ring in rings
         ]
         features.append({
             "type": "Feature",
-            "id": f"{dataset_type}:{index}",
+            "id": f"{'context-' if context_only else ''}{dataset_type}:{index}",
             "properties": properties,
             "geometry": {"type": "Polygon", "coordinates": coordinates},
         })
-    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({
         "type": "FeatureCollection",
         "name": source.stem,
+        "project": "External licence reference" if context_only else "Nergui Undur",
+        "scope": "external_reference" if context_only else "project",
+        "dataType": "licence_context" if context_only else ("uchastik_boundary" if dataset_type == "uchastik" else "licence_boundary"),
         "features": features,
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"Exported {len(features)} license feature(s) to {output}")
@@ -143,5 +150,6 @@ if __name__ == "__main__":
     parser.add_argument("--utm-zone-49n", action="store_true")
     parser.add_argument("--dataset-type", choices=("license", "uchastik"), default="license")
     parser.add_argument("--only-nergui-undur", action="store_true")
+    parser.add_argument("--context-only", action="store_true")
     args = parser.parse_args()
-    export(args.source, args.output, args.utm_zone_49n, args.dataset_type, args.only_nergui_undur)
+    export(args.source, args.output, args.utm_zone_49n, args.dataset_type, args.only_nergui_undur, args.context_only)

@@ -18,7 +18,7 @@ def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def validate_geojson(path: Path, expected_project: str = "Nergui Undur") -> list[str]:
+def validate_geojson(path: Path, expected_project: str = "Nergui Undur", external_context: bool = False) -> list[str]:
     errors = []
     data = load(path)
     if data.get("type") != "FeatureCollection":
@@ -37,8 +37,10 @@ def validate_geojson(path: Path, expected_project: str = "Nergui Undur") -> list
         if project != expected_project:
             errors.append(f"{path}:{fid}: project must be {expected_project!r}, got {project!r}")
         text = json.dumps(props, ensure_ascii=False).lower()
-        if any(token in text for token in FORBIDDEN):
+        if not external_context and any(token in text for token in FORBIDDEN):
             errors.append(f"{path}:{fid}: another project name is present")
+        if external_context and (props.get("dataType") != "licence_context" or props.get("contextOnly") is not True):
+            errors.append(f"{path}:{fid}: external licence features must be context-only")
         if props.get("dataType") == "actual_flight_track":
             source_file = str(props.get("sourceFile", "")).lower()
             if re.search(r"\.(kmz|kml|wpmz|zip)$", source_file) or props.get("plannedActual") != "actual":
@@ -57,7 +59,9 @@ def main() -> int:
         if dataset_id in dataset_ids:
             errors.append(f"datasets.json: duplicate id {dataset_id}")
         dataset_ids.add(dataset_id)
-        if dataset.get("project") != "Nergui Undur":
+        external_context = dataset.get("scope") == "external_reference"
+        expected_project = "External licence reference" if external_context else "Nergui Undur"
+        if dataset.get("project") != expected_project:
             errors.append(f"datasets.json:{dataset_id}: wrong project")
         asset = dataset.get("webAsset")
         if asset:
@@ -65,13 +69,13 @@ def main() -> int:
             if not path.exists():
                 errors.append(f"datasets.json:{dataset_id}: missing {asset}")
             elif path.suffix == ".geojson":
-                errors.extend(validate_geojson(path))
+                errors.extend(validate_geojson(path, expected_project, external_context))
     if errors:
         print("Validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
-    print(f"Validated {len(dataset_ids)} datasets; no duplicate IDs, cross-project markers, or planned/actual conflicts.")
+    print(f"Validated {len(dataset_ids)} datasets; no duplicate IDs, unauthorised cross-project markers, or planned/actual conflicts.")
     return 0
 
 

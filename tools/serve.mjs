@@ -17,6 +17,7 @@ const outputs = {
   plan: path.join(root, "data", "magarrow", "planned-survey.geojson"),
   licence: path.join(root, "data", "base", "licenses.geojson"),
   uchastik: path.join(root, "data", "base", "uchastics.geojson"),
+  licenceContext: path.join(root, "data", "context", "licenses.geojson"),
 };
 const scripts = {
   plan: path.join(projectRoot, "tools", "export_gpkg.py"),
@@ -75,6 +76,9 @@ async function syncFor(target) {
   }
   if (target === outputs.uchastik && await isNewer(sources.uchastik, outputs.uchastik)) {
     await runExport("Uchastik", scripts.shapefile, [sources.uchastik, outputs.uchastik, "--utm-zone-49n", "--dataset-type", "uchastik"]);
+  }
+  if (target === outputs.licenceContext && await isNewer(sources.licence, outputs.licenceContext)) {
+    await runExport("Licence context", scripts.shapefile, [sources.licence, outputs.licenceContext, "--context-only"]);
   }
 }
 

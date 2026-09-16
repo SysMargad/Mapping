@@ -9,6 +9,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 - `dist/data/datasets.json` — dataset registry ба canonical metadata.
 - `dist/data/manifest.json` — build version, шинэчлэгдсэн огноо, asset hash.
 - `dist/data/base/` — licence, uchastik, DWG/CAD-аас гарсан base/control geometry. Sensor track биш.
+- `dist/data/context/licenses.geojson` — 24 лицензийн external reference. Default-аар зурагт харагдахгүй; хэрэглэгч сонгоход тухайн polygon дээр төвлөрнө.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
@@ -48,6 +49,15 @@ Nergui Undur licence only:
   "C:\Users\margad.p\Desktop\Drone Track\Talbain license.zip" `
   .\dist\data\base\licenses.geojson `
   --only-nergui-undur
+```
+
+External licence reference list:
+
+```powershell
+& $python .\tools\export_shapefile.py `
+  "C:\Users\margad.p\Desktop\Drone Track\Talbain license.zip" `
+  .\dist\data\context\licenses.geojson `
+  --context-only
 ```
 
 Uchastik:
