@@ -10,13 +10,15 @@
     errorMessage: $("#error-message"),
     retry: $("#retry"),
     warnings: $("#data-warnings"),
-    manifestStatus: $("#manifest-status"),
     primaryLabel: $("#summary-label-primary"),
     primaryValue: $("#summary-value-primary"),
     secondaryLabel: $("#summary-label-secondary"),
     secondaryValue: $("#summary-value-secondary"),
+    tertiaryLabel: $("#summary-label-tertiary"),
+    tertiaryValue: $("#summary-value-tertiary"),
     summaryNote: $("#summary-note"),
     baseLayers: $("#base-layer-list"),
+    licenseBrowserTitle: $("#license-browser-title"),
     licenseCount: $("#license-count"),
     licenseContextList: $("#license-context-list"),
     clearLicenseContext: $("#clear-license-context"),
@@ -36,9 +38,15 @@
     activeSensor: "MagArrow",
     activeDatasetId: "magarrow-planned-survey",
     baseLayers: new Map(),
+    licenceData: null,
     licenseContextLayers: new Map(),
     licenseContextData: null,
     selectedContextLicense: null,
+    licenseBrowserMode: "licence",
+    uchastikData: null,
+    uchastikFeatureLayers: new Map(),
+    selectedUchastikKey: null,
+    areaScope: null,
     planLayers: new Map(),
     planVisibility: { boundary: true, main: true, tie: true },
     missionLayers: new Map(),
@@ -262,16 +270,29 @@
     ui.warnings.replaceChildren();
   };
 
-  const setSummary = (primaryLabel, primaryValue, secondaryLabel, secondaryValue, note = "") => {
-    ui.primaryLabel.textContent = primaryLabel;
-    ui.primaryValue.textContent = primaryValue;
-    ui.secondaryLabel.textContent = secondaryLabel;
-    ui.secondaryValue.textContent = secondaryValue;
-    ui.summaryNote.textContent = note;
+  const renderAreaSummary = () => {
+    const features = state.areaScope?.features || [];
+    const totalArea = features.length ? features.reduce((sum, feature) => sum + featureArea(feature), 0) : NaN;
+    ui.primaryLabel.textContent = "Нийт талбай";
+    ui.primaryValue.textContent = formatArea(totalArea);
+    ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
+    ui.secondaryValue.textContent = "—";
+    ui.tertiaryLabel.textContent = "Өдрийн ниссэн талбай";
+    ui.tertiaryValue.textContent = "—";
+    ui.summaryNote.textContent = state.areaScope
+      ? `${state.areaScope.label} · Actual flight track баталгаажаагүй тул ниссэн талбай тооцоогүй.`
+      : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
+  };
+
+  const setAreaScope = (label, features) => {
+    state.areaScope = {
+      label,
+      features: (Array.isArray(features) ? features : [features]).filter(Boolean),
+    };
+    renderAreaSummary();
   };
 
   const registerBaseControl = (id, label, detail, layer, visible, tone = "base") => {
-    state.baseLayers.set(id, { layer, visible, label });
     if (visible) layer.addTo(state.map);
     const row = document.createElement("label");
     row.className = "toggle-row";
@@ -279,9 +300,12 @@
     row.innerHTML = `
       <span class="toggle-copy"><span class="mini-symbol ${tone}" aria-hidden="true"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span>
       <span class="switch"><input type="checkbox" ${visible ? "checked" : ""} /><span aria-hidden="true"></span></span>`;
-    row.querySelector("input").addEventListener("change", (event) => {
+    const input = row.querySelector("input");
+    state.baseLayers.set(id, { layer, visible, label, input });
+    input.addEventListener("change", (event) => {
       state.baseLayers.get(id).visible = event.target.checked;
-      if (event.target.checked) layer.addTo(state.map);
+      if (id === "uchastik") syncUchastikLayerVisibility();
+      else if (event.target.checked) layer.addTo(state.map);
       else state.map.removeLayer(layer);
     });
     ui.baseLayers.appendChild(row);
@@ -299,6 +323,7 @@
     const config = dataset("base-licence");
     const data = await fetchJson(config.webAsset);
     assertProjectTruth(data, "Licence");
+    state.licenceData = data;
     const layer = L.geoJSON(data, {
       pane: "licencePane",
       style: { color: "#ffd166", weight: 3, fillColor: "#ffd166", fillOpacity: 0.05, dashArray: "9 5" },
@@ -310,8 +335,25 @@
   const clearLicenceContext = () => {
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
     state.selectedContextLicense = null;
-    ui.clearLicenseContext.hidden = true;
     for (const button of ui.licenseContextList.querySelectorAll("button")) button.classList.remove("is-active");
+  };
+
+  const clearUchastikMapLayers = () => {
+    const aggregate = state.baseLayers.get("uchastik")?.layer;
+    if (aggregate) state.map.removeLayer(aggregate);
+    for (const layer of state.uchastikFeatureLayers.values()) state.map.removeLayer(layer);
+  };
+
+  const syncUchastikLayerVisibility = () => {
+    clearUchastikMapLayers();
+    const control = state.baseLayers.get("uchastik");
+    if (!control?.visible) return;
+    if (state.licenseBrowserMode === "uchastik") {
+      if (state.selectedUchastikKey === "all") control.layer.addTo(state.map);
+      else state.uchastikFeatureLayers.get(state.selectedUchastikKey)?.addTo(state.map);
+      return;
+    }
+    if (!state.selectedContextLicense) control.layer.addTo(state.map);
   };
 
   const fitSingleLayer = (layer) => {
@@ -319,46 +361,109 @@
     if (bounds?.isValid()) state.map.fitBounds(bounds, { padding: [44, 44], maxZoom: 15 });
   };
 
+  const featureLabel = (feature, fallback = "Талбай") => feature?.properties?.AREANAME_L
+    || feature?.properties?.AREANAME
+    || feature?.properties?.name
+    || fallback;
+
+  const isNerguiLicence = (feature) => {
+    const value = `${feature?.properties?.AREANAME || ""} ${feature?.properties?.AREANAME_L || ""}`.toLowerCase();
+    return value.includes("nergui undur") || value.includes("нэргүй өндөр");
+  };
+
+  const selectUchastik = (key, button) => {
+    state.selectedUchastikKey = key;
+    for (const item of ui.licenseContextList.querySelectorAll("button")) item.classList.remove("is-active");
+    button.classList.add("is-active");
+    const control = state.baseLayers.get("uchastik");
+    if (control) {
+      control.visible = true;
+      if (control.input) control.input.checked = true;
+    }
+    syncUchastikLayerVisibility();
+    if (key === "all") {
+      setAreaScope("Нэргүй өндөр · Бүх участик", state.uchastikData?.features || []);
+      fitSingleLayer(control?.layer);
+    } else {
+      const feature = state.uchastikData?.features.find((item) => String(item.id) === key);
+      const layer = state.uchastikFeatureLayers.get(key);
+      setAreaScope(`Нэргүй өндөр · ${featureLabel(feature, key)}`, feature);
+      fitSingleLayer(layer);
+    }
+    state.activeDatasetId = "base-uchastik";
+    renderDatasetInfo();
+  };
+
+  const showUchastikBrowser = (licenceFeature) => {
+    state.licenseBrowserMode = "uchastik";
+    state.selectedUchastikKey = null;
+    syncUchastikLayerVisibility();
+    ui.licenseBrowserTitle.textContent = "Участик сонгох";
+    ui.licenseCount.textContent = `${state.uchastikData?.features.length || 0} талбай`;
+    ui.clearLicenseContext.textContent = "← Лицензийн жагсаалт";
+    ui.clearLicenseContext.hidden = false;
+    ui.licenseContextList.replaceChildren();
+    const features = state.uchastikData?.features || [];
+    const entries = [{ key: "all", label: "Бүх участик", detail: `${features.length} талбай` }]
+      .concat(features.map((feature) => ({
+        key: String(feature.id),
+        label: featureLabel(feature, feature.id),
+        detail: formatArea(featureArea(feature)),
+      })));
+    for (const entry of entries) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "license-context-button";
+      button.innerHTML = `<strong>${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.detail)}</small>`;
+      button.addEventListener("click", () => selectUchastik(entry.key, button));
+      ui.licenseContextList.appendChild(button);
+    }
+    setAreaScope(featureLabel(licenceFeature, "Нэргүй өндөр"), licenceFeature);
+  };
+
   const selectLicenceContext = (key, button) => {
     clearLicenceContext();
+    state.licenseBrowserMode = "licence";
+    state.selectedUchastikKey = null;
     state.selectedContextLicense = key;
     button.classList.add("is-active");
+    ui.clearLicenseContext.textContent = "Сонголт арилгах";
     ui.clearLicenseContext.hidden = false;
+    syncUchastikLayerVisibility();
     if (key === "all") {
       for (const layer of state.licenseContextLayers.values()) layer.addTo(state.map);
       fitSingleLayer(L.featureGroup([...state.licenseContextLayers.values()]));
+      setAreaScope("Бүх лиценз", state.licenseContextData?.features || []);
     } else {
       const layer = state.licenseContextLayers.get(key);
       layer?.addTo(state.map);
       fitSingleLayer(layer);
+      const feature = state.licenseContextData?.features.find((item) => String(item.id) === key);
+      if (isNerguiLicence(feature)) showUchastikBrowser(feature);
+      else setAreaScope(featureLabel(feature, key), feature);
     }
     state.activeDatasetId = "base-licence-context";
     renderDatasetInfo();
   };
 
-  const loadLicenceContext = async () => {
-    const config = dataset("base-licence-context");
-    const data = await fetchJson(config.webAsset);
-    assertLicenceContext(data);
-    state.licenseContextData = data;
+  const renderLicenceBrowser = () => {
+    const data = state.licenseContextData;
+    if (!data) return;
+    state.licenseBrowserMode = "licence";
+    state.selectedUchastikKey = null;
+    ui.licenseBrowserTitle.textContent = "Лицензийн талбай сонгох";
     ui.licenseCount.textContent = `${data.features.length} талбай`;
+    ui.clearLicenseContext.textContent = "Сонголт арилгах";
+    ui.clearLicenseContext.hidden = !state.selectedContextLicense;
     ui.licenseContextList.replaceChildren();
     const entries = [{ key: "all", label: "Бүх лиценз", licence: `${data.features.length} талбай`, feature: null }]
       .concat(data.features.map((feature) => ({
         key: String(feature.id),
-        label: feature.properties?.AREANAME_L || feature.properties?.AREANAME || feature.id,
+        label: featureLabel(feature, feature.id),
         licence: feature.properties?.LICENSE || "Licence number unavailable",
         feature,
       })));
     for (const entry of entries) {
-      if (entry.feature) {
-        const layer = L.geoJSON(entry.feature, {
-          pane: "licencePane",
-          style: { color: "#ffe08a", weight: 3.2, opacity: 1, fillColor: "#ffd166", fillOpacity: 0.12, dashArray: "10 5" },
-          onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
-        });
-        state.licenseContextLayers.set(entry.key, layer);
-      }
       const button = document.createElement("button");
       button.type = "button";
       button.className = "license-context-button";
@@ -368,15 +473,52 @@
     }
   };
 
+  const returnToLicenceBrowser = () => {
+    clearLicenceContext();
+    state.licenseBrowserMode = "licence";
+    state.selectedUchastikKey = null;
+    syncUchastikLayerVisibility();
+    renderLicenceBrowser();
+    const feature = state.licenceData?.features?.[0];
+    setAreaScope(featureLabel(feature, "Нэргүй өндөр"), feature);
+    state.activeDatasetId = "base-licence";
+    renderDatasetInfo();
+    fitSingleLayer(state.baseLayers.get("licence")?.layer);
+  };
+
+  const loadLicenceContext = async () => {
+    const config = dataset("base-licence-context");
+    const data = await fetchJson(config.webAsset);
+    assertLicenceContext(data);
+    state.licenseContextData = data;
+    for (const feature of data.features) {
+        const layer = L.geoJSON(feature, {
+          pane: "licencePane",
+          style: { color: "#ffe08a", weight: 3.2, opacity: 1, fillColor: "#ffd166", fillOpacity: 0.12, dashArray: "10 5" },
+          onEachFeature(itemFeature, item) { item.bindPopup(basePopup(itemFeature)); },
+        });
+        state.licenseContextLayers.set(String(feature.id), layer);
+    }
+    renderLicenceBrowser();
+  };
+
   const loadUchastik = async () => {
     const config = dataset("base-uchastik");
     const data = await fetchJson(config.webAsset);
     assertProjectTruth(data, "Uchastik");
+    state.uchastikData = data;
     const layer = L.geoJSON(data, {
       pane: "uchastikPane",
       style: { color: "#ff75b5", weight: 2.2, fillColor: "#ff75b5", fillOpacity: 0.08 },
       onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
     });
+    for (const feature of data.features) {
+      state.uchastikFeatureLayers.set(String(feature.id), L.geoJSON(feature, {
+        pane: "uchastikPane",
+        style: { color: "#ff75b5", weight: 3, fillColor: "#ff75b5", fillOpacity: 0.14 },
+        onEachFeature(itemFeature, item) { item.bindPopup(basePopup(itemFeature)); },
+      }));
+    }
     registerBaseControl("uchastik", "Uchastik", `${data.features.length} polygon`, layer, true, "uchastik");
   };
 
@@ -505,24 +647,8 @@
 
   const updateMagArrowSummary = () => {
     if (state.selectedMissions.size && state.missionData) {
-      const selected = state.missionData.features.filter((feature) => state.selectedMissions.has(feature.properties?.mission_id || feature.properties?.plan));
-      const estimatedCoverage = selected.reduce((sum, feature) => sum + lineLength(feature) * 100, 0);
-      setSummary(
-        "Нийт талбай",
-        formatArea(state.planArea),
-        "Төлөвлөсөн хамрах талбай",
-        formatArea(estimatedCoverage),
-        "DJI mission plan шугамын урт × 100 м — төлөвлөсөн estimate; verified flown area биш."
-      );
       state.activeDatasetId = "magarrow-mission-plans";
     } else {
-      setSummary(
-        "Нийт талбай",
-        formatArea(state.planArea),
-        "Төлөвлөсөн хамрах талбай",
-        formatArea(state.mainCoverage),
-        "Approved main-line length × 100 м. Actual track/covered area гэж тооцоогүй."
-      );
       state.activeDatasetId = "magarrow-planned-survey";
     }
     renderDatasetInfo();
@@ -607,28 +733,23 @@
         tone: "survey",
         body: "Sant Uul survey family, metadata болон derived products баталгаажсан.",
         extra: `<div class="block-grid">${["N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9"].map((block) => `<span>${block}</span>`).join("")}</div><p class="truth-note">Actual trajectory: NOT AVAILABLE / NOT CONFIRMED</p>`,
-        summary: ["Survey blocks", "N1–N9", "Data status", "Available"],
       },
       L2: {
         datasetId: "l2-source", title: "Zenmuse L2", badge: "SOURCE PENDING", tone: "pending",
         body: "Canonical LiDAR source structure байна. Nergui Undur actual flight track баталгаажаагүй.", extra: "",
-        summary: ["Data status", "Pending", "Flight track", "Not confirmed"],
       },
       P1: {
         datasetId: "p1-source", title: "Zenmuse P1", badge: "SOURCE PENDING", tone: "pending",
         body: "Canonical RGB photogrammetry source байна. Raw mission/trajectory баталгаажаагүй.", extra: "",
-        summary: ["Data status", "Pending", "Flight track", "Not confirmed"],
       },
       Medusa: {
         datasetId: "medusa-source", title: "Medusa MS-700", badge: "NO FLIGHT DATA INGESTED", tone: "unavailable",
         body: "SOP/specification баримт байна. Actual field-flight/acquisition data баталгаажаагүй.", extra: "",
-        summary: ["Data status", "Pending", "Flight data", "Not ingested"],
       },
     };
     const config = mapping[sensor];
     state.activeDatasetId = config.datasetId;
     ui.sensorPanel.innerHTML = `<div class="sensor-heading"><div><strong>${escapeHtml(config.title)}</strong><span>Nergui Undur</span></div><span class="status-badge ${config.tone}">${escapeHtml(config.badge)}</span></div><p class="status-copy">${escapeHtml(config.body)}</p>${config.extra}`;
-    setSummary(...config.summary, "Missing data-г zero гэж үзээгүй; баталгаажаагүй track харуулахгүй.");
     renderDatasetInfo();
   };
 
@@ -681,7 +802,8 @@
 
   const visibleLayers = () => {
     const layers = [];
-    for (const item of state.baseLayers.values()) if (item.visible) layers.push(item.layer);
+    for (const item of state.baseLayers.values()) if (item.visible && state.map.hasLayer(item.layer)) layers.push(item.layer);
+    for (const layer of state.uchastikFeatureLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of state.licenseContextLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
@@ -699,11 +821,18 @@
   const removeAllDataLayers = () => {
     for (const item of state.baseLayers.values()) state.map.removeLayer(item.layer);
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.uchastikFeatureLayers.values()) state.map.removeLayer(layer);
     hideSensorLayers();
     state.baseLayers.clear();
+    state.licenceData = null;
     state.licenseContextLayers.clear();
     state.licenseContextData = null;
     state.selectedContextLicense = null;
+    state.licenseBrowserMode = "licence";
+    state.uchastikData = null;
+    state.uchastikFeatureLayers.clear();
+    state.selectedUchastikKey = null;
+    state.areaScope = null;
     state.planLayers.clear();
     state.missionLayers.clear();
     state.selectedMissions.clear();
@@ -713,6 +842,7 @@
     state.mainCoverage = 0;
     ui.baseLayers.replaceChildren();
     ui.licenseContextList.replaceChildren();
+    ui.licenseBrowserTitle.textContent = "Лицензийн талбай сонгох";
     ui.licenseCount.textContent = "—";
     ui.clearLicenseContext.hidden = true;
   };
@@ -732,8 +862,6 @@
       state.manifest = manifest;
       state.registry = registry;
       state.datasets = new Map(registry.datasets.map((item) => [item.id, item]));
-      ui.manifestStatus.textContent = `Data ${manifest.version} · ${manifest.updated}`;
-
       const jobs = [
         { label: "Licence", task: loadLicence, errorType: "base" },
         { label: "Uchastik", task: loadUchastik, errorType: "base" },
@@ -751,6 +879,8 @@
       });
       renderSensorButtons();
       selectSensor(state.activeSensor);
+      const defaultLicence = state.licenceData?.features?.[0];
+      setAreaScope(featureLabel(defaultLicence, "Нэргүй өндөр"), defaultLicence);
       fitMap();
       const usable = state.baseLayers.size + state.planLayers.size;
       if (!usable) throw new Error("No base or active sensor layers could be loaded.");
@@ -764,11 +894,7 @@
   };
 
   ui.fit.addEventListener("click", fitMap);
-  ui.clearLicenseContext.addEventListener("click", () => {
-    clearLicenceContext();
-    selectSensor(state.activeSensor);
-    fitMap();
-  });
+  ui.clearLicenseContext.addEventListener("click", returnToLicenceBrowser);
   ui.refresh.addEventListener("click", load);
   ui.retry.addEventListener("click", load);
   load();

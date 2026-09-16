@@ -33,13 +33,11 @@ button { color: inherit; }
 .brand-mark { display: grid; place-items: center; width: 46px; height: 46px; flex: 0 0 46px; border: 1px solid rgba(57, 217, 255, .35); border-radius: 13px; background: rgba(57, 217, 255, .14); }
 .brand-mark svg { width: 28px; height: 28px; fill: none; stroke: var(--cyan); stroke-width: 1.6; }
 .brand-mark svg path:last-child { fill: rgba(57, 217, 255, .26); stroke: #e8fbff; }
-.eyebrow { margin: 2px 0 6px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .13em; }
 h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
-.build-status { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
-.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 20px 0 8px; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 20px 0 8px; }
 .summary-grid > div { min-width: 0; padding: 13px 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-soft); }
 .summary-grid span { display: block; color: var(--muted); font-size: 11px; line-height: 1.3; }
-.summary-grid strong { display: block; margin-top: 5px; overflow: hidden; font-size: 19px; letter-spacing: -.02em; text-overflow: ellipsis; }
+.summary-grid strong { display: block; margin-top: 5px; overflow: hidden; font-size: 16px; letter-spacing: -.02em; text-overflow: ellipsis; }
 .summary-note, .hint, .panel-note, .truth-note { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .summary-note { min-height: 17px; margin: 0 2px 18px; }
 .control-section { margin-top: 17px; }
