@@ -5,8 +5,10 @@
   const retryButton = document.querySelector("#retry");
   const totalArea = document.querySelector("#total-area");
   const flownArea = document.querySelector("#flown-area");
+  const flownAreaLabel = document.querySelector("#flown-area-label");
   const planList = document.querySelector("#plan-list");
   const lPlanList = document.querySelector("#l-plan-list");
+  const dailyTracksSection = document.querySelector("#daily-tracks-section");
   const licenseList = document.querySelector("#license-list");
   const licenseHeading = document.querySelector("#licenses-heading");
   const licenseBack = document.querySelector("#license-back");
@@ -54,6 +56,8 @@
   let selectedUchasticKey = "all";
   let selectedUchasticFeature = null;
   let selectedLPlan = "all";
+  let l3Features = [];
+  let lPlanData = null;
   const planConfig = {
     L2: { label: "L2", color: "#ffb84d", dash: "10 7" },
     L3: { label: "L3", color: "#c18cff", dash: "3 8" },
@@ -90,6 +94,27 @@
   };
 
   const featureArea = (feature) => Number(feature?.properties?.area_m2) || geometryArea(feature?.geometry);
+  const formatHectares = (squareMetres) => `${(squareMetres / 10_000).toLocaleString("mn-MN", { maximumFractionDigits: 2 })} га`;
+  const lineLengthMetres = (feature) => {
+    const coordinates = feature?.geometry?.coordinates || [];
+    const lines = feature?.geometry?.type === "MultiLineString" ? coordinates : [coordinates];
+    return lines.reduce((total, line) => line.slice(1).reduce((sum, point, index) => {
+      const previous = line[index];
+      const dx = (point[0] - previous[0]) * 111320 * Math.cos(point[1] * Math.PI / 180);
+      const dy = (point[1] - previous[1]) * 111320;
+      return sum + Math.hypot(dx, dy);
+    }, total), 0);
+  };
+  const dailyFlightArea = (planKey) => {
+    if (!lPlanData || planKey === "all") return 0;
+    return lPlanData.features
+      .filter((feature) => feature.properties?.plan === planKey)
+      .reduce((sum, feature) => sum + lineLengthMetres(feature) * 100, 0);
+  };
+  const setFlownArea = (label, squareMetres, hectares = false) => {
+    flownAreaLabel.textContent = label;
+    flownArea.textContent = hectares ? formatHectares(squareMetres) : formatArea(squareMetres);
+  };
   const setTotalArea = (features) => {
     const list = Array.isArray(features) ? features : [features];
     totalArea.textContent = formatArea(list.reduce((sum, feature) => sum + featureArea(feature), 0));
@@ -197,6 +222,12 @@
         }
         for (const item of lPlanList.children) item.classList.remove("is-active");
         button.classList.add("is-active");
+        const selectedFeatures = lPlanData.features.filter((feature) => feature.properties?.plan === entry.key);
+        const squareMetres = entry.key === "all"
+          ? l3Features.filter((feature) => feature.properties?.layer === "BLOCK_BOUNDARY")
+            .reduce((sum, feature) => sum + featureArea(feature), 0)
+          : selectedFeatures.reduce((sum, feature) => sum + lineLengthMetres(feature) * 100, 0);
+        setFlownArea(entry.key === "all" ? "Нийт нислэг" : "Өдрийн нислэг", squareMetres, entry.key !== "all");
         fitToArea();
       });
       lPlanList.appendChild(button);
@@ -216,6 +247,17 @@
     if (l3Layer) {
       if (showL3) l3Layer.addTo(map);
       else map.removeLayer(l3Layer);
+    }
+    dailyTracksSection.hidden = activePlan !== "L3";
+    for (const [key, layer] of lPlanLayers) {
+      if (activePlan !== "L3" || (selectedLPlan !== "all" && key !== selectedLPlan)) map.removeLayer(layer);
+      else layer.addTo(map);
+    }
+    if (activePlan === "L3" && l3Features.length) {
+      const total = l3Features.filter((feature) => feature.properties?.layer === "BLOCK_BOUNDARY")
+        .reduce((sum, feature) => sum + featureArea(feature), 0);
+      setFlownArea(selectedLPlan === "all" ? "Нийт нислэг" : "Өдрийн нислэг",
+        selectedLPlan === "all" ? total : dailyFlightArea(selectedLPlan), selectedLPlan !== "all");
     }
   };
 
@@ -471,6 +513,7 @@
       const l3Response = await fetch("./data/l3.geojson", { cache: "no-store" });
       if (!l3Response.ok) throw new Error(`L3 өгөгдлийн хүсэлт амжилтгүй (${l3Response.status})`);
       const l3Data = await l3Response.json();
+      l3Features = l3Data.features;
       if (l3Layer) map.removeLayer(l3Layer);
       const l3VisibleFeatures = l3Data.features.filter((feature) =>
         feature.geometry?.type !== "Point" || feature.properties?.layer === "BLOCK_NUM_LABELS");
@@ -493,19 +536,19 @@
 
       const lPlanResponse = await fetch("./data/l-plans.geojson", { cache: "no-store" });
       if (!lPlanResponse.ok) throw new Error(`L дата хүсэлт амжилтгүй (${lPlanResponse.status})`);
-      const lPlanData = await lPlanResponse.json();
+      const lPlanDataPayload = await lPlanResponse.json();
       for (const layer of lPlanLayers.values()) map.removeLayer(layer);
       lPlanLayers.clear();
-      for (const plan of lPlanData.plans || []) {
-        const features = lPlanData.features.filter((feature) => feature.properties?.plan === plan.label);
+      for (const plan of lPlanDataPayload.plans || []) {
+        const features = lPlanDataPayload.features.filter((feature) => feature.properties?.plan === plan.label);
         const layer = L.geoJSON({ type: "FeatureCollection", features }, {
           style: { color: "#ff9f43", weight: 2, opacity: 0.9, dashArray: "8 5" },
           onEachFeature(feature, itemLayer) { itemLayer.bindPopup(popupContent(feature)); },
         });
         lPlanLayers.set(plan.label, layer);
       }
-      renderLPlanControls(lPlanData.plans || []);
-      for (const layer of lPlanLayers.values()) layer.addTo(map);
+      lPlanData = lPlanDataPayload;
+      renderLPlanControls(lPlanDataPayload.plans || []);
 
       const licenseResponse = await fetch("./data/licenses.geojson", { cache: "no-store" });
       if (!licenseResponse.ok) throw new Error(`Лицензийн өгөгдлийн хүсэлт амжилтгүй (${licenseResponse.status})`);
@@ -538,6 +581,7 @@
         ? flownFeatures.reduce((sum, feature) => sum + (Number(feature.properties?.area_m2) || 0), 0)
         : null;
       setTotalArea(licenseData.features);
+      setFlownArea("Нийт нислэг", flownAreaSum || 0);
       flownArea.textContent = formatArea(flownAreaSum);
       fitToArea();
       loading.hidden = true;
