@@ -18,6 +18,7 @@
     tertiaryValue: $("#summary-value-tertiary"),
     summaryNote: $("#summary-note"),
     baseLayers: $("#base-layer-list"),
+    licenseBrowser: $("#license-browser"),
     licenseBrowserTitle: $("#license-browser-title"),
     licenseCount: $("#license-count"),
     licenseContextList: $("#license-context-list"),
@@ -53,6 +54,10 @@
     selectedMissions: new Set(),
     missionData: null,
     missionPromise: null,
+    actualTrackData: null,
+    actualCoverage: null,
+    actualTrackLayers: new Map(),
+    selectedFlightDate: "all",
     planArea: 0,
     mainCoverage: 0,
     warnings: new Set(),
@@ -172,6 +177,19 @@
     ]);
   };
 
+  const actualPopup = (feature) => {
+    const props = feature.properties || {};
+    return popup([
+      ["Sensor", "MagArrow"],
+      ["Acquisition", props.acquisition],
+      ["Date", props.date],
+      ["Type", "Actual GNSS trajectory"],
+      ["Start", props.startTime],
+      ["End", props.endTime],
+      ["Source", props.sourceFile],
+    ]);
+  };
+
   const basePopup = (feature) => {
     const props = feature.properties || {};
     const label = ["licence_boundary", "licence_context"].includes(props.dataType) ? "Licence boundary"
@@ -273,21 +291,28 @@
   const renderAreaSummary = () => {
     const features = state.areaScope?.features || [];
     const totalArea = features.length ? features.reduce((sum, feature) => sum + featureArea(feature), 0) : NaN;
+    const coverage = state.areaScope?.coverageKey
+      ? state.actualCoverage?.scopes?.[state.areaScope.coverageKey]
+      : null;
+    const selectedDate = state.selectedFlightDate !== "all" ? state.selectedFlightDate : null;
     ui.primaryLabel.textContent = "Нийт талбай";
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
-    ui.secondaryValue.textContent = "—";
+    ui.secondaryValue.textContent = formatArea(coverage?.totalAreaM2);
     ui.tertiaryLabel.textContent = "Өдрийн ниссэн талбай";
-    ui.tertiaryValue.textContent = "—";
-    ui.summaryNote.textContent = state.areaScope
-      ? `${state.areaScope.label} · Actual flight track баталгаажаагүй тул ниссэн талбай тооцоогүй.`
-      : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
+    ui.tertiaryValue.textContent = formatArea(selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : NaN);
+    ui.summaryNote.textContent = coverage
+      ? `${state.areaScope.label} · ${selectedDate || "Бүх огноо"} · GNSS trajectory-д суурилсан 50 м зурвасын тооцоо.`
+      : state.areaScope
+        ? `${state.areaScope.label} · Энэ сонголтод нислэгийн талбайн тооцоо байхгүй.`
+        : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
   };
 
-  const setAreaScope = (label, features) => {
+  const setAreaScope = (label, features, coverageKey = null) => {
     state.areaScope = {
       label,
       features: (Array.isArray(features) ? features : [features]).filter(Boolean),
+      coverageKey,
     };
     renderAreaSummary();
   };
@@ -382,12 +407,12 @@
     }
     syncUchastikLayerVisibility();
     if (key === "all") {
-      setAreaScope("Нэргүй өндөр · Бүх участик", state.uchastikData?.features || []);
+      setAreaScope("Нэргүй өндөр · Бүх участик", state.uchastikData?.features || [], "uchastik-all");
       fitSingleLayer(control?.layer);
     } else {
       const feature = state.uchastikData?.features.find((item) => String(item.id) === key);
       const layer = state.uchastikFeatureLayers.get(key);
-      setAreaScope(`Нэргүй өндөр · ${featureLabel(feature, key)}`, feature);
+      setAreaScope(`Нэргүй өндөр · ${featureLabel(feature, key)}`, feature, key);
       fitSingleLayer(layer);
     }
     state.activeDatasetId = "base-uchastik";
@@ -396,6 +421,7 @@
 
   const showUchastikBrowser = (licenceFeature) => {
     state.licenseBrowserMode = "uchastik";
+    ui.licenseBrowser.classList.add("is-uchastik");
     state.selectedUchastikKey = null;
     syncUchastikLayerVisibility();
     ui.licenseBrowserTitle.textContent = "Участик сонгох";
@@ -418,7 +444,7 @@
       button.addEventListener("click", () => selectUchastik(entry.key, button));
       ui.licenseContextList.appendChild(button);
     }
-    setAreaScope(featureLabel(licenceFeature, "Нэргүй өндөр"), licenceFeature);
+    setAreaScope(featureLabel(licenceFeature, "Нэргүй өндөр"), licenceFeature, "licence");
   };
 
   const selectLicenceContext = (key, button) => {
@@ -433,14 +459,14 @@
     if (key === "all") {
       for (const layer of state.licenseContextLayers.values()) layer.addTo(state.map);
       fitSingleLayer(L.featureGroup([...state.licenseContextLayers.values()]));
-      setAreaScope("Бүх лиценз", state.licenseContextData?.features || []);
+      setAreaScope("Бүх лиценз", state.licenseContextData?.features || [], null);
     } else {
       const layer = state.licenseContextLayers.get(key);
       layer?.addTo(state.map);
       fitSingleLayer(layer);
       const feature = state.licenseContextData?.features.find((item) => String(item.id) === key);
       if (isNerguiLicence(feature)) showUchastikBrowser(feature);
-      else setAreaScope(featureLabel(feature, key), feature);
+      else setAreaScope(featureLabel(feature, key), feature, null);
     }
     state.activeDatasetId = "base-licence-context";
     renderDatasetInfo();
@@ -450,6 +476,7 @@
     const data = state.licenseContextData;
     if (!data) return;
     state.licenseBrowserMode = "licence";
+    ui.licenseBrowser.classList.remove("is-uchastik");
     state.selectedUchastikKey = null;
     ui.licenseBrowserTitle.textContent = "Лицензийн талбай сонгох";
     ui.licenseCount.textContent = `${data.features.length} талбай`;
@@ -480,7 +507,7 @@
     syncUchastikLayerVisibility();
     renderLicenceBrowser();
     const feature = state.licenceData?.features?.[0];
-    setAreaScope(featureLabel(feature, "Нэргүй өндөр"), feature);
+    setAreaScope(featureLabel(feature, "Нэргүй өндөр"), feature, "licence");
     state.activeDatasetId = "base-licence";
     renderDatasetInfo();
     fitSingleLayer(state.baseLayers.get("licence")?.layer);
@@ -606,6 +633,57 @@
     restoreMagArrowLayers();
   };
 
+  const flightDateColor = (date) => {
+    const palette = ["#ff75b5", "#39d9ff", "#71f6c1", "#ffd166", "#b596ff", "#ff8f66", "#63e6be", "#74a7ff", "#f783ac", "#a9e34b"];
+    const dates = state.actualCoverage?.dates || [];
+    const index = Math.max(0, dates.indexOf(date));
+    return palette[index % palette.length];
+  };
+
+  const selectedActualLayers = () => {
+    if (state.selectedFlightDate === "all") return [...state.actualTrackLayers.values()];
+    const layer = state.actualTrackLayers.get(state.selectedFlightDate);
+    return layer ? [layer] : [];
+  };
+
+  const syncActualTrackVisibility = () => {
+    for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
+    if (state.activeSensor !== "MagArrow") return;
+    for (const layer of selectedActualLayers()) layer.addTo(state.map);
+  };
+
+  const loadActualTracks = async () => {
+    const trackConfig = dataset("magarrow-actual-tracks");
+    const coverageConfig = dataset("magarrow-coverage-stats");
+    const [data, coverage] = await Promise.all([
+      fetchJson(trackConfig.webAsset),
+      fetchJson(coverageConfig.webAsset),
+    ]);
+    assertProjectTruth(data, "MagArrow actual tracks");
+    if (coverage.acquisitionCount !== data.features.length) {
+      throw new Error("Actual trajectory болон coverage count зөрүүтэй байна");
+    }
+    state.actualTrackData = data;
+    state.actualCoverage = coverage;
+    const grouped = new Map();
+    for (const feature of data.features) {
+      const date = feature.properties?.date;
+      if (!grouped.has(date)) grouped.set(date, []);
+      grouped.get(date).push(feature);
+    }
+    for (const [date, features] of grouped) {
+      const color = flightDateColor(date);
+      const layer = L.geoJSON({ type: "FeatureCollection", features }, {
+        pane: "actualPane",
+        style: { color, weight: 2.5, opacity: 0.95 },
+        onEachFeature(feature, item) { item.bindPopup(actualPopup(feature)); },
+      });
+      state.actualTrackLayers.set(date, layer);
+    }
+    syncActualTrackVisibility();
+    renderAreaSummary();
+  };
+
   const restoreMagArrowLayers = () => {
     if (state.activeSensor !== "MagArrow") return;
     for (const [id, layer] of state.planLayers) {
@@ -614,11 +692,13 @@
     for (const [id, layer] of state.missionLayers) {
       if (state.selectedMissions.has(id)) layer.addTo(state.map);
     }
+    syncActualTrackVisibility();
   };
 
   const hideSensorLayers = () => {
     for (const layer of state.planLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
   };
 
   const loadMissionPlans = async () => {
@@ -646,12 +726,29 @@
   };
 
   const updateMagArrowSummary = () => {
-    if (state.selectedMissions.size && state.missionData) {
+    if (state.selectedFlightDate) {
+      state.activeDatasetId = "magarrow-actual-tracks";
+    } else if (state.selectedMissions.size && state.missionData) {
       state.activeDatasetId = "magarrow-mission-plans";
     } else {
       state.activeDatasetId = "magarrow-planned-survey";
     }
     renderDatasetInfo();
+  };
+
+  const selectFlightDate = (date, shouldFit = true) => {
+    state.selectedFlightDate = date;
+    syncActualTrackVisibility();
+    for (const button of ui.sensorPanel.querySelectorAll("[data-flight-date]")) {
+      button.classList.toggle("is-active", button.dataset.flightDate === date);
+    }
+    state.activeDatasetId = "magarrow-actual-tracks";
+    renderDatasetInfo();
+    renderAreaSummary();
+    if (shouldFit) {
+      const layers = selectedActualLayers();
+      if (layers.length) fitSingleLayer(L.featureGroup(layers));
+    }
   };
 
   const makeToggle = (label, detail, checked, onChange, className = "") => {
@@ -664,8 +761,10 @@
 
   const renderMagArrowPanel = () => {
     const missions = dataset("magarrow-mission-plans")?.missions || [];
+    const dates = state.actualCoverage?.dates || [];
+    const acquisitionCount = state.actualCoverage?.acquisitionCount || 0;
     ui.sensorPanel.innerHTML = `
-      <div class="sensor-heading"><div><strong>MagArrow</strong><span>Heseg Uul hoid</span></div><span class="status-badge available">CONFIRMED</span></div>
+      <div class="sensor-heading"><div><strong>MagArrow</strong><span>Heseg Uul hoid</span></div><span class="status-badge available">TRACKS AVAILABLE</span></div>
       <h3>Planned Survey Lines</h3>
       <div id="plan-toggles" class="control-list"></div>
       <details class="nested-panel">
@@ -673,13 +772,13 @@
         <p class="panel-note">L01–L11 нь planned WPMZ/KMZ route. Actual flown track биш.</p>
         <div id="mission-list" class="mission-list"></div>
       </details>
-      <h3>Actual Data</h3>
-      <button class="status-row" type="button" data-dataset="magarrow-actual-tracks"><span>Actual tracks</span><em>PENDING INGESTION</em></button>
-      <button class="status-row" type="button" data-dataset="magarrow-measurements"><span>10 Hz measurements</span><em>OFF · PENDING</em></button>
-      <p class="panel-note">Local 10 Hz CSV байхгүй тул track/measurement geometry зохиогоогүй.</p>`;
+      <h3>Ниссэн trajectory</h3>
+      <div id="flight-date-list" class="flight-date-list"></div>
+      <button class="status-row" type="button" data-dataset="magarrow-measurements"><span>10 Hz measurements</span><em>OFF · SOURCE AVAILABLE</em></button>
+      <p class="panel-note">${acquisitionCount} acquisition · Огноо сонгоход тухайн өдрийн trajectory болон ниссэн талбай харагдана.</p>`;
     const planToggles = ui.sensorPanel.querySelector("#plan-toggles");
     const planRows = [
-      ["boundary", "Survey boundary", "Approved footprint"],
+      ["boundary", "Survey boundary", "Planning footprint"],
       ["main", "Main lines", "E-W · 100 м · AZ≈88°/268°"],
       ["tie", "Tie lines", "N-S · 200 м · AZ≈178°/358°"],
     ];
@@ -691,6 +790,23 @@
         if (checked) layer.addTo(state.map);
         else state.map.removeLayer(layer);
       }));
+    }
+    const flightDateList = ui.sensorPanel.querySelector("#flight-date-list");
+    const dateOptions = [{ value: "all", label: "Бүх огноо", count: acquisitionCount }]
+      .concat(dates.map((date) => ({
+        value: date,
+        label: date,
+        count: state.actualTrackData?.features.filter((feature) => feature.properties?.date === date).length || 0,
+      })));
+    for (const option of dateOptions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `flight-date-button${state.selectedFlightDate === option.value ? " is-active" : ""}`;
+      button.dataset.flightDate = option.value;
+      button.style.setProperty("--date-color", option.value === "all" ? "#ffffff" : flightDateColor(option.value));
+      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${option.count} track</small>`;
+      button.addEventListener("click", () => selectFlightDate(option.value));
+      flightDateList.appendChild(button);
     }
     const missionList = ui.sensorPanel.querySelector("#mission-list");
     for (const mission of missions) {
@@ -758,7 +874,7 @@
     for (const sensor of sensorConfig) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `sensor-button${state.activeSensor === sensor.id ? " is-active" : ""}`;
+      button.className = `sensor-button ${sensor.tone} sensor-${sensor.id.toLowerCase()}${state.activeSensor === sensor.id ? " is-active" : ""}`;
       button.dataset.sensor = sensor.id;
       button.innerHTML = `<span>${escapeHtml(sensor.label)}</span><small class="${sensor.tone}">${escapeHtml(sensor.status)}</small>`;
       button.addEventListener("click", () => selectSensor(sensor.id));
@@ -796,7 +912,8 @@
     ];
     ui.datasetInfo.innerHTML = rows.map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
     const links = [...state.datasets.values()].filter((item) => item.sensor === config.sensor && item.sourceUrl);
-    const unique = new Map(links.map((item) => [item.sourceUrl, item]));
+    const unique = new Map();
+    for (const item of links) if (!unique.has(item.sourceUrl)) unique.set(item.sourceUrl, item);
     ui.sourceLinks.innerHTML = [...unique.values()].map((item) => `<a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.dataType.replaceAll("_", " "))}<span>↗</span></a>`).join("");
   };
 
@@ -808,6 +925,7 @@
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
+      for (const layer of selectedActualLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
     }
     return layers;
   };
@@ -838,6 +956,10 @@
     state.selectedMissions.clear();
     state.missionData = null;
     state.missionPromise = null;
+    state.actualTrackData = null;
+    state.actualCoverage = null;
+    state.actualTrackLayers.clear();
+    state.selectedFlightDate = "all";
     state.planArea = 0;
     state.mainCoverage = 0;
     ui.baseLayers.replaceChildren();
@@ -845,6 +967,7 @@
     ui.licenseBrowserTitle.textContent = "Лицензийн талбай сонгох";
     ui.licenseCount.textContent = "—";
     ui.clearLicenseContext.hidden = true;
+    ui.licenseBrowser.classList.remove("is-uchastik");
   };
 
   const load = async () => {
@@ -867,6 +990,7 @@
         { label: "Uchastik", task: loadUchastik, errorType: "base" },
         { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
         { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
+        { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
         { label: "Licence context", task: loadLicenceContext, errorType: "warning" },
       ];
       const results = await Promise.allSettled(jobs.map(({ task }) => task()));
@@ -880,7 +1004,7 @@
       renderSensorButtons();
       selectSensor(state.activeSensor);
       const defaultLicence = state.licenceData?.features?.[0];
-      setAreaScope(featureLabel(defaultLicence, "Нэргүй өндөр"), defaultLicence);
+      setAreaScope(featureLabel(defaultLicence, "Нэргүй өндөр"), defaultLicence, "licence");
       fitMap();
       const usable = state.baseLayers.size + state.planLayers.size;
       if (!usable) throw new Error("No base or active sensor layers could be loaded.");

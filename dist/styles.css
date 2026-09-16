@@ -77,13 +77,23 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .license-context-button strong { font-size: 11px; }
 .license-context-button small { margin-top: 2px; color: var(--muted); font-size: 9px; }
 .license-context-button:hover, .license-context-button.is-active { border-color: #ffd166; background: rgba(255, 209, 102, .15); }
+.license-browser.is-uchastik { border-color: rgba(255, 117, 181, .42); }
+.license-browser.is-uchastik .license-context-button { border-color: rgba(255, 117, 181, .38); background: rgba(255, 117, 181, .07); }
+.license-browser.is-uchastik .license-context-button:hover,
+.license-browser.is-uchastik .license-context-button.is-active { border-color: var(--pink); background: rgba(255, 117, 181, .18); box-shadow: inset 0 0 0 1px rgba(255, 117, 181, .18); }
 .clear-context { margin: 0 12px 12px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
-.sensor-button { min-height: 55px; padding: 8px 7px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-soft); text-align: left; cursor: pointer; }
+.sensor-button { --sensor-accent: #91a6bb; --sensor-fill: rgba(145, 166, 187, .08); min-height: 55px; padding: 8px 7px; border: 1px solid color-mix(in srgb, var(--sensor-accent) 48%, transparent); border-radius: 11px; background: var(--sensor-fill); text-align: left; cursor: pointer; }
+.sensor-button.sensor-magarrow { --sensor-accent: var(--cyan); --sensor-fill: rgba(57, 217, 255, .09); }
+.sensor-button.sensor-l3 { --sensor-accent: var(--green); --sensor-fill: rgba(113, 246, 193, .08); }
+.sensor-button.sensor-l2 { --sensor-accent: var(--amber); --sensor-fill: rgba(255, 184, 77, .08); }
+.sensor-button.sensor-p1 { --sensor-accent: var(--pink); --sensor-fill: rgba(255, 117, 181, .08); }
+.sensor-button.sensor-medusa { --sensor-accent: #b596ff; --sensor-fill: rgba(181, 150, 255, .08); }
 .sensor-button strong, .sensor-button span { display: block; }
 .sensor-button strong { font-size: 12px; }
 .sensor-button span { margin-top: 4px; color: var(--muted); font-size: 8px; line-height: 1.25; letter-spacing: .05em; }
-.sensor-button:hover, .sensor-button.is-active { border-color: rgba(57, 217, 255, .7); background: rgba(57, 217, 255, .12); }
-.sensor-button.is-active { box-shadow: inset 0 0 0 1px var(--cyan); }
+.sensor-button small { display: block; margin-top: 6px; color: var(--sensor-accent); font-size: 11px; line-height: 1.25; }
+.sensor-button:hover, .sensor-button.is-active { border-color: var(--sensor-accent); background: color-mix(in srgb, var(--sensor-accent) 16%, transparent); }
+.sensor-button.is-active { box-shadow: inset 0 0 0 1px var(--sensor-accent); }
 .sensor-button.pending:not(.is-active), .sensor-button.unavailable:not(.is-active) { opacity: .75; }
 .sensor-panel { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 15px; background: rgba(0, 0, 0, .12); }
 .sensor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
@@ -105,6 +115,14 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .mission-list .switch > span { width: 32px; height: 19px; }
 .mission-list .switch > span::after { width: 13px; height: 13px; }
 .mission-list .switch input:checked + span::after { transform: translateX(13px); }
+.flight-date-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.flight-date-button { position: relative; min-height: 44px; padding: 8px 9px 8px 15px; border: 1px solid color-mix(in srgb, var(--date-color) 35%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--date-color) 6%, transparent); text-align: left; cursor: pointer; }
+.flight-date-button::before { content: ""; position: absolute; top: 9px; bottom: 9px; left: 7px; width: 3px; border-radius: 99px; background: var(--date-color); }
+.flight-date-button span, .flight-date-button small { display: block; }
+.flight-date-button span { font-size: 11px; font-weight: 750; }
+.flight-date-button small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.flight-date-button:hover, .flight-date-button.is-active { border-color: var(--date-color); background: color-mix(in srgb, var(--date-color) 14%, transparent); }
+.flight-date-button.is-active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--date-color) 55%, transparent); }
 .status-row { display: flex; width: 100%; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-soft); font-size: 11px; cursor: pointer; }
 .status-row:hover { border-color: #607387; }
 .status-row em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 800; }

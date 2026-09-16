@@ -1,6 +1,6 @@
 {
   "project": "Nergui Undur",
-  "version": "2026-09-16.1",
+  "version": "2026-09-16.3",
   "datasets": [
     {
       "id": "base-licence",
@@ -73,14 +73,14 @@
       "sensor": "MagArrow",
       "dataType": "planned_survey",
       "plannedActual": "planned",
-      "status": "confirmed",
+      "status": "source_available",
       "sourceFile": "NU_DR_MagArrow_Plan.gpkg",
       "webAsset": "./data/magarrow/planned-survey.geojson",
       "sourceCrs": "EPSG:32649",
       "displayCrs": "EPSG:4326",
       "crsVerified": true,
       "defaultVisible": true,
-      "notes": "Approved E-W main lines at 100 m spacing and near-N-S tie lines at 200 m spacing."
+      "notes": "Planning geometry with E-W main lines at 100 m spacing and near-N-S tie lines at 200 m spacing."
     },
     {
       "id": "magarrow-mission-plans",
@@ -89,7 +89,7 @@
       "sensor": "MagArrow",
       "dataType": "mission_plan",
       "plannedActual": "planned",
-      "status": "confirmed",
+      "status": "source_available",
       "sourceUrl": "https://drive.google.com/drive/folders/1n5C1QrH1ZQfuFOOpDfpGk_4hgrwBdlXS",
       "sourceFile": "heseguulhoidL01.kmz … heseguulhoidL11.kmz",
       "webAsset": "./data/magarrow/mission-plans.geojson",
@@ -119,16 +119,33 @@
       "sensor": "MagArrow",
       "dataType": "actual_flight_track",
       "plannedActual": "actual",
-      "status": "pending_ingestion",
-      "sourceUrl": "https://drive.google.com/drive/folders/1gUPM7-VCrJFKGRgC8mzJNcQBu9iNM8gO",
-      "sourceFile": "SRVY0-ACQU58-10Hz.csv … SRVY0-ACQU69-10Hz.csv",
+      "status": "confirmed_source",
+      "sourceUrl": "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
+      "sourceFile": "SRVY0-ACQU0.magdata … SRVY0-ACQU69.magdata (+ SRVY0-ACQU2 (1).magdata)",
       "webAsset": "./data/magarrow/actual-tracks.geojson",
-      "sourceCrs": "UNVERIFIED UNTIL CSV HEADERS ARE INSPECTED",
+      "sourceCrs": "EPSG:4326",
       "displayCrs": "EPSG:4326",
-      "crsVerified": false,
-      "flightTrackAvailable": false,
+      "crsVerified": true,
+      "flightTrackAvailable": true,
+      "defaultVisible": true,
+      "notes": "Actual GNSS trajectories extracted from embedded NMEA GGA/RMC navigation sentences in 71 .magdata acquisitions."
+    },
+    {
+      "id": "magarrow-coverage-stats",
+      "project": "Nergui Undur",
+      "area": "Heseg Uul hoid",
+      "sensor": "MagArrow",
+      "dataType": "actual_coverage_summary",
+      "plannedActual": "actual",
+      "status": "derived",
+      "sourceUrl": "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
+      "sourceFile": "Derived from embedded GNSS trajectory in 71 .magdata acquisitions",
+      "webAsset": "./data/magarrow/coverage-stats.json",
+      "sourceCrs": "EPSG:4326",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
       "defaultVisible": false,
-      "notes": "Actual track data pending ingestion. No local 10 Hz CSV was present during this build."
+      "notes": "50 m swath estimate on a 10 m grid, clipped to licence and Uchastik polygons."
     },
     {
       "id": "magarrow-measurements",
@@ -154,9 +171,9 @@
       "plannedActual": "actual",
       "status": "confirmed_source",
       "sourceUrl": "https://drive.google.com/drive/folders/19qt3lNdmT6xkMuClvdNi00U3rKlo3TGr",
-      "sourceFile": "SRVY0-ACQU58.magdata … SRVY0-ACQU69.magdata",
+      "sourceFile": "SRVY0-ACQU0.magdata … SRVY0-ACQU69.magdata (+ SRVY0-ACQU2 (1).magdata)",
       "webAsset": null,
-      "notes": "Raw .magdata is provenance/download metadata only and is never parsed in the browser."
+      "notes": "Raw .magdata provenance for 71 acquisitions. Only embedded GNSS trajectory is exported to the browser."
     },
     {
       "id": "magarrow-base-station",
