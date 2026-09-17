@@ -296,7 +296,7 @@
       ["Sensor", props.sensor],
       ["Mission", props.mission],
       ["Date", props.date],
-      ["Type", "Verified DJI FlightRecord trajectory"],
+      ["Type", props.sourceKind || "Verified actual flight trajectory"],
       ["Start", props.startTime],
       ["Points", props.pointCount],
       ["Coverage model", `${props.coverageSwathWidthM || 50} m swath`],
@@ -1239,12 +1239,17 @@
     const records = (state.trackerData.records || []).filter((record) => (
       record.projectKey === state.selectedTrackerProject && record.sensor === sensor
     ));
-    const trajectoryDates = [...new Set(projectFlightFeatures(state.selectedTrackerProject, sensor, "all")
+    const allGeometry = projectFlightFeatures(state.selectedTrackerProject, sensor, "all");
+    const geometryByTrackerId = new Map(allGeometry.map((feature) => [feature.properties?.trackerId, feature]));
+    const trajectoryDates = [...new Set(allGeometry
       .map((feature) => feature.properties?.date).filter(Boolean))].sort().reverse();
     const selectedRecords = state.selectedTrackerDate === "all"
       ? records
-      : records.filter((record) => record.date === state.selectedTrackerDate);
-    const geometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, "all").length;
+      : records.filter((record) => (
+        record.date === state.selectedTrackerDate
+        || geometryByTrackerId.get(record.id)?.properties?.date === state.selectedTrackerDate
+      ));
+    const geometryCount = allGeometry.length;
     const visibleGeometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, state.selectedTrackerDate).length;
     const dateOptions = geometryCount ? [{ value: "all", label: "Бүх trajectory", count: geometryCount }]
       .concat(trajectoryDates.map((date) => ({
@@ -1253,9 +1258,10 @@
         count: projectFlightFeatures(state.selectedTrackerProject, sensor, date).length,
       }))) : [];
     const missionRows = selectedRecords.map((record) => {
-      const hasGeometry = projectFlightFeatures(record.projectKey, record.sensor, record.date)
-        .some((feature) => feature.properties?.trackerId === record.id);
-      return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(record.date)} · ${escapeHtml(record.altitudeM ? `${record.altitudeM} м` : "өндөргүй")}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
+      const geometry = geometryByTrackerId.get(record.id);
+      const hasGeometry = Boolean(geometry);
+      const displayDate = geometry?.properties?.date || record.date;
+      return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(displayDate)} · ${escapeHtml(record.altitudeM ? `${record.altitudeM} м` : "өндөргүй")}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
     }).join("");
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>
@@ -1263,7 +1269,7 @@
       ${geometryCount ? '<div id="tracker-flight-date-list" class="flight-date-list"></div>' : '<p class="truth-note">Энэ sensor-д coordinate бүхий trajectory файл олдоогүй. Өдрийн бүртгэлийг доороос харна уу.</p>'}
       <h3>Бодит нислэгийн бүртгэл</h3>
       <div class="tracker-flight-records">${missionRows}</div>
-      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
+      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. MRK/KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
     const dateList = ui.sensorPanel.querySelector("#tracker-flight-date-list");
     for (const option of dateOptions) {
       const button = document.createElement("button");

@@ -130,12 +130,13 @@
       "id": "context-project-flight-tracks",
       "project": "Multi-project operations",
       "scope": "project_operations",
-      "area": "Buduunkhad",
+      "area": "Artsat / Buduunkhad",
       "sensor": "Project Operations",
       "dataType": "actual_flight_track",
       "plannedActual": "actual",
       "status": "confirmed_source",
       "sourceFiles": [
+        "DJI Timestamp.MRK image-position files (118 matched tracker missions)",
         "DJIFlightRecord_2026-06-20_[12-31-37].kmz",
         "DJIFlightRecord_2026-06-20_[13-05-55].kmz",
         "DJIFlightRecord_2026-06-20_[13-54-39].kmz"
@@ -150,23 +151,23 @@
       "displayCrs": "EPSG:4326",
       "crsVerified": true,
       "defaultVisible": false,
-      "notes": "Three verified Buduunkhad L2 trajectories matched to tracker records by date and start time. Unmatched tracker rows remain register-only records."
+      "notes": "121 verified trajectories: 120 Buduunkhad flights and 1 Artsat flight. Timestamp.MRK routes use chronological image-position GNSS coordinates; three Buduunkhad flights use full DJI FlightRecord KMZ telemetry. Unmatched tracker rows remain register-only records."
     },
     {
       "id": "context-project-flight-coverage",
       "project": "Multi-project operations",
       "scope": "project_operations",
-      "area": "Buduunkhad",
+      "area": "Artsat / Buduunkhad",
       "sensor": "Project Operations",
       "dataType": "actual_coverage_summary",
       "plannedActual": "derived_from_actual",
       "status": "calculated",
-      "sourceFiles": ["Verified DJI FlightRecord KMZ trajectories"],
+      "sourceFiles": ["Verified DJI Timestamp.MRK and FlightRecord KMZ trajectories"],
       "webAsset": "./data/context/project-flight-coverage.json",
       "displayCrs": null,
       "crsVerified": true,
       "defaultVisible": false,
-      "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to the Buduunkhad licence. It is available only for verified trajectory records."
+      "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to each matching project licence. It is available only for verified trajectory records."
     },
     {
       "id": "magarrow-planned-survey",

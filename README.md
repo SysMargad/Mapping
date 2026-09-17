@@ -13,14 +13,14 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 - `dist/data/context/hetsuu-hutul-dwg.geojson` — Drive дахь `Hetsuu hutul.DWG`-ийн 628 байрлалтай entity. `Hetsuu hutul` лиценз сонгоход автоматаар нээгдэнэ.
 - `dist/data/context/project-trackers.json` — Арцат, Хэцүү хөтөл, Бүдүүн хадын Checklist-ээс гаргасан 780 actual flight-register record. Энэ бүртгэл нь trajectory geometry биш; pilot нэр web asset-д ороогүй.
 - `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн provenance asset. Control point нь trajectory биш тул map дээр цэнхэр цэгээр дүрслэхгүй.
-- `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ-ээс баталгаажсан бодит trajectory. Одоогоор Бүдүүн хадын L2 sensor-ийн 2026-06-20-ны 3 нислэг байна.
+- `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ болон зураг авалтын `Timestamp.MRK` GNSS байрлалаас баталгаажсан бодит trajectory. Бүдүүн хадын 120, Арцатын 1 нислэг огноо/sensor-оор харагдана.
 - `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
-Project tracker өгөгдөл нь `project_operations` scope-д тусгаарлагдана. Nergui Undur sensor/trajectory өгөгдөлтэй нийлүүлэхгүй. Tracker-ийн mission бүртгэл дангаараа geometry биш: зөвхөн source filename нь `DJIFlightRecord_*.kmz`, `flightRecordVerified: true` бөгөөд tracker row-той тохирсон үед trajectory болно. Үлдсэн бүртгэлийг map дээр шугам болгон таамаглахгүй.
+Project tracker өгөгдөл нь `project_operations` scope-д тусгаарлагдана. Nergui Undur sensor/trajectory өгөгдөлтэй нийлүүлэхгүй. Tracker-ийн mission бүртгэл дангаараа geometry биш: зөвхөн tracker холбоостой таарсан `DJIFlightRecord_*.kmz` эсвэл `Timestamp.MRK` coordinate эх үүсвэртэй үед trajectory болно. Үлдсэн бүртгэлийг map дээр шугам болгон таамаглахгүй.
 
 ## Local preview
 
@@ -81,7 +81,16 @@ Verified DJI FlightRecord trajectory (татаж авсан read-only `.kmz` cop
   --coverage-output .\dist\data\context\project-flight-coverage.json
 ```
 
-Coverage нь trajectory-н төв шугамаас тал бүрт 25 м буюу нийт 50 м зурвасыг 10 м grid-ээр тооцож, Бүдүүн хадын `XV-023222` лицензийн polygon-д тайрна. Sensor ба огноо сонгоход “Ниссэн нийт талбай” тухайн шүүлтүүрээр, “Бүх өдрийн нийлбэр” бүх огнооны нийлбэрээр шинэчлэгдэнэ.
+Coverage нь trajectory-н төв шугамаас тал бүрт 25 м буюу нийт 50 м зурвасыг 10 м grid-ээр тооцож, тухайн төслийн лицензийн polygon-д тайрна. Sensor ба огноо сонгоход “Ниссэн нийт талбай” тухайн шүүлтүүрээр, “Бүх өдрийн нийлбэр” бүх огнооны нийлбэрээр шинэчлэгдэнэ.
+
+Нэгтгэсэн MRK/KMZ trajectory asset-аас бүх төслийн coverage-г дахин бодох:
+
+```powershell
+& $python .\tools\export_project_flight_coverage.py `
+  .\dist\data\context\project-flight-tracks.geojson `
+  --licences .\dist\data\context\licenses.geojson `
+  --output .\dist\data\context\project-flight-coverage.json
+```
 
 Nergui Undur licence only:
 
@@ -123,7 +132,7 @@ The exporter stops instead of guessing ambiguous coordinate or time columns.
 ```powershell
 & $python .\tools\normalise_assets.py
 & $python .\tools\validate_data.py
-& $python .\tools\build_manifest.py --version 2026-09-17.6 --updated 2026-09-17
+& $python .\tools\build_manifest.py --version 2026-09-17.7 --updated 2026-09-17
 node --check .\dist\app.js
 ```
 
