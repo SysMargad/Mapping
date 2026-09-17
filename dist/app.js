@@ -386,7 +386,7 @@
     if (visible) layer.addTo(state.map);
     const row = document.createElement("label");
     row.className = "toggle-row";
-    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4, trackerControl: 5, hetsuuCad: 6 }[id] || 99);
+    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4, trackerControl: 5, hetsuuCad: 6, hetsuuCadPoints: 7 }[id] || 99);
     row.innerHTML = `
       <span class="toggle-copy"><span class="mini-symbol ${tone}" aria-hidden="true"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span>
       <span class="switch"><input type="checkbox" ${visible ? "checked" : ""} /><span aria-hidden="true"></span></span>`;
@@ -428,8 +428,10 @@
     if (state.hetsuuCadLayer) state.map.removeLayer(state.hetsuuCadLayer);
     for (const layer of state.projectControlLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
-    const cadControl = state.baseLayers.get("hetsuuCad");
-    if (cadControl) {
+    for (const id of ["hetsuuCad", "hetsuuCadPoints"]) {
+      const cadControl = state.baseLayers.get(id);
+      if (!cadControl) continue;
+      state.map.removeLayer(cadControl.layer);
       cadControl.visible = false;
       if (cadControl.input) cadControl.input.checked = false;
     }
@@ -664,12 +666,44 @@
     }
     return L.circleMarker(latlng, {
       pane: "surveyPane",
-      radius: 2.2,
-      color: "#56d7ff",
+      radius: 2,
+      color: "#9eb1c3",
       weight: 1,
-      fillColor: "#56d7ff",
-      fillOpacity: 0.7,
+      fillColor: "#9eb1c3",
+      fillOpacity: 0.45,
     });
+  };
+
+  const hetsuuCadReferencePoint = (feature, latlng) => {
+    const elevation = feature.properties?.displayRole === "elevation";
+    return L.circleMarker(latlng, {
+      pane: "surveyPane",
+      radius: elevation ? 1.8 : 2.4,
+      color: elevation ? "#aab7c4" : "#56d7ff",
+      weight: 1,
+      fillColor: elevation ? "#aab7c4" : "#56d7ff",
+      fillOpacity: elevation ? 0.42 : 0.58,
+    });
+  };
+
+  const hetsuuCadPopup = (feature) => {
+    const props = feature.properties || {};
+    const roleLabels = {
+      boundary: "Талбайн хүрээ",
+      block: "Участикийн хүрээ",
+      section: "Хэсгийн хүрээ",
+      polygon: "CAD polygon",
+      control_point: "CAD control point",
+      elevation: "Өндрийн тэмдэглэгээ",
+      label: "CAD нэршил",
+    };
+    return popup([
+      ["Төрөл", roleLabels[props.displayRole] || "CAD reference"],
+      ["Нэр/утга", props.text_value || ""],
+      ["CAD layer", props.cadLayer || ""],
+      ["Статус", "Reference geometry · нислэгийн trajectory биш"],
+      ["Source", props.sourceFile || "Hetsuu hutul.DWG"],
+    ]);
   };
 
   const syncHetsuuCadLabels = () => {
@@ -687,26 +721,42 @@
     assertExternalReference(data, "Hetsuu hutul DWG", "cad_reference_geometry");
     state.hetsuuCadData = data;
     state.hetsuuCadLabelLayers = [];
-    const layer = L.geoJSON(data, {
+    const outlineFeatures = data.features.filter((feature) => feature.geometry?.type !== "Point");
+    const labelFeatures = data.features.filter((feature) => feature.properties?.displayRole === "label");
+    const pointFeatures = data.features.filter((feature) => ["control_point", "elevation"].includes(feature.properties?.displayRole));
+    const layer = L.geoJSON({ type: "FeatureCollection", features: [...outlineFeatures, ...labelFeatures] }, {
       pane: "surveyPane",
       style(feature) {
         const role = feature.properties?.displayRole;
-        if (role === "boundary") return { color: "#ffca5c", weight: 3, opacity: 1, fillColor: "#ffca5c", fillOpacity: 0.045 };
-        if (role === "block") return { color: "#ff8fb8", weight: 1.8, opacity: 0.9, fillColor: "#ff8fb8", fillOpacity: 0.04 };
-        if (role === "section") return { color: "#71f6c1", weight: 1.7, opacity: 0.86, fillColor: "#71f6c1", fillOpacity: 0.03 };
-        return { color: "#56d7ff", weight: 1.5, opacity: 0.82, fillColor: "#56d7ff", fillOpacity: 0.025 };
+        if (role === "boundary") return { color: "#ffca5c", weight: 3.4, opacity: 1, fillOpacity: 0 };
+        if (role === "block") return { color: "#ff8fb8", weight: 2, opacity: 0.96, fillOpacity: 0 };
+        if (role === "section") return { color: "#71f6c1", weight: 1.9, opacity: 0.92, fillOpacity: 0 };
+        return { color: "#56d7ff", weight: 1.6, opacity: 0.88, fillOpacity: 0 };
       },
       pointToLayer: hetsuuCadPoint,
-      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+      onEachFeature(feature, item) { item.bindPopup(hetsuuCadPopup(feature)); },
+    });
+    const pointLayer = L.geoJSON({ type: "FeatureCollection", features: pointFeatures }, {
+      pane: "surveyPane",
+      pointToLayer: hetsuuCadReferencePoint,
+      onEachFeature(feature, item) { item.bindPopup(hetsuuCadPopup(feature)); },
     });
     state.hetsuuCadLayer = layer;
     registerBaseControl(
       "hetsuuCad",
-      "Hetsuu hutul DWG",
-      `${data.featureCount || data.features.length} feature · ${data.droppedUnlocatedCount || 0} unlocated hidden`,
+      "Хэцүү хөтөл · CAD хүрээ",
+      `${outlineFeatures.length} хүрээ · ${labelFeatures.length} нэр · trajectory биш`,
       layer,
       false,
       "hetsuu",
+    );
+    registerBaseControl(
+      "hetsuuCadPoints",
+      "Хэцүү хөтөл · CAD цэг",
+      `${pointFeatures.length} control/elevation point · trajectory биш`,
+      pointLayer,
+      false,
+      "pending",
     );
   };
 
@@ -787,6 +837,20 @@
     const qaQcDone = project.qaqc?.["Тийм"] || 0;
     const baseCount = project.controlPoints?.base || 0;
     const gcpCount = project.controlPoints?.gcp || 0;
+    const cadFeatures = projectKey === "hetsuu-hutul" ? (state.hetsuuCadData?.features || []) : [];
+    const cadOutlineCount = cadFeatures.filter((feature) => feature.geometry?.type !== "Point").length;
+    const cadPointCount = cadFeatures.filter((feature) => ["control_point", "elevation"].includes(feature.properties?.displayRole)).length;
+    const cadLabelCount = cadFeatures.filter((feature) => feature.properties?.displayRole === "label").length;
+    const cadReference = cadFeatures.length ? `
+      <details class="nested-panel" open>
+        <summary>CAD reference зураглал <span>${formatCount(cadFeatures.length)}</span></summary>
+        <div class="tracker-kpis">
+          <div><span>Хүрээний зураас</span><strong>${formatCount(cadOutlineCount)}</strong></div>
+          <div><span>Control/elevation цэг</span><strong>${formatCount(cadPointCount)}</strong></div>
+          <div><span>Нэр, label</span><strong>${formatCount(cadLabelCount)}</strong></div>
+        </div>
+        <p class="truth-note">DWG-ийн талбай, участик, хэсгийн хүрээг map дээр зураасаар харуулав. CAD цэгүүдийг Base layers хэсгээс тусад нь асаана. Эдгээр нь reference geometry бөгөөд ниссэн trajectory биш.</p>
+      </details>` : "";
     ui.projectTrackerPanel.innerHTML = `
       <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge survey">ACTUAL RECORDS</span></div>
       <div class="tracker-kpis">
@@ -796,6 +860,7 @@
       </div>
       <div class="tracker-sensors">${sensorRows}</div>
       <p class="panel-note">${formatCount(copied)}/${formatCount(project.records)} файл хуулсан · QAQC “Тийм”: ${formatCount(qaQcDone)} · Base ${formatCount(baseCount)} · GCP ${formatCount(gcpCount)}.</p>
+      ${cadReference}
       <details class="nested-panel">
         <summary>Өдрийн бүртгэл <span>${formatCount(project.flightDays)}</span></summary>
         <div class="tracker-daily">${dailyRows}</div>
