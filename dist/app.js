@@ -295,14 +295,20 @@
       ? state.actualCoverage?.scopes?.[state.areaScope.coverageKey]
       : null;
     const selectedDate = state.selectedFlightDate !== "all" ? state.selectedFlightDate : null;
+    const dailyAreas = Object.values(coverage?.dailyAreaM2 || {}).filter(Number.isFinite);
+    const selectedArea = selectedDate
+      ? coverage?.dailyAreaM2?.[selectedDate]
+      : coverage
+        ? dailyAreas.reduce((sum, area) => sum + area, 0)
+        : NaN;
     ui.primaryLabel.textContent = "Нийт талбай";
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
     ui.secondaryValue.textContent = formatArea(coverage?.totalAreaM2);
-    ui.tertiaryLabel.textContent = "Өдрийн ниссэн талбай";
-    ui.tertiaryValue.textContent = formatArea(selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : NaN);
+    ui.tertiaryLabel.textContent = selectedDate ? "Өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр";
+    ui.tertiaryValue.textContent = formatArea(selectedArea);
     ui.summaryNote.textContent = coverage
-      ? `${state.areaScope.label} · ${selectedDate || "Бүх огноо"} · GNSS trajectory-д суурилсан 50 м зурвасын тооцоо.`
+      ? `${state.areaScope.label} · ${selectedDate || "Бүх огноо"} · GNSS trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
       : state.areaScope
         ? `${state.areaScope.label} · Энэ сонголтод нислэгийн талбайн тооцоо байхгүй.`
         : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
