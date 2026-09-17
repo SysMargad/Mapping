@@ -4,6 +4,19 @@ Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө, se
 
 Public URL: <https://sysmargad.github.io/Mapping/>
 
+## Өдөр тутмын Google Drive sync
+
+`.github/workflows/drive-sync.yml` нь өдөр бүр **08:00 Asia/Shanghai** (`00:00 UTC`)-д GitHub Actions дээр ажиллана. OpenAI/Codex runtime ашиглахгүй. Workflow нь гурван project tracker-ийг Drive API-аар read-only татаж, Checklist-ийн mission folder холбоосууд дотроос coordinate агуулсан `KMZ`, `MRK`, `KML`, `CSV`, `TXT` эх үүсвэрийг mission/огноотой нь шалгаад trajectory болон coverage asset-ийг шинэчилнэ. Өөрчлөлт гарсан үед л `main` руу commit хийж, Pages deployment-ийг өдөөдөг.
+
+Нэг удаагийн тохиргоо:
+
+1. Google Cloud project дээр Google Drive API-г enable хийж service account үүсгэн JSON key татна.
+2. Доорх гурван tracker файл болон Checklist-ээс холбоостой нислэгийн folder-уудыг service account-ын email-д **Viewer** эрхээр share хийнэ. Shared Drive хэрэглэж байвал service account-ыг тухайн Shared Drive-д viewer/member болгоно.
+3. GitHub repository-н `Settings → Secrets and variables → Actions` хэсэгт `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` нэртэй repository secret үүсгээд JSON key-ийн бүтэн агуулгыг оруулна. Key файлыг repository-д commit хийж болохгүй.
+4. `Actions → Sync Google Drive survey data → Run workflow` гэж нэг удаа гараар ажиллуулж, амжилттай болсныг шалгана. Secret байхгүй үед scheduled run нь өгөгдөл өөрчлөхгүйгээр safe skip хийнэ.
+
+Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
+
 ## Data truth model
 
 - `dist/data/datasets.json` — dataset registry ба canonical metadata.

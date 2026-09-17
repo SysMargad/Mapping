@@ -2,3 +2,5 @@
 *.tar.gz
 __pycache__/
 *.pyc
+.secrets/
+*service-account*.json

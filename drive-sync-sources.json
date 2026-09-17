@@ -1,0 +1,21 @@
+{
+  "projects": [
+    {
+      "key": "hetsuu-hutul",
+      "trackerFileId": "1XvKLs9QCgvIjHjQbXlV7thqPu0HdLIae",
+      "workbookName": "Hetsuu_Hutul_Drone_Project_Tracker.xlsx"
+    },
+    {
+      "key": "artsat",
+      "trackerFileId": "1dbk0R5iHgwgPfa8gT25wN-NhtOVLjQUZ",
+      "workbookName": "Artsat_Drone_Project_Tracker.xlsx"
+    },
+    {
+      "key": "buduunkhad",
+      "trackerFileId": "1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz",
+      "workbookName": "Buduunkhad_Drone_Project_Tracker.xlsx"
+    }
+  ],
+  "folderScanDepth": 2,
+  "maxSourceSizeBytes": 104857600
+}

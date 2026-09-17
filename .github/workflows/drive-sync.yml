@@ -1,0 +1,90 @@
+name: Sync Google Drive survey data
+
+on:
+  schedule:
+    # GitHub cron is UTC. 00:00 UTC = 08:00 Asia/Shanghai.
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mapping-drive-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Drive credential
+        id: credential
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          if [[ -n "$GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is not configured; Drive sync skipped."
+          fi
+
+      - name: Install sync dependencies
+        if: steps.credential.outputs.available == 'true'
+        run: python -m pip install --disable-pip-version-check openpyxl google-api-python-client google-auth
+
+      - name: Sync verified Drive sources
+        if: steps.credential.outputs.available == 'true'
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python tools/sync_drive_sources.py \
+            --config drive-sync-sources.json \
+            --repo . \
+            --workspace "$RUNNER_TEMP/mapping-drive-sync"
+
+      - name: Validate generated site data
+        if: steps.credential.outputs.available == 'true'
+        run: |
+          python tools/validate_data.py
+          node --check dist/app.js
+
+      - name: Detect generated changes
+        if: steps.credential.outputs.available == 'true'
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- \
+            dist/data/context/project-trackers.json \
+            dist/data/context/project-control-points.geojson \
+            dist/data/context/project-flight-tracks.geojson \
+            dist/data/context/project-flight-coverage.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push verified changes
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            dist/data/context/project-trackers.json \
+            dist/data/context/project-control-points.geojson \
+            dist/data/context/project-flight-tracks.geojson \
+            dist/data/context/project-flight-coverage.json
+          git commit -m "Sync verified Drive survey data"
+          git push origin HEAD:main
