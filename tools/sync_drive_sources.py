@@ -31,6 +31,9 @@ SOURCE_PRIORITY = {".kmz": 0, ".mrk": 1, ".kml": 2, ".csv": 3, ".txt": 4}
 FOLDER_ID_RE = re.compile(r"/folders/([A-Za-z0-9_-]+)")
 DATE_COMPACT_RE = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
 DATE_DASH_RE = re.compile(r"(?<!\d)(20\d{2})-(\d{2})-(\d{2})(?!\d)")
+DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
+RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
+DJI_FILE_COUNT_SENSORS = {4: "P1", 11: "L3"}
 
 
 def clean(value) -> str:
@@ -163,6 +166,72 @@ def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
     return found
 
 
+def folder_name_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def find_raw_data_folder(service, root_folder_id: str, max_depth: int = 2) -> dict | None:
+    queue = [(root_folder_id, 0)]
+    visited = set()
+    while queue:
+        current, depth = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        for raw_item in list_children(service, current):
+            item = resolve_shortcut(service, raw_item)
+            if item.get("mimeType") != FOLDER_MIME:
+                continue
+            if folder_name_key(item.get("name", "")) in RAW_DATA_FOLDER_KEYS:
+                return item
+            if depth < max_depth:
+                queue.append((item["id"], depth + 1))
+    return None
+
+
+def raw_sensor_counts(service, root_folder_id: str, max_depth: int = 8) -> dict:
+    """Return aggregate sensor counts without exposing private folder metadata."""
+    raw_folder = find_raw_data_folder(service, root_folder_id)
+    if not raw_folder:
+        raise ValueError("Raw Data folder was not found under the configured root")
+    sensors = {
+        sensor: {"folderCount": 0, "djiFileCount": 0}
+        for sensor in sorted(set(DJI_FILE_COUNT_SENSORS.values()))
+    }
+    unclassified_counts = {}
+    scanned_folders = 0
+    queue = [(raw_folder["id"], 0)]
+    visited = set()
+    while queue:
+        current, depth = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        scanned_folders += 1
+        children = [resolve_shortcut(service, item) for item in list_children(service, current)]
+        child_folders = [item for item in children if item.get("mimeType") == FOLDER_MIME]
+        dji_file_count = sum(
+            1 for item in children
+            if item.get("mimeType") != FOLDER_MIME and DJI_FILE_RE.search(item.get("name", ""))
+        )
+        if dji_file_count:
+            sensor = DJI_FILE_COUNT_SENSORS.get(dji_file_count)
+            if sensor:
+                sensors[sensor]["folderCount"] += 1
+                sensors[sensor]["djiFileCount"] += dji_file_count
+            else:
+                key = str(dji_file_count)
+                unclassified_counts[key] = unclassified_counts.get(key, 0) + 1
+        if depth < max_depth:
+            queue.extend((item["id"], depth + 1) for item in child_folders)
+    return {
+        "classificationRule": {str(count): sensor for count, sensor in DJI_FILE_COUNT_SENSORS.items()},
+        "scannedFolderCount": scanned_folders,
+        "sensors": sensors,
+        "unclassifiedFolderCountsByDjiFileCount": unclassified_counts,
+    }
+
+
 def choose_source(
     items: list[dict],
     tracker_date: str | None,
@@ -236,6 +305,17 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     sources_dir.mkdir(parents=True)
     reports_dir.mkdir(parents=True)
     service = build_drive_service()
+    raw_root_folder_id = os.environ.get("NERGUI_UNDUR_RAW_ROOT_FOLDER_ID", "").strip()
+    raw_sensor_summary = None
+    if raw_root_folder_id:
+        try:
+            raw_sensor_summary = raw_sensor_counts(service, raw_root_folder_id)
+            print("Nergui Undur Raw Data sensor classification:")
+            print(json.dumps(raw_sensor_summary, ensure_ascii=False, indent=2))
+        except Exception as error:
+            print(f"::warning::Nergui Undur Raw Data sensor classification skipped: {error}")
+    else:
+        print("::notice::NERGUI_UNDUR_RAW_ROOT_FOLDER_ID is not configured; Raw Data sensor classification skipped.")
     max_depth = int(config.get("folderScanDepth", 2))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
     workbook_paths = []
@@ -319,7 +399,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "--licences", str(context_dir / "licenses.geojson"),
         "--output", str(context_dir / "project-flight-coverage.json"),
     ], repo)
-    summary = {"projects": project_results}
+    summary = {"projects": project_results, "nerguiUndurRawSensorCounts": raw_sensor_summary}
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
 

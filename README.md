@@ -17,6 +17,8 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 
 Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
 
+Нэргүй өндөр төслийн `Raw Data` хавтсыг тоолохдоо root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дэд хавтас бүрийн `DJI...` нэртэй файлыг тоолж, яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж log-д нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset-д нийтлэхгүй; 4/11-ээс өөр тоотой хавтсыг `unclassifiedFolderCountsByDjiFileCount` хэсэгт зөвхөн тоогоор тайлагнана.
+
 ## Data truth model
 
 - `dist/data/datasets.json` — dataset registry ба canonical metadata.
