@@ -123,7 +123,7 @@ The exporter stops instead of guessing ambiguous coordinate or time columns.
 ```powershell
 & $python .\tools\normalise_assets.py
 & $python .\tools\validate_data.py
-& $python .\tools\build_manifest.py --version 2026-09-17.5 --updated 2026-09-17
+& $python .\tools\build_manifest.py --version 2026-09-17.6 --updated 2026-09-17
 node --check .\dist\app.js
 ```
 

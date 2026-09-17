@@ -138,10 +138,10 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .nested-panel summary span { float: right; color: var(--muted); }
 .nested-panel[open] summary { border-bottom: 1px solid var(--line); }
 .nested-panel .panel-note { margin: 10px 12px; }
-.mission-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 0 12px 12px; }
+.mission-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 0 12px 12px; }
 .mission-list .toggle-row { min-height: 36px; padding: 7px 8px; }
 .mission-list .toggle-copy strong { font-size: 11px; }
-.mission-list .toggle-copy small { display: none; }
+.mission-list .toggle-copy small { display: block; }
 .mission-list .switch > span { width: 32px; height: 19px; }
 .mission-list .switch > span::after { width: 13px; height: 13px; }
 .mission-list .switch input:checked + span::after { transform: translateX(13px); }

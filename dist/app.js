@@ -1117,10 +1117,10 @@
   };
 
   const updateMagArrowSummary = () => {
-    if (state.selectedFlightDate) {
-      state.activeDatasetId = "magarrow-actual-tracks";
-    } else if (state.selectedMissions.size && state.missionData) {
+    if (state.selectedMissions.size && state.missionData) {
       state.activeDatasetId = "magarrow-mission-plans";
+    } else if (state.selectedFlightDate) {
+      state.activeDatasetId = "magarrow-actual-tracks";
     } else {
       state.activeDatasetId = "magarrow-planned-survey";
     }
@@ -1200,11 +1200,13 @@
       flightDateList.appendChild(button);
     }
     const missionList = ui.sensorPanel.querySelector("#mission-list");
-    for (const mission of missions) {
-      missionList.appendChild(makeToggle(`${mission.id} · ${mission.date}`, "DJI mission plan · Planned", state.selectedMissions.has(mission.id), async (checked, input) => {
-        input.disabled = true;
-        try {
-          await loadMissionPlans();
+    const allMissionsSelected = missions.length > 0
+      && missions.every((mission) => state.selectedMissions.has(mission.id));
+    missionList.appendChild(makeToggle("Бүх mission plan", `L01–L${String(missions.length).padStart(2, "0")} · ${missions.length} planned route`, allMissionsSelected, async (checked, input) => {
+      input.disabled = true;
+      try {
+        await loadMissionPlans();
+        for (const mission of missions) {
           const layer = state.missionLayers.get(mission.id);
           if (checked) {
             state.selectedMissions.add(mission.id);
@@ -1213,15 +1215,15 @@
             state.selectedMissions.delete(mission.id);
             if (layer) state.map.removeLayer(layer);
           }
-          updateMagArrowSummary();
-        } catch (error) {
-          input.checked = false;
-          addWarning("mission-plans", `Mission plans: ${error.message}`);
-        } finally {
-          input.disabled = false;
         }
-      }));
-    }
+        updateMagArrowSummary();
+      } catch (error) {
+        input.checked = false;
+        addWarning("mission-plans", `Mission plans: ${error.message}`);
+      } finally {
+        input.disabled = false;
+      }
+    }));
     for (const button of ui.sensorPanel.querySelectorAll("[data-dataset]")) {
       button.addEventListener("click", () => {
         state.activeDatasetId = button.dataset.dataset;
