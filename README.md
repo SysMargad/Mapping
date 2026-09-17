@@ -1,4 +1,4 @@
-# Nergui Undur Survey Map
+# Mapping
 
 Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө болон sensor бүрийн баталгаажсан төлөвийг харуулдаг static Leaflet map.
 

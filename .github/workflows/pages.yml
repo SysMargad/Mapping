@@ -1,4 +1,4 @@
-name: Deploy Nergui Undur Survey Map to GitHub Pages
+name: Deploy Mapping to GitHub Pages
 
 on:
   push:
