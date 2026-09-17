@@ -18,7 +18,12 @@ def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def validate_geojson(path: Path, expected_project: str = "Nergui Undur", external_context: bool = False) -> list[str]:
+def validate_geojson(
+    path: Path,
+    expected_project: str = "Nergui Undur",
+    external_context: bool = False,
+    expected_data_type: str | None = None,
+) -> list[str]:
     errors = []
     data = load(path)
     if data.get("type") != "FeatureCollection":
@@ -39,8 +44,12 @@ def validate_geojson(path: Path, expected_project: str = "Nergui Undur", externa
         text = json.dumps(props, ensure_ascii=False).lower()
         if not external_context and any(token in text for token in FORBIDDEN):
             errors.append(f"{path}:{fid}: another project name is present")
-        if external_context and (props.get("dataType") != "licence_context" or props.get("contextOnly") is not True):
-            errors.append(f"{path}:{fid}: external licence features must be context-only")
+        if external_context and props.get("contextOnly") is not True:
+            errors.append(f"{path}:{fid}: external reference features must be context-only")
+        if external_context and expected_data_type and props.get("dataType") != expected_data_type:
+            errors.append(
+                f"{path}:{fid}: expected dataType {expected_data_type!r}, got {props.get('dataType')!r}"
+            )
         if props.get("dataType") == "actual_flight_track":
             source_file = str(props.get("sourceFile", "")).lower()
             if re.search(r"\.(kmz|kml|wpmz|zip)$", source_file) or props.get("plannedActual") != "actual":
@@ -69,7 +78,12 @@ def main() -> int:
             if not path.exists():
                 errors.append(f"datasets.json:{dataset_id}: missing {asset}")
             elif path.suffix == ".geojson":
-                errors.extend(validate_geojson(path, expected_project, external_context))
+                errors.extend(validate_geojson(
+                    path,
+                    expected_project,
+                    external_context,
+                    dataset.get("dataType"),
+                ))
     if errors:
         print("Validation failed:")
         for error in errors:

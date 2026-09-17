@@ -43,6 +43,9 @@
     licenseContextLayers: new Map(),
     licenseContextData: null,
     selectedContextLicense: null,
+    hetsuuCadData: null,
+    hetsuuCadLayer: null,
+    hetsuuCadLabelLayers: [],
     licenseBrowserMode: "licence",
     uchastikData: null,
     uchastikFeatureLayers: new Map(),
@@ -203,6 +206,9 @@
       ["Name", props.AREANAME_L || props.AREANAME || props.name || props.text_value],
       ["Licence", props.LICENSE],
       ["Block", props.block_num],
+      ["CAD layer", props.cadLayer],
+      ["Label", props.text_value],
+      ["Entity", props.entityHandle],
       ["Source", props.sourceFile || props.source_dwg],
       ["Source CRS", props.sourceCrs || "Unknown / unverified"],
       ["Web CRS", props.displayCrs || "EPSG:4326"],
@@ -232,6 +238,7 @@
       const pane = map.createPane(name);
       pane.style.zIndex = String(zIndex);
     }
+    map.on("zoomend", syncHetsuuCadLabels);
     map.setView([49.1, 107.5], 8);
     return map;
   };
@@ -260,17 +267,19 @@
     }
   };
 
-  const assertLicenceContext = (payload) => {
+  const assertExternalReference = (payload, label, expectedDataType) => {
     if (payload?.scope !== "external_reference" || payload?.project !== "External licence reference") {
-      throw new Error("Licence context must be isolated as an external reference dataset");
+      throw new Error(`${label} must be isolated as an external reference dataset`);
     }
     for (const feature of payload.features || []) {
       const props = feature.properties || {};
-      if (props.dataType !== "licence_context" || props.contextOnly !== true) {
-        throw new Error(`Licence context feature ${feature.id} is not marked context-only`);
+      if (props.dataType !== expectedDataType || props.contextOnly !== true) {
+        throw new Error(`${label} feature ${feature.id} is not marked context-only`);
       }
     }
   };
+
+  const assertLicenceContext = (payload) => assertExternalReference(payload, "Licence context", "licence_context");
 
   const dataset = (id) => state.datasets.get(id);
 
@@ -327,7 +336,7 @@
     if (visible) layer.addTo(state.map);
     const row = document.createElement("label");
     row.className = "toggle-row";
-    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4 }[id] || 99);
+    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4, hetsuuCad: 5 }[id] || 99);
     row.innerHTML = `
       <span class="toggle-copy"><span class="mini-symbol ${tone}" aria-hidden="true"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span>
       <span class="switch"><input type="checkbox" ${visible ? "checked" : ""} /><span aria-hidden="true"></span></span>`;
@@ -365,6 +374,12 @@
 
   const clearLicenceContext = () => {
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
+    if (state.hetsuuCadLayer) state.map.removeLayer(state.hetsuuCadLayer);
+    const cadControl = state.baseLayers.get("hetsuuCad");
+    if (cadControl) {
+      cadControl.visible = false;
+      if (cadControl.input) cadControl.input.checked = false;
+    }
     state.selectedContextLicense = null;
     for (const button of ui.licenseContextList.querySelectorAll("button")) button.classList.remove("is-active");
   };
@@ -400,6 +415,12 @@
   const isNerguiLicence = (feature) => {
     const value = `${feature?.properties?.AREANAME || ""} ${feature?.properties?.AREANAME_L || ""}`.toLowerCase();
     return value.includes("nergui undur") || value.includes("нэргүй өндөр");
+  };
+
+  const isHetsuuLicence = (feature) => {
+    const props = feature?.properties || {};
+    const value = `${props.AREANAME || ""} ${props.AREANAME_L || ""} ${props.LICENSE || ""}`.toLowerCase();
+    return value.includes("hetsuu hutul") || value.includes("xv-022905");
   };
 
   const selectUchastik = (key, button) => {
@@ -454,6 +475,7 @@
   };
 
   const selectLicenceContext = (key, button) => {
+    let activeContextDataset = "base-licence-context";
     clearLicenceContext();
     state.licenseBrowserMode = "licence";
     state.selectedUchastikKey = null;
@@ -469,12 +491,27 @@
     } else {
       const layer = state.licenseContextLayers.get(key);
       layer?.addTo(state.map);
-      fitSingleLayer(layer);
       const feature = state.licenseContextData?.features.find((item) => String(item.id) === key);
-      if (isNerguiLicence(feature)) showUchastikBrowser(feature);
-      else setAreaScope(featureLabel(feature, key), feature, null);
+      if (isNerguiLicence(feature)) {
+        fitSingleLayer(layer);
+        showUchastikBrowser(feature);
+      } else if (isHetsuuLicence(feature) && state.hetsuuCadLayer) {
+        const cadControl = state.baseLayers.get("hetsuuCad");
+        if (cadControl) {
+          cadControl.visible = true;
+          if (cadControl.input) cadControl.input.checked = true;
+        }
+        state.hetsuuCadLayer.addTo(state.map);
+        syncHetsuuCadLabels();
+        fitSingleLayer(L.featureGroup([layer, state.hetsuuCadLayer].filter(Boolean)));
+        setAreaScope(featureLabel(feature, key), feature, null);
+        activeContextDataset = "context-hetsuu-hutul-dwg";
+      } else {
+        fitSingleLayer(layer);
+        setAreaScope(featureLabel(feature, key), feature, null);
+      }
     }
-    state.activeDatasetId = "base-licence-context";
+    state.activeDatasetId = activeContextDataset;
     renderDatasetInfo();
   };
 
@@ -533,6 +570,66 @@
         state.licenseContextLayers.set(String(feature.id), layer);
     }
     renderLicenceBrowser();
+  };
+
+  const hetsuuCadPoint = (feature, latlng) => {
+    const props = feature.properties || {};
+    if (props.displayRole === "label" && props.text_value) {
+      const marker = L.marker(latlng, {
+        pane: "labelsPane",
+        interactive: true,
+        icon: L.divIcon({ className: "map-label cad-map-label", html: `<span>${escapeHtml(props.text_value)}</span>` }),
+      });
+      marker.setOpacity(state.map.getZoom() >= 12 ? 1 : 0);
+      state.hetsuuCadLabelLayers.push(marker);
+      return marker;
+    }
+    return L.circleMarker(latlng, {
+      pane: "surveyPane",
+      radius: 2.2,
+      color: "#56d7ff",
+      weight: 1,
+      fillColor: "#56d7ff",
+      fillOpacity: 0.7,
+    });
+  };
+
+  const syncHetsuuCadLabels = () => {
+    const visible = state.map?.getZoom() >= 12;
+    for (const marker of state.hetsuuCadLabelLayers) {
+      marker.setOpacity(visible ? 1 : 0);
+      const element = marker.getElement?.();
+      if (element) element.style.pointerEvents = visible ? "auto" : "none";
+    }
+  };
+
+  const loadHetsuuCad = async () => {
+    const config = dataset("context-hetsuu-hutul-dwg");
+    const data = await fetchJson(config.webAsset);
+    assertExternalReference(data, "Hetsuu hutul DWG", "cad_reference_geometry");
+    state.hetsuuCadData = data;
+    state.hetsuuCadLabelLayers = [];
+    const layer = L.geoJSON(data, {
+      pane: "surveyPane",
+      style(feature) {
+        const role = feature.properties?.displayRole;
+        if (role === "boundary") return { color: "#ffca5c", weight: 3, opacity: 1, fillColor: "#ffca5c", fillOpacity: 0.045 };
+        if (role === "block") return { color: "#ff8fb8", weight: 1.8, opacity: 0.9, fillColor: "#ff8fb8", fillOpacity: 0.04 };
+        if (role === "section") return { color: "#71f6c1", weight: 1.7, opacity: 0.86, fillColor: "#71f6c1", fillOpacity: 0.03 };
+        return { color: "#56d7ff", weight: 1.5, opacity: 0.82, fillColor: "#56d7ff", fillOpacity: 0.025 };
+      },
+      pointToLayer: hetsuuCadPoint,
+      onEachFeature(feature, item) { item.bindPopup(basePopup(feature)); },
+    });
+    state.hetsuuCadLayer = layer;
+    registerBaseControl(
+      "hetsuuCad",
+      "Hetsuu hutul DWG",
+      `${data.featureCount || data.features.length} feature · ${data.droppedUnlocatedCount || 0} unlocated hidden`,
+      layer,
+      false,
+      "hetsuu",
+    );
   };
 
   const loadUchastik = async () => {
@@ -947,6 +1044,9 @@
     state.licenseContextLayers.clear();
     state.licenseContextData = null;
     state.selectedContextLicense = null;
+    state.hetsuuCadData = null;
+    state.hetsuuCadLayer = null;
+    state.hetsuuCadLabelLayers = [];
     state.licenseBrowserMode = "licence";
     state.uchastikData = null;
     state.uchastikFeatureLayers.clear();
@@ -990,6 +1090,7 @@
         { label: "Licence", task: loadLicence, errorType: "base" },
         { label: "Uchastik", task: loadUchastik, errorType: "base" },
         { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
+        { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
         { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
         { label: "Licence context", task: loadLicenceContext, errorType: "warning" },

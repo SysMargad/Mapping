@@ -1,12 +1,13 @@
 {
-  "version": "2026-09-16.4",
-  "updated": "2026-09-16",
+  "version": "2026-09-17.2",
+  "updated": "2026-09-17",
   "datasets": {
     "registry": "./data/datasets.json",
     "base-licence": "./data/base/licenses.geojson",
     "base-uchastik": "./data/base/uchastics.geojson",
     "base-licence-context": "./data/context/licenses.geojson",
     "base-survey-boundaries": "./data/base/survey-boundaries.geojson",
+    "context-hetsuu-hutul-dwg": "./data/context/hetsuu-hutul-dwg.geojson",
     "magarrow-planned-survey": "./data/magarrow/planned-survey.geojson",
     "magarrow-mission-plans": "./data/magarrow/mission-plans.geojson",
     "magarrow-actual-tracks": "./data/magarrow/actual-tracks.geojson",
@@ -15,16 +16,17 @@
     "l3-survey-family": "./data/l3/metadata.json"
   },
   "hashes": {
-    "registry": "b1d84b5ba9fd3c7f",
+    "registry": "417eb066e3ab061b",
     "base-licence": "f68bab4661abfe72",
     "base-uchastik": "d6672e0a0ea44496",
     "base-licence-context": "a66a54138766d058",
     "base-survey-boundaries": "d09a3752dd958ebd",
+    "context-hetsuu-hutul-dwg": "368535dce5450557",
     "magarrow-planned-survey": "b1a1ee9107e19404",
     "magarrow-mission-plans": "c048af9d5e81c37d",
     "magarrow-actual-tracks": "61cf8c179b08748f",
     "magarrow-coverage-stats": "7ff67cf22346b80f",
-    "magarrow-measurements": "637fb6ffeb4bca01",
-    "l3-survey-family": "b86cfed364def34d"
+    "magarrow-measurements": "a0e04707a700b1b3",
+    "l3-survey-family": "8f709b95c2c72824"
   }
 }

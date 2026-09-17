@@ -28,6 +28,7 @@ button { color: inherit; }
 .popup-value { display: block; font-size: 14px; font-weight: 700; }
 .map-label { width: auto !important; height: auto !important; border: 0; background: transparent; }
 .map-label span { display: block; transform: translate(-50%, -50%); padding: 2px 5px; border: 1px solid rgba(7, 17, 31, .7); border-radius: 4px; background: rgba(7, 17, 31, .8); color: #fff; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.cad-map-label span { border-color: rgba(86, 215, 255, .65); color: #bcefff; font-size: 10px; }
 .panel { position: absolute; z-index: 500; top: 10px; bottom: 10px; left: 10px; width: min(420px, calc(100vw - 20px)); padding: 22px; overflow-y: auto; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(18px); scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
 .brand-row { display: flex; gap: 13px; align-items: flex-start; }
 .brand-mark { display: grid; place-items: center; width: 46px; height: 46px; flex: 0 0 46px; border: 1px solid rgba(57, 217, 255, .35); border-radius: 13px; background: rgba(57, 217, 255, .14); }
@@ -57,6 +58,7 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .mini-symbol.uchastik { border-color: var(--pink); }
 .mini-symbol.block { border-color: var(--amber); }
 .mini-symbol.cad { border-color: #d6a5ff; border-style: solid; box-shadow: 0 0 7px rgba(214, 165, 255, .45); }
+.mini-symbol.hetsuu { border-color: #56d7ff; box-shadow: 0 0 7px rgba(86, 215, 255, .45); }
 .mini-symbol.pending { border-color: #6c7e90; border-style: dotted; }
 .switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }

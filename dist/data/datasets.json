@@ -1,6 +1,6 @@
 {
   "project": "Nergui Undur",
-  "version": "2026-09-16.4",
+  "version": "2026-09-17.2",
   "datasets": [
     {
       "id": "base-licence",
@@ -65,6 +65,24 @@
       "crsVerified": false,
       "defaultVisible": false,
       "notes": "DWG-derived uchastik, block, label, line and ellipse geometry. Source CRS metadata is unverified. References renders 114 reviewed uchastik boundaries; 98 labels are hidden to avoid map clutter, and 33 unlocated 0_LINES/0_ELLIPSES features are retained in the asset but not rendered. This is not L3 flight data."
+    },
+    {
+      "id": "context-hetsuu-hutul-dwg",
+      "project": "External licence reference",
+      "scope": "external_reference",
+      "area": "Hetsuu hutul",
+      "sensor": "Base / Control",
+      "dataType": "cad_reference_geometry",
+      "plannedActual": "reference",
+      "status": "confirmed_geometry",
+      "sourceUrl": "https://drive.google.com/drive/folders/1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub",
+      "sourceFile": "Hetsuu hutul.DWG",
+      "webAsset": "./data/context/hetsuu-hutul-dwg.geojson",
+      "sourceCrs": "EPSG:32646",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "628 located DWG entities are decoded into boundaries, blocks, sections, lines, labels and control points. The layer opens automatically when Hetsuu hutul (XV-022905) is selected; 25 unlocated or unsupported entities are omitted."
     },
     {
       "id": "magarrow-planned-survey",

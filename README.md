@@ -10,6 +10,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 - `dist/data/manifest.json` — build version, шинэчлэгдсэн огноо, asset hash.
 - `dist/data/base/` — licence, uchastik, DWG/CAD-аас гарсан base/control geometry. Sensor track биш.
 - `dist/data/context/licenses.geojson` — 24 лицензийн external reference. Default-аар зурагт харагдахгүй; хэрэглэгч сонгоход тухайн polygon дээр төвлөрнө.
+- `dist/data/context/hetsuu-hutul-dwg.geojson` — Drive дахь `Hetsuu hutul.DWG`-ийн 628 байрлалтай entity. `Hetsuu hutul` лиценз сонгоход автоматаар нээгдэнэ.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
@@ -23,7 +24,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 node .\tools\serve.mjs
 ```
 
-Дараа нь <http://127.0.0.1:4173> хаягийг нээнэ. Сервер зөвхөн яг нэрлэсэн `NU_DR_MagArrow_Plan.gpkg`-ийг MagArrow plan болгон шинэчилнэ; `NU_DT_L3_PLAN.gpkg`-ийг fallback болгон сонгохгүй. Page өөрөө 30 секунд тутам refresh хийхгүй; UI дахь refresh товчийг хэрэглэнэ.
+Дараа нь <http://127.0.0.1:4173> хаягийг нээнэ. Сервер `G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track` Drive Desktop хавтсыг үндсэн Area Data эх үүсвэр болгоно; Drive холбогдоогүй үед хуучин `Desktop\Drone Track\Area Data` руу fallback хийнэ. Өөр зам ашиглах бол `AREA_DATA_ROOT` environment variable тохируулна. Сервер зөвхөн яг нэрлэсэн `NU_DR_MagArrow_Plan.gpkg`-ийг MagArrow plan болгон шинэчилнэ; `NU_DT_L3_PLAN.gpkg`-ийг fallback болгон сонгохгүй. Page өөрөө 30 секунд тутам refresh хийхгүй; UI дахь refresh товчийг хэрэглэнэ.
 
 ## Export commands
 
@@ -37,9 +38,19 @@ MagArrow plan:
 
 ```powershell
 & $python .\tools\export_gpkg.py `
-  "C:\Users\margad.p\Desktop\Drone Track\Area Data\NU_DR_MagArrow_Plan.gpkg" `
+  "G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track\NU_DR_MagArrow_Plan.gpkg" `
   .\dist\data\magarrow\planned-survey.geojson `
   --profile magarrow-plan
+```
+
+Hetsuu hutul DWG (WGS 84 / UTM zone 46N):
+
+```powershell
+& $python .\tools\export_dwg.py `
+  "G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track\Hetsuu hutul.DWG" `
+  .\dist\data\context\hetsuu-hutul-dwg.geojson `
+  --dwgread "C:\Users\margad.p\Desktop\Drone Track\.tools\libredwg\dwgread.exe" `
+  --utm-zone 46
 ```
 
 Nergui Undur licence only:
