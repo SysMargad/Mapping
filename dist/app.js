@@ -23,6 +23,7 @@
     licenseCount: $("#license-count"),
     licenseContextList: $("#license-context-list"),
     clearLicenseContext: $("#clear-license-context"),
+    projectTrackerPanel: $("#project-tracker-panel"),
     sensors: $("#sensor-list"),
     sensorPanel: $("#sensor-panel"),
     datasetInfo: $("#dataset-info"),
@@ -46,6 +47,10 @@
     hetsuuCadData: null,
     hetsuuCadLayer: null,
     hetsuuCadLabelLayers: [],
+    trackerData: null,
+    projectControlData: null,
+    projectControlLayers: new Map(),
+    selectedTrackerProject: null,
     licenseBrowserMode: "licence",
     uchastikData: null,
     uchastikFeatureLayers: new Map(),
@@ -281,6 +286,21 @@
 
   const assertLicenceContext = (payload) => assertExternalReference(payload, "Licence context", "licence_context");
 
+  const assertProjectOperations = (payload, label, expectedDataType) => {
+    if (payload?.scope !== "project_operations" || payload?.project !== "Multi-project operations") {
+      throw new Error(`${label} must be isolated as project operations data`);
+    }
+    if (expectedDataType && payload.dataType !== expectedDataType) {
+      throw new Error(`${label}: expected ${expectedDataType}, got ${payload.dataType}`);
+    }
+    for (const feature of payload.features || []) {
+      const props = feature.properties || {};
+      if (props.dataType !== expectedDataType || props.contextOnly !== true) {
+        throw new Error(`${label} feature ${feature.id} is not isolated correctly`);
+      }
+    }
+  };
+
   const dataset = (id) => state.datasets.get(id);
 
   const addWarning = (key, message) => {
@@ -336,7 +356,7 @@
     if (visible) layer.addTo(state.map);
     const row = document.createElement("label");
     row.className = "toggle-row";
-    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4, hetsuuCad: 5 }[id] || 99);
+    row.style.order = String({ licence: 1, uchastik: 2, blocks: 3, cad: 4, trackerControl: 5, hetsuuCad: 6 }[id] || 99);
     row.innerHTML = `
       <span class="toggle-copy"><span class="mini-symbol ${tone}" aria-hidden="true"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span></span>
       <span class="switch"><input type="checkbox" ${visible ? "checked" : ""} /><span aria-hidden="true"></span></span>`;
@@ -345,6 +365,7 @@
     input.addEventListener("change", (event) => {
       state.baseLayers.get(id).visible = event.target.checked;
       if (id === "uchastik") syncUchastikLayerVisibility();
+      else if (id === "trackerControl") syncProjectControlVisibility();
       else if (event.target.checked) layer.addTo(state.map);
       else state.map.removeLayer(layer);
     });
@@ -375,11 +396,21 @@
   const clearLicenceContext = () => {
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
     if (state.hetsuuCadLayer) state.map.removeLayer(state.hetsuuCadLayer);
+    for (const layer of state.projectControlLayers.values()) state.map.removeLayer(layer);
     const cadControl = state.baseLayers.get("hetsuuCad");
     if (cadControl) {
       cadControl.visible = false;
       if (cadControl.input) cadControl.input.checked = false;
     }
+    const trackerControl = state.baseLayers.get("trackerControl");
+    if (trackerControl) {
+      state.map.removeLayer(trackerControl.layer);
+      trackerControl.visible = false;
+      if (trackerControl.input) trackerControl.input.checked = false;
+    }
+    state.selectedTrackerProject = null;
+    ui.projectTrackerPanel.hidden = true;
+    ui.projectTrackerPanel.replaceChildren();
     state.selectedContextLicense = null;
     for (const button of ui.licenseContextList.querySelectorAll("button")) button.classList.remove("is-active");
   };
@@ -417,10 +448,13 @@
     return value.includes("nergui undur") || value.includes("нэргүй өндөр");
   };
 
-  const isHetsuuLicence = (feature) => {
-    const props = feature?.properties || {};
-    const value = `${props.AREANAME || ""} ${props.AREANAME_L || ""} ${props.LICENSE || ""}`.toLowerCase();
-    return value.includes("hetsuu hutul") || value.includes("xv-022905");
+  const trackerProjectForLicence = (feature) => {
+    const licence = feature?.properties?.LICENSE;
+    return ({
+      "XV-022905": "hetsuu-hutul",
+      "XV-021395": "artsat",
+      "XV-023222": "buduunkhad",
+    })[licence] || null;
   };
 
   const selectUchastik = (key, button) => {
@@ -495,19 +529,26 @@
       if (isNerguiLicence(feature)) {
         fitSingleLayer(layer);
         showUchastikBrowser(feature);
-      } else if (isHetsuuLicence(feature) && state.hetsuuCadLayer) {
-        const cadControl = state.baseLayers.get("hetsuuCad");
-        if (cadControl) {
-          cadControl.visible = true;
-          if (cadControl.input) cadControl.input.checked = true;
-        }
-        state.hetsuuCadLayer.addTo(state.map);
-        syncHetsuuCadLabels();
-        fitSingleLayer(L.featureGroup([layer, state.hetsuuCadLayer].filter(Boolean)));
-        setAreaScope(featureLabel(feature, key), feature, null);
-        activeContextDataset = "context-hetsuu-hutul-dwg";
       } else {
-        fitSingleLayer(layer);
+        const projectKey = trackerProjectForLicence(feature);
+        if (projectKey) {
+          const trackerLayer = activateTrackerProject(projectKey);
+          const fitLayers = [layer, trackerLayer].filter(Boolean);
+          if (projectKey === "hetsuu-hutul" && state.hetsuuCadLayer) {
+            const cadControl = state.baseLayers.get("hetsuuCad");
+            if (cadControl) {
+              cadControl.visible = true;
+              if (cadControl.input) cadControl.input.checked = true;
+            }
+            state.hetsuuCadLayer.addTo(state.map);
+            syncHetsuuCadLabels();
+            fitLayers.push(state.hetsuuCadLayer);
+          }
+          fitSingleLayer(L.featureGroup(fitLayers));
+          activeContextDataset = "context-project-trackers";
+        } else {
+          fitSingleLayer(layer);
+        }
         setAreaScope(featureLabel(feature, key), feature, null);
       }
     }
@@ -629,6 +670,124 @@
       layer,
       false,
       "hetsuu",
+    );
+  };
+
+  const trackerPoint = (feature, latlng) => {
+    const base = feature.properties?.controlType === "base";
+    return L.circleMarker(latlng, {
+      pane: "surveyPane",
+      radius: base ? 5.5 : 3.5,
+      color: base ? "#ffca5c" : "#56d7ff",
+      weight: base ? 2 : 1.4,
+      fillColor: base ? "#ffca5c" : "#56d7ff",
+      fillOpacity: base ? 0.68 : 0.55,
+    });
+  };
+
+  const trackerPointPopup = (feature) => {
+    const props = feature.properties || {};
+    return popup([
+      ["Project", props.area],
+      ["Type", props.controlType === "base" ? "Base station" : "GCP"],
+      ["Name", props.name],
+      ["Elevation", Number.isFinite(Number(props.elevationM)) ? `${props.elevationM} m` : ""],
+      ["UTM", `${props.sourceCrs || ""} · E ${props.easting || ""} · N ${props.northing || ""}`],
+      ["Dates", (props.dates || []).join(", ")],
+      ["Observations", props.observationCount],
+      ["Source", props.sourceFile],
+    ]);
+  };
+
+  const syncProjectControlVisibility = () => {
+    const control = state.baseLayers.get("trackerControl");
+    if (!control) return;
+    state.map.removeLayer(control.layer);
+    for (const layer of state.projectControlLayers.values()) state.map.removeLayer(layer);
+    if (!control.visible) return;
+    if (state.selectedTrackerProject) state.projectControlLayers.get(state.selectedTrackerProject)?.addTo(state.map);
+    else control.layer.addTo(state.map);
+  };
+
+  const formatCount = (value) => Number(value || 0).toLocaleString("mn-MN");
+
+  const renderTrackerProject = (projectKey) => {
+    const project = state.trackerData?.projects?.[projectKey];
+    if (!project) {
+      ui.projectTrackerPanel.hidden = true;
+      return;
+    }
+    const sensorRows = Object.entries(project.sensors || {}).map(([sensor, stats]) => {
+      const altitude = Number.isFinite(stats.altitudeMinM)
+        ? `${stats.altitudeMinM}–${stats.altitudeMaxM} м`
+        : "өндөр бүртгээгүй";
+      return `<div class="tracker-sensor-row"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл</b></div>`;
+    }).join("");
+    const dailyRows = (project.daily || []).map((item) => (
+      `<div class="tracker-day"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></div>`
+    )).join("");
+    const copied = project.fileCopy?.["Хуулж дууссан"] || 0;
+    const qaQcDone = project.qaqc?.["Тийм"] || 0;
+    const baseCount = project.controlPoints?.base || 0;
+    const gcpCount = project.controlPoints?.gcp || 0;
+    ui.projectTrackerPanel.innerHTML = `
+      <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge survey">ACTUAL RECORDS</span></div>
+      <div class="tracker-kpis">
+        <div><span>Нислэгийн бүртгэл</span><strong>${formatCount(project.records)}</strong></div>
+        <div><span>Ниссэн өдөр</span><strong>${formatCount(project.flightDays)}</strong></div>
+        <div><span>Зургийн тоо</span><strong>${formatCount(project.images)}</strong></div>
+      </div>
+      <div class="tracker-sensors">${sensorRows}</div>
+      <p class="panel-note">${formatCount(copied)}/${formatCount(project.records)} файл хуулсан · QAQC “Тийм”: ${formatCount(qaQcDone)} · Base ${formatCount(baseCount)} · GCP ${formatCount(gcpCount)}.</p>
+      <details class="nested-panel">
+        <summary>Өдрийн бүртгэл <span>${formatCount(project.flightDays)}</span></summary>
+        <div class="tracker-daily">${dailyRows}</div>
+      </details>
+      <p class="truth-note">Энэ нь actual flight register. Ниссэн trajectory geometry агуулаагүй.</p>
+      <a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`;
+    ui.projectTrackerPanel.hidden = false;
+  };
+
+  const activateTrackerProject = (projectKey) => {
+    state.selectedTrackerProject = projectKey;
+    const control = state.baseLayers.get("trackerControl");
+    if (control) {
+      control.visible = true;
+      if (control.input) control.input.checked = true;
+    }
+    syncProjectControlVisibility();
+    renderTrackerProject(projectKey);
+    return state.projectControlLayers.get(projectKey);
+  };
+
+  const loadProjectTrackers = async () => {
+    const trackerConfig = dataset("context-project-trackers");
+    const pointConfig = dataset("context-project-control-points");
+    const [trackerData, pointData] = await Promise.all([
+      fetchJson(trackerConfig.webAsset),
+      fetchJson(pointConfig.webAsset),
+    ]);
+    assertProjectOperations(trackerData, "Project trackers", "flight_register_summary");
+    assertProjectOperations(pointData, "Project control points", "control_reference_point");
+    state.trackerData = trackerData;
+    state.projectControlData = pointData;
+    const layerOptions = {
+      pane: "surveyPane",
+      pointToLayer: trackerPoint,
+      onEachFeature(feature, item) { item.bindPopup(trackerPointPopup(feature)); },
+    };
+    const aggregate = L.geoJSON(pointData, layerOptions);
+    for (const projectKey of Object.keys(trackerData.projects || {})) {
+      const features = pointData.features.filter((feature) => feature.properties?.projectKey === projectKey);
+      state.projectControlLayers.set(projectKey, L.geoJSON({ type: "FeatureCollection", features }, layerOptions));
+    }
+    registerBaseControl(
+      "trackerControl",
+      "Project control points",
+      `${Object.keys(trackerData.projects || {}).length} project · ${pointData.featureCount || pointData.features.length} Base/GCP`,
+      aggregate,
+      false,
+      "tracker",
     );
   };
 
@@ -1009,7 +1168,10 @@
       ["CRS status", verified],
     ];
     ui.datasetInfo.innerHTML = rows.map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
-    const links = [...state.datasets.values()].filter((item) => item.sensor === config.sensor && item.sourceUrl);
+    const selectedTracker = state.trackerData?.projects?.[state.selectedTrackerProject];
+    const links = config.scope === "project_operations" && selectedTracker
+      ? [{ sourceUrl: selectedTracker.url, dataType: `${selectedTracker.key}_tracker` }]
+      : [...state.datasets.values()].filter((item) => item.sensor === config.sensor && item.sourceUrl);
     const unique = new Map();
     for (const item of links) if (!unique.has(item.sourceUrl)) unique.set(item.sourceUrl, item);
     ui.sourceLinks.innerHTML = [...unique.values()].map((item) => `<a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.dataType.replaceAll("_", " "))}<span>↗</span></a>`).join("");
@@ -1020,6 +1182,7 @@
     for (const item of state.baseLayers.values()) if (item.visible && state.map.hasLayer(item.layer)) layers.push(item.layer);
     for (const layer of state.uchastikFeatureLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of state.licenseContextLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
+    for (const layer of state.projectControlLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
@@ -1038,6 +1201,7 @@
     for (const item of state.baseLayers.values()) state.map.removeLayer(item.layer);
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.uchastikFeatureLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.projectControlLayers.values()) state.map.removeLayer(layer);
     hideSensorLayers();
     state.baseLayers.clear();
     state.licenceData = null;
@@ -1047,6 +1211,10 @@
     state.hetsuuCadData = null;
     state.hetsuuCadLayer = null;
     state.hetsuuCadLabelLayers = [];
+    state.trackerData = null;
+    state.projectControlData = null;
+    state.projectControlLayers.clear();
+    state.selectedTrackerProject = null;
     state.licenseBrowserMode = "licence";
     state.uchastikData = null;
     state.uchastikFeatureLayers.clear();
@@ -1069,6 +1237,8 @@
     ui.licenseCount.textContent = "—";
     ui.clearLicenseContext.hidden = true;
     ui.licenseBrowser.classList.remove("is-uchastik");
+    ui.projectTrackerPanel.hidden = true;
+    ui.projectTrackerPanel.replaceChildren();
   };
 
   const load = async () => {
@@ -1090,6 +1260,7 @@
         { label: "Licence", task: loadLicence, errorType: "base" },
         { label: "Uchastik", task: loadUchastik, errorType: "base" },
         { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
+        { label: "Project trackers", task: loadProjectTrackers, errorType: "warning" },
         { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
         { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },

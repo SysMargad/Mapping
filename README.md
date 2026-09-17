@@ -1,6 +1,6 @@
 # Mapping
 
-Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө болон sensor бүрийн баталгаажсан төлөвийг харуулдаг static Leaflet map.
+Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, Base/GCP цэгийг харуулдаг static Leaflet map.
 
 Public URL: <https://sysmargad.github.io/Mapping/>
 
@@ -11,12 +11,14 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 - `dist/data/base/` — licence, uchastik, DWG/CAD-аас гарсан base/control geometry. Sensor track биш.
 - `dist/data/context/licenses.geojson` — 24 лицензийн external reference. Default-аар зурагт харагдахгүй; хэрэглэгч сонгоход тухайн polygon дээр төвлөрнө.
 - `dist/data/context/hetsuu-hutul-dwg.geojson` — Drive дахь `Hetsuu hutul.DWG`-ийн 628 байрлалтай entity. `Hetsuu hutul` лиценз сонгоход автоматаар нээгдэнэ.
+- `dist/data/context/project-trackers.json` — Арцат, Хэцүү хөтөл, Бүдүүн хадын Checklist-ээс гаргасан 780 actual flight-register record. Энэ бүртгэл нь trajectory geometry биш; pilot нэр web asset-д ороогүй.
+- `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн, лицензийн талбайгаар шалгаж оноосон 878 давхардалгүй control point.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
-Өөр төслийн Artsat/Buduunkhad мэдээлэл орох ёсгүй. `tools/validate_data.py` энэ тусгаарлалтыг шалгана.
+Project tracker өгөгдөл нь `project_operations` scope-д тусгаарлагдана. Nergui Undur sensor/trajectory өгөгдөлтэй нийлүүлэхгүй бөгөөд `tools/validate_data.py` энэ зааг болон tracker record бүр `trajectoryAvailable: false` болохыг шалгана.
 
 ## Local preview
 
@@ -52,6 +54,20 @@ Hetsuu hutul DWG (WGS 84 / UTM zone 46N):
   --dwgread "C:\Users\margad.p\Desktop\Drone Track\.tools\libredwg\dwgread.exe" `
   --utm-zone 46
 ```
+
+Project trackers (татаж авсан read-only `.xlsx` copy):
+
+```powershell
+& $python .\tools\export_project_trackers.py `
+  "<Hetsuu Hutul Drone Project Tracker.xlsx>" `
+  "<Artsat Drone Project Tracker.xlsx>" `
+  "<Buduunkhad Drone Project Tracker.xlsx>" `
+  --licences .\dist\data\context\licenses.geojson `
+  --summary-output .\dist\data\context\project-trackers.json `
+  --points-output .\dist\data\context\project-control-points.geojson
+```
+
+Эх сурвалжууд нь `datasets.json`-д Google Sheet URL-аар бүртгэгдсэн. Export хийхдээ source workbook-ийг өөрчлөхгүй; Checklist-ийг нислэгийн operational бүртгэл болгон авч, trajectory гэж таамаглахгүй.
 
 Nergui Undur licence only:
 
@@ -93,7 +109,7 @@ The exporter stops instead of guessing ambiguous coordinate or time columns.
 ```powershell
 & $python .\tools\normalise_assets.py
 & $python .\tools\validate_data.py
-& $python .\tools\build_manifest.py --version 2026-09-16.1 --updated 2026-09-16
+& $python .\tools\build_manifest.py --version 2026-09-17.3 --updated 2026-09-17
 node --check .\dist\app.js
 ```
 

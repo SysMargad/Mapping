@@ -59,6 +59,7 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .mini-symbol.block { border-color: var(--amber); }
 .mini-symbol.cad { border-color: #d6a5ff; border-style: solid; box-shadow: 0 0 7px rgba(214, 165, 255, .45); }
 .mini-symbol.hetsuu { border-color: #56d7ff; box-shadow: 0 0 7px rgba(86, 215, 255, .45); }
+.mini-symbol.tracker { border-color: #71f6c1; border-radius: 50%; box-shadow: 0 0 7px rgba(113, 246, 193, .38); }
 .mini-symbol.pending { border-color: #6c7e90; border-style: dotted; }
 .switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -84,6 +85,25 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .license-browser.is-uchastik .license-context-button:hover,
 .license-browser.is-uchastik .license-context-button.is-active { border-color: var(--pink); background: rgba(255, 117, 181, .18); box-shadow: inset 0 0 0 1px rgba(255, 117, 181, .18); }
 .clear-context { margin: 0 12px 12px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
+.tracker-panel { padding: 14px; border: 1px solid rgba(113, 246, 193, .28); border-radius: 15px; background: rgba(113, 246, 193, .035); }
+.tracker-panel[hidden] { display: none; }
+.tracker-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tracker-heading strong, .tracker-heading span { display: block; }
+.tracker-heading strong { font-size: 16px; }
+.tracker-heading span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.tracker-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+.tracker-kpis div { padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: rgba(0, 0, 0, .12); }
+.tracker-kpis span, .tracker-kpis strong { display: block; }
+.tracker-kpis span { color: var(--muted); font-size: 8px; line-height: 1.25; }
+.tracker-kpis strong { margin-top: 4px; font-size: 13px; }
+.tracker-sensors { display: grid; gap: 5px; margin-top: 10px; }
+.tracker-sensor-row { display: grid; grid-template-columns: 54px 1fr auto; gap: 8px; align-items: center; padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-soft); font-size: 10px; }
+.tracker-sensor-row strong { color: var(--green); }
+.tracker-sensor-row span { color: var(--muted); }
+.tracker-daily { display: grid; gap: 4px; max-height: 154px; overflow-y: auto; padding: 8px 10px 10px; scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
+.tracker-day { display: grid; grid-template-columns: 82px 1fr auto; gap: 7px; color: #d5e6f2; font-size: 9px; }
+.tracker-day span:nth-child(2) { color: var(--muted); }
+.tracker-source { display: inline-flex; margin-top: 10px; color: var(--cyan); font-size: 10px; text-decoration: none; }
 .sensor-button { --sensor-accent: #91a6bb; --sensor-fill: rgba(145, 166, 187, .08); min-height: 55px; padding: 8px 7px; border: 1px solid color-mix(in srgb, var(--sensor-accent) 48%, transparent); border-radius: 11px; background: var(--sensor-fill); text-align: left; cursor: pointer; }
 .sensor-button.sensor-magarrow { --sensor-accent: var(--cyan); --sensor-fill: rgba(57, 217, 255, .09); }
 .sensor-button.sensor-l3 { --sensor-accent: var(--green); --sensor-fill: rgba(113, 246, 193, .08); }
@@ -146,6 +166,9 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .legend-symbol.uchastik { border-color: var(--pink); }
 .legend-symbol.block { border-color: var(--amber); }
 .legend-symbol.reference { border-color: #d6a5ff; border-style: solid; box-shadow: 0 0 6px rgba(214, 165, 255, .5); }
+.legend-symbol.base-point, .legend-symbol.gcp-point { width: 10px; height: 10px; margin-left: 2px; border-radius: 50%; }
+.legend-symbol.base-point { border-color: #ffca5c; background: rgba(255, 202, 92, .35); }
+.legend-symbol.gcp-point { border-color: #56d7ff; background: rgba(86, 215, 255, .35); }
 .legend-symbol.main-line, .legend-symbol.tie-line, .legend-symbol.mission-line, .legend-symbol.actual-line { height: 0; border-width: 2px 0 0; border-radius: 0; }
 .legend-symbol.main-line { border-color: var(--green); }
 .legend-symbol.tie-line { border-color: #39a8ff; border-style: dashed; }

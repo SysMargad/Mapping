@@ -1,6 +1,6 @@
 {
   "project": "Nergui Undur",
-  "version": "2026-09-17.2",
+  "version": "2026-09-17.3",
   "datasets": [
     {
       "id": "base-licence",
@@ -83,6 +83,48 @@
       "crsVerified": true,
       "defaultVisible": false,
       "notes": "628 located DWG entities are decoded into boundaries, blocks, sections, lines, labels and control points. The layer opens automatically when Hetsuu hutul (XV-022905) is selected; 25 unlocated or unsupported entities are omitted."
+    },
+    {
+      "id": "context-project-trackers",
+      "project": "Multi-project operations",
+      "scope": "project_operations",
+      "area": "Hetsuu hutul / Artsat / Buduunkhad",
+      "sensor": "Project Operations",
+      "dataType": "flight_register_summary",
+      "plannedActual": "actual_record",
+      "status": "confirmed_source",
+      "sourceFiles": [
+        "Hetsuu_Hutul_Drone_Project_Tracker.xlsx",
+        "Artsat_Drone_Project_Tracker.xlsx",
+        "Buduunkhad_Drone_Project_Tracker.xlsx"
+      ],
+      "sourceUrls": [
+        "https://docs.google.com/spreadsheets/d/1XvKLs9QCgvIjHjQbXlV7thqPu0HdLIae/edit?gid=289538975",
+        "https://docs.google.com/spreadsheets/d/1dbk0R5iHgwgPfa8gT25wN-NhtOVLjQUZ/edit?gid=991918308",
+        "https://docs.google.com/spreadsheets/d/1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz/edit?gid=991918308"
+      ],
+      "webAsset": "./data/context/project-trackers.json",
+      "displayCrs": null,
+      "crsVerified": null,
+      "defaultVisible": false,
+      "notes": "Operational register snapshot: 780 actual flight records across 89 project-days. These records confirm flights and processing status but do not contain trajectory geometry. Pilot names are excluded from the web asset."
+    },
+    {
+      "id": "context-project-control-points",
+      "project": "Multi-project operations",
+      "scope": "project_operations",
+      "area": "Hetsuu hutul / Artsat / Buduunkhad",
+      "sensor": "Project Operations",
+      "dataType": "control_reference_point",
+      "plannedActual": "reference",
+      "status": "confirmed_source",
+      "sourceFiles": ["Hetsuu/Artsat/Buduunkhad tracker Base and GCP tabs"],
+      "webAsset": "./data/context/project-control-points.geojson",
+      "sourceCrs": "EPSG:32646 / EPSG:32647",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "878 unique Base/GCP points assigned to the matching licence extent. Duplicate observations are consolidated and source provenance is preserved."
     },
     {
       "id": "magarrow-planned-survey",
