@@ -1,0 +1,357 @@
+"""Import verified project flight trajectories and match them to tracker missions.
+
+The importer never creates geometry from tracker rows alone. A track is emitted
+only when a coordinate-bearing MRK, KML, KMZ, CSV, or DJIFlightRecord TXT file
+can be matched to one tracker mission and its coordinates fall inside the
+matching project licence extent.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import math
+import re
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+
+SUPPORTED_SUFFIXES = {".mrk", ".kml", ".kmz", ".csv", ".txt"}
+PROJECTS = {
+    "hetsuu-hutul": {"project": "Hetsuu hutul", "area": "Хэцүү хөтөл", "licence": "XV-022905"},
+    "artsat": {"project": "Artsat", "area": "Арцат", "licence": "XV-021395"},
+    "buduunkhad": {"project": "Buduunkhad", "area": "Бүдүүн хад", "licence": "XV-023222"},
+}
+MISSION_TIME_RE = re.compile(r"DJI_(\d{8})(\d{4,6})", re.IGNORECASE)
+FLIGHT_RECORD_RE = re.compile(
+    r"DJIFlightRecord[_-](\d{4})-(\d{2})-(\d{2})[_-]\[(\d{2})-(\d{2})-(\d{2})\]",
+    re.IGNORECASE,
+)
+KML_NS = {"kml": "http://www.opengis.net/kml/2.2", "gx": "http://www.google.com/kml/ext/2.2"}
+METRES_PER_DEGREE = 111_320.0
+
+
+def normalise(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def mission_time(value: str) -> datetime | None:
+    match = MISSION_TIME_RE.search(value)
+    if not match:
+        return None
+    clock = match.group(2).ljust(6, "0")
+    return datetime.strptime(match.group(1) + clock, "%Y%m%d%H%M%S")
+
+
+def file_time(path: Path) -> datetime | None:
+    match = MISSION_TIME_RE.search(path.name)
+    if match:
+        return mission_time(match.group(0))
+    match = FLIGHT_RECORD_RE.search(path.name)
+    if not match:
+        return None
+    return datetime.strptime("".join(match.groups()), "%Y%m%d%H%M%S")
+
+
+def iter_coordinate_pairs(value):
+    if isinstance(value, list) and len(value) >= 2 and all(isinstance(item, (int, float)) for item in value[:2]):
+        yield float(value[0]), float(value[1])
+    elif isinstance(value, list):
+        for item in value:
+            yield from iter_coordinate_pairs(item)
+
+
+def licence_extents(path: Path) -> dict[str, tuple[float, float, float, float]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    by_licence = {value["licence"]: key for key, value in PROJECTS.items()}
+    result = {}
+    for feature in data.get("features", []):
+        project_key = by_licence.get(feature.get("properties", {}).get("LICENSE"))
+        if not project_key:
+            continue
+        points = list(iter_coordinate_pairs((feature.get("geometry") or {}).get("coordinates")))
+        if points:
+            result[project_key] = (
+                min(point[0] for point in points), min(point[1] for point in points),
+                max(point[0] for point in points), max(point[1] for point in points),
+            )
+    return result
+
+
+def in_extent(point: list[float], extent, margin: float = 0.02) -> bool:
+    west, south, east, north = extent
+    return west - margin <= point[0] <= east + margin and south - margin <= point[1] <= north + margin
+
+
+def parse_kml_bytes(content: bytes) -> list[list[float]]:
+    root = ET.fromstring(content)
+    candidates = []
+    for node in root.findall(".//kml:LineString/kml:coordinates", KML_NS):
+        points = []
+        for value in (node.text or "").split():
+            parts = value.split(",")
+            if len(parts) >= 2:
+                points.append([float(parts[0]), float(parts[1])])
+        if len(points) >= 2:
+            candidates.append(points)
+    gx_points = []
+    for node in root.findall(".//gx:Track/gx:coord", KML_NS):
+        parts = (node.text or "").split()
+        if len(parts) >= 2:
+            gx_points.append([float(parts[0]), float(parts[1])])
+    if len(gx_points) >= 2:
+        candidates.append(gx_points)
+    if not candidates:
+        point_sequence = []
+        for node in root.findall(".//kml:Point/kml:coordinates", KML_NS):
+            parts = (node.text or "").strip().split(",")
+            if len(parts) >= 2:
+                point_sequence.append([float(parts[0]), float(parts[1])])
+        if len(point_sequence) >= 2:
+            candidates.append(point_sequence)
+    if not candidates:
+        raise ValueError("no coordinate sequence in KML")
+    return max(candidates, key=len)
+
+
+def parse_delimited_text(text: str) -> list[list[float]]:
+    sample = text[:8192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    rows = list(csv.reader(io.StringIO(text), dialect))
+    if not rows:
+        raise ValueError("empty coordinate text")
+    headers = [normalise(value) for value in rows[0]]
+    lon_names = {"lon", "lng", "longitude", "gpslongitude", "gpslon", "long"}
+    lat_names = {"lat", "latitude", "gpslatitude", "gpslat"}
+    lon_index = next((index for index, value in enumerate(headers) if value in lon_names), None)
+    lat_index = next((index for index, value in enumerate(headers) if value in lat_names), None)
+    if lon_index is None or lat_index is None:
+        raise ValueError("coordinate columns not found")
+    points = []
+    for row in rows[1:]:
+        try:
+            points.append([float(row[lon_index]), float(row[lat_index])])
+        except (IndexError, TypeError, ValueError):
+            continue
+    if len(points) < 2:
+        raise ValueError("fewer than two coordinate rows")
+    return points
+
+
+def parse_mrk(text: str) -> list[list[float]]:
+    points = []
+    hemisphere = re.compile(r"([+-]?\d{1,3}(?:\.\d+)?)\s*[, ]?\s*([NSEW])\b", re.IGNORECASE)
+    decimal = re.compile(r"[+-]?\d{1,3}\.\d+")
+    for line in text.splitlines():
+        lat = lon = None
+        for raw, direction in hemisphere.findall(line):
+            value = float(raw)
+            if direction.upper() in {"S", "W"}:
+                value *= -1
+            if direction.upper() in {"N", "S"}:
+                lat = value
+            else:
+                lon = value
+        if lat is None or lon is None:
+            values = [float(value) for value in decimal.findall(line)]
+            lat = next((value for value in values if 40 <= value <= 55), None)
+            lon = next((value for value in values if 90 <= value <= 110), None)
+        if lat is not None and lon is not None:
+            points.append([lon, lat])
+    if len(points) < 2:
+        raise ValueError("fewer than two MRK positions")
+    return points
+
+
+def parse_source(path: Path) -> list[list[float]]:
+    suffix = path.suffix.lower()
+    if suffix == ".kmz":
+        with zipfile.ZipFile(path) as archive:
+            name = next((name for name in archive.namelist() if name.lower().endswith(".kml")), None)
+            if not name:
+                raise ValueError("KMZ has no KML")
+            return parse_kml_bytes(archive.read(name))
+    if suffix == ".kml":
+        return parse_kml_bytes(path.read_bytes())
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if suffix == ".mrk":
+        return parse_mrk(text)
+    return parse_delimited_text(text)
+
+
+def clean_points(points: list[list[float]], extent) -> list[list[float]]:
+    cleaned = []
+    for lon, lat in points:
+        point = [round(lon, 8), round(lat, 8)]
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90) or not in_extent(point, extent):
+            continue
+        if not cleaned or point != cleaned[-1]:
+            cleaned.append(point)
+    if len(cleaned) < 2:
+        raise ValueError("coordinates are outside the project licence extent")
+    return cleaned
+
+
+def simplify(points: list[list[float]], tolerance_m: float = 2.5) -> list[list[float]]:
+    if len(points) <= 2:
+        return points
+    lon0 = sum(point[0] for point in points) / len(points)
+    lat0 = sum(point[1] for point in points) / len(points)
+    projected = [
+        ((point[0] - lon0) * METRES_PER_DEGREE * math.cos(math.radians(lat0)),
+         (point[1] - lat0) * METRES_PER_DEGREE)
+        for point in points
+    ]
+
+    def distance(point, start, end):
+        px, py = point
+        ax, ay = start
+        bx, by = end
+        dx, dy = bx - ax, by - ay
+        if dx == 0 and dy == 0:
+            return math.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+    def rdp(start, end):
+        if end <= start + 1:
+            return [start, end]
+        furthest, maximum = None, -1.0
+        for index in range(start + 1, end):
+            candidate = distance(projected[index], projected[start], projected[end])
+            if candidate > maximum:
+                furthest, maximum = index, candidate
+        if maximum <= tolerance_m:
+            return [start, end]
+        return rdp(start, furthest)[:-1] + rdp(furthest, end)
+
+    return [points[index] for index in rdp(0, len(points) - 1)]
+
+
+def load_mapping(path: Path | None) -> dict[str, dict]:
+    if not path:
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entries = data.get("sources", data) if isinstance(data, dict) else data
+    result = {}
+    for entry in entries:
+        key = normalise(entry.get("file", ""))
+        if key:
+            result[key] = entry
+    return result
+
+
+def match_record(path: Path, records: list[dict], mapping: dict[str, dict]) -> tuple[dict | None, dict]:
+    config = mapping.get(normalise(path.name), {})
+    if config.get("trackerId"):
+        matches = [record for record in records if record.get("id") == config["trackerId"]]
+        return (matches[0] if len(matches) == 1 else None), config
+    if config.get("mission"):
+        matches = [record for record in records if record.get("mission") == config["mission"]]
+        return (matches[0] if len(matches) == 1 else None), config
+    filename_key = normalise(path.stem)
+    exact = [record for record in records if normalise(record.get("mission", "")) in filename_key]
+    if len(exact) == 1:
+        return exact[0], config
+    started = file_time(path)
+    if not started:
+        return None, config
+    same_day = []
+    for record in records:
+        candidate = mission_time(record.get("mission", ""))
+        if candidate and candidate.date() == started.date():
+            same_day.append((abs((candidate - started).total_seconds()), record))
+    same_day.sort(key=lambda item: item[0])
+    if same_day and same_day[0][0] <= 20 * 60 and (len(same_day) == 1 or same_day[1][0] - same_day[0][0] >= 3 * 60):
+        return same_day[0][1], config
+    return None, config
+
+
+def build(args) -> dict:
+    trackers = json.loads(args.trackers.read_text(encoding="utf-8"))
+    records = [record for record in trackers.get("records", []) if record.get("projectKey") == args.project]
+    extent = licence_extents(args.licences).get(args.project)
+    if not extent:
+        raise ValueError(f"No licence extent for {args.project}")
+    mapping = load_mapping(args.mapping)
+    existing = json.loads(args.existing.read_text(encoding="utf-8")) if args.existing.exists() else {"type": "FeatureCollection", "features": []}
+    features = list(existing.get("features", []))
+    imported, unmatched, rejected = [], [], []
+    seen_tracker_ids = set()
+    for path in sorted(item for item in args.source_dir.rglob("*") if item.suffix.lower() in SUPPORTED_SUFFIXES):
+        record, source_config = match_record(path, records, mapping)
+        if not record:
+            unmatched.append(str(path.relative_to(args.source_dir)))
+            continue
+        if record["id"] in seen_tracker_ids:
+            rejected.append({"file": path.name, "reason": f"duplicate tracker match {record['id']}"})
+            continue
+        try:
+            raw_points = parse_source(path)
+            points = clean_points(raw_points, extent)
+        except Exception as error:
+            rejected.append({"file": path.name, "trackerId": record["id"], "reason": str(error)})
+            continue
+        seen_tracker_ids.add(record["id"])
+        project = PROJECTS[args.project]
+        source_url = source_config.get("sourceUrl")
+        feature = {
+            "type": "Feature",
+            "id": f"{args.project}-{record['id'].split(':')[-1]}-{normalise(record['mission'])}",
+            "properties": {
+                "project": project["project"], "projectKey": args.project,
+                "area": record.get("area") or project["area"], "licence": project["licence"],
+                "sensor": record.get("sensor", "Unknown"), "mission": record["mission"],
+                "trackerId": record["id"], "date": record.get("date"),
+                "dataType": "actual_flight_track", "plannedActual": "actual",
+                "status": "confirmed_source", "contextOnly": True, "trajectoryAvailable": True,
+                "sourceFile": path.name, "sourceKind": f"{path.suffix.upper()[1:]} coordinate trajectory",
+                "flightRecordVerified": True, "sourceCrs": "EPSG:4326", "displayCrs": "EPSG:4326",
+                "crsVerified": True, "pointCount": len(raw_points), "coverageSwathWidthM": 50,
+                **({"sourceUrl": source_url} if source_url else {}),
+            },
+            "geometry": {"type": "LineString", "coordinates": simplify(points)},
+        }
+        imported.append(feature)
+    replaced_tracker_ids = {feature["properties"]["trackerId"] for feature in imported}
+    features = [
+        feature for feature in features
+        if feature.get("properties", {}).get("trackerId") not in replaced_tracker_ids
+    ]
+    features.extend(imported)
+    output = {
+        "type": "FeatureCollection", "name": "Verified project flight trajectories",
+        "project": "Multi-project operations", "scope": "project_operations",
+        "dataType": "actual_flight_track", "featureCount": len(features), "features": features,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(output, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    report = {"project": args.project, "imported": len(imported), "unmatched": unmatched, "rejected": rejected}
+    if args.report:
+        args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return report
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source_dir", type=Path)
+    parser.add_argument("--project", choices=sorted(PROJECTS), default="hetsuu-hutul")
+    parser.add_argument("--trackers", required=True, type=Path)
+    parser.add_argument("--licences", required=True, type=Path)
+    parser.add_argument("--existing", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--mapping", type=Path)
+    parser.add_argument("--report", type=Path)
+    args = parser.parse_args()
+    print(json.dumps(build(args), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

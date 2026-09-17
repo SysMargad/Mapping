@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "file": "DJI_202608221222_001_DEMO-AWarehouse-XT-B007_Timestamp.MRK",
+      "trackerId": "hetsuu-hutul:3",
+      "mission": "DJI_202608221222_001_DEMO-AWarehouse-XT-B007",
+      "sourceUrl": "https://drive.google.com/file/d/DRIVE_FILE_ID/view"
+    },
+    {
+      "file": "DJIFlightRecord_2026-08-22_[12-40-00].kmz",
+      "trackerId": "hetsuu-hutul:4",
+      "mission": "DJI_202608221222_002_DEMO-AWarehouse-XT-B007",
+      "sourceUrl": "https://drive.google.com/file/d/DRIVE_FILE_ID/view"
+    }
+  ]
+}

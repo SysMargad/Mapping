@@ -92,6 +92,31 @@ Coverage нь trajectory-н төв шугамаас тал бүрт 25 м бую
   --output .\dist\data\context\project-flight-coverage.json
 ```
 
+Хэцүү хөтлийн бодит trajectory файлуудыг tracker mission-тэй холбох:
+
+1. Drive дахь `Timestamp.MRK`, `DJIFlightRecord KMZ/TXT`, KML эсвэл longitude/latitude баганатай CSV файлуудыг нэг local хавтас руу read-only байдлаар татна.
+2. Файлын нэрэнд tracker-ийн бүтэн mission нэр байвал автоматаар таарна. `DJIFlightRecord_YYYY-MM-DD_[HH-MM-SS]` нэртэй файл нь ижил өдрийн ганц, 20 минутын доторх mission-тэй л автоматаар таарна.
+3. Нэрээр найдвартай таарахгүй бол `flight-source-map.example.json`-ийг хуулж, файл бүрт `trackerId`/`mission` болон Drive-ийн `sourceUrl`-ийг заана.
+
+```powershell
+& $python .\tools\import_project_flight_tracks.py `
+  "<Drive-аас татсан Хэцүү хөтлийн flight file хавтас>" `
+  --project hetsuu-hutul `
+  --trackers .\dist\data\context\project-trackers.json `
+  --licences .\dist\data\context\licenses.geojson `
+  --existing .\dist\data\context\project-flight-tracks.geojson `
+  --output .\dist\data\context\project-flight-tracks.geojson `
+  --mapping .\flight-source-map.json `
+  --report .\hetsuu-flight-import-report.json
+
+& $python .\tools\export_project_flight_coverage.py `
+  .\dist\data\context\project-flight-tracks.geojson `
+  --licences .\dist\data\context\licenses.geojson `
+  --output .\dist\data\context\project-flight-coverage.json
+```
+
+Importer нь coordinate-той файлгүй tracker мөрөөс шугам зохиохгүй. Mission/огноо зөрсөн, лицензийн талбайгаас гадуур координаттай, эсвэл нэг mission-тэй давхар таарсан файлыг `rejected`/`unmatched` тайланд үлдээнэ. Амжилттай орсон Хэцүү хөтлийн trajectory нь одоо байгаа map-ийн sensor → өдөр сонголтоор Нэргүй өндөр, Бүдүүн хадтай адил шугамаар харагдаж, ниссэн талбайн тооцоонд орно.
+
 Nergui Undur licence only:
 
 ```powershell
