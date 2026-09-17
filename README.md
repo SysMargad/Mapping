@@ -1,6 +1,6 @@
 # Mapping
 
-Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, Base/GCP цэгийг харуулдаг static Leaflet map.
+Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, баталгаажсан trajectory-г харуулдаг static Leaflet map.
 
 Public URL: <https://sysmargad.github.io/Mapping/>
 
@@ -12,7 +12,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 - `dist/data/context/licenses.geojson` — 24 лицензийн external reference. Default-аар зурагт харагдахгүй; хэрэглэгч сонгоход тухайн polygon дээр төвлөрнө.
 - `dist/data/context/hetsuu-hutul-dwg.geojson` — Drive дахь `Hetsuu hutul.DWG`-ийн 628 байрлалтай entity. `Hetsuu hutul` лиценз сонгоход автоматаар нээгдэнэ.
 - `dist/data/context/project-trackers.json` — Арцат, Хэцүү хөтөл, Бүдүүн хадын Checklist-ээс гаргасан 780 actual flight-register record. Энэ бүртгэл нь trajectory geometry биш; pilot нэр web asset-д ороогүй.
-- `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн, лицензийн талбайгаар шалгаж оноосон 878 давхардалгүй control point.
+- `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн provenance asset. Control point нь trajectory биш тул map дээр цэнхэр цэгээр дүрслэхгүй.
 - `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ-ээс баталгаажсан бодит trajectory. Одоогоор Бүдүүн хадын L2 sensor-ийн 2026-06-20-ны 3 нислэг байна.
 - `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
@@ -123,7 +123,7 @@ The exporter stops instead of guessing ambiguous coordinate or time columns.
 ```powershell
 & $python .\tools\normalise_assets.py
 & $python .\tools\validate_data.py
-& $python .\tools\build_manifest.py --version 2026-09-17.4 --updated 2026-09-17
+& $python .\tools\build_manifest.py --version 2026-09-17.5 --updated 2026-09-17
 node --check .\dist\app.js
 ```
 

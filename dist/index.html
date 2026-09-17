@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="preconnect" href="https://tile.openstreetmap.org" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <link rel="stylesheet" href="./styles.css?v=2026-09-17.4" />
+    <link rel="stylesheet" href="./styles.css?v=2026-09-17.5" />
   </head>
   <body>
     <main class="app-shell">
@@ -62,7 +62,7 @@
           <div id="base-layer-list" class="control-list"></div>
           <details id="license-browser" class="license-browser">
             <summary><span id="license-browser-title">Лицензийн талбай сонгох</span><span id="license-count">—</span></summary>
-            <p>Арцат, Хэцүү хөтөл, Бүдүүн хад дээр tracker болон Base/GCP өгөгдөл нээгдэнэ. Баталгаажсан flight-log байвал trajectory шугам, sensor/өдрийн талбай хамт харагдана.</p>
+            <p>Арцат, Хэцүү хөтөл, Бүдүүн хад дээр tracker өгөгдөл нээгдэнэ. Баталгаажсан flight-log байвал trajectory шугам, sensor/өдрийн талбай хамт харагдана.</p>
             <div id="license-context-list" class="license-context-list" role="group" aria-label="Лицензийн талбай сонгох"></div>
             <button id="clear-license-context" class="clear-context" type="button" hidden>Сонголт арилгах</button>
           </details>
@@ -90,13 +90,10 @@
             <span class="legend-symbol uchastik"></span><span>Uchastik</span>
             <span class="legend-symbol block"></span><span>Block boundary</span>
             <span class="legend-symbol reference"></span><span>References</span>
-            <span class="legend-symbol base-point"></span><span>Base station</span>
-            <span class="legend-symbol gcp-point"></span><span>GCP</span>
             <span class="legend-symbol main-line"></span><span>MagArrow planned main</span>
             <span class="legend-symbol tie-line"></span><span>MagArrow planned tie</span>
             <span class="legend-symbol mission-line"></span><span>DJI mission plan</span>
             <span class="legend-symbol actual-line"></span><span>Actual track</span>
-            <span class="legend-symbol measurement"></span><span>10 Hz measurement</span>
             <span class="legend-symbol pending"></span><span>Pending / unavailable</span>
           </div>
         </details>
@@ -108,13 +105,13 @@
           </button>
           <button id="refresh-data" class="secondary-action" type="button" title="Manifest болон өгөгдлийг гараар шинэчлэх">↻</button>
         </div>
-        <p class="hint">Base/control layer нь sensor солиход хэвээр үлдэнэ. Pending sensor дээр дарж эх сурвалж, статусыг харна уу.</p>
+        <p class="hint">Талбай, участик, sensor болон огноо сонгоход trajectory хамт шүүгдэнэ. Pending sensor дээр дарж эх сурвалж, статусыг харна уу.</p>
       </aside>
 
       <div class="map-credit">© OpenStreetMap contributors</div>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <script src="./app.js?v=2026-09-17.4"></script>
+    <script src="./app.js?v=2026-09-17.5"></script>
   </body>
 </html>

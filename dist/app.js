@@ -371,6 +371,15 @@
       coverageKey,
     };
     renderAreaSummary();
+    if (state.actualTrackData) {
+      if (state.activeSensor === "MagArrow" && state.selectedFlightDate !== "all"
+        && !actualFeaturesInArea().some((feature) => feature.properties?.date === state.selectedFlightDate)) {
+        state.selectedFlightDate = "all";
+        renderAreaSummary();
+      }
+      syncActualTrackVisibility();
+      if (state.activeSensor === "MagArrow") renderMagArrowPanel();
+    }
   };
 
   const registerBaseControl = (id, label, detail, layer, visible, tone = "base") => {
@@ -772,7 +781,7 @@
       return `<button type="button" class="tracker-sensor-row${state.selectedTrackerSensor === sensor ? " is-active" : ""}" data-tracker-sensor="${escapeHtml(sensor)}"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл${geometryCount ? ` · ${geometryCount} line` : ""}</b></button>`;
     }).join("");
     const dailyRows = (project.daily || []).map((item) => (
-      `<button type="button" class="tracker-day${state.selectedTrackerDate === item.date ? " is-active" : ""}" data-tracker-date="${escapeHtml(item.date)}"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></button>`
+      `<div class="tracker-day"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></div>`
     )).join("");
     const copied = project.fileCopy?.["Хуулж дууссан"] || 0;
     const qaQcDone = project.qaqc?.["Тийм"] || 0;
@@ -796,16 +805,6 @@
     for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-sensor]")) {
       button.addEventListener("click", () => selectSensor(button.dataset.trackerSensor));
     }
-    for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-date]")) {
-      button.addEventListener("click", () => {
-        const daily = project.daily?.find((item) => item.date === button.dataset.trackerDate);
-        if (!daily?.sensors?.[state.selectedTrackerSensor]) {
-          const fallbackSensor = Object.keys(daily?.sensors || {})[0];
-          if (fallbackSensor) selectSensor(fallbackSensor);
-        }
-        selectTrackerDate(button.dataset.trackerDate);
-      });
-    }
     ui.projectTrackerPanel.hidden = false;
   };
 
@@ -815,11 +814,10 @@
     state.selectedTrackerSensor = Object.keys(project?.sensors || {})[0] || null;
     state.selectedTrackerDate = "all";
     state.activeSensor = state.selectedTrackerSensor || "MagArrow";
-    const hasVerifiedFlights = projectFlightFeatures(projectKey, null, "all").length > 0;
     const control = state.baseLayers.get("trackerControl");
     if (control) {
-      control.visible = !hasVerifiedFlights;
-      if (control.input) control.input.checked = !hasVerifiedFlights;
+      control.visible = false;
+      if (control.input) control.input.checked = false;
     }
     syncProjectControlVisibility();
     syncProjectFlightVisibility();
@@ -827,7 +825,7 @@
     renderSensorButtons();
     if (state.selectedTrackerSensor) renderTrackerSensorPanel(state.selectedTrackerSensor);
     const flightLayers = selectedProjectFlightLayers();
-    return flightLayers.length ? L.featureGroup(flightLayers) : state.projectControlLayers.get(projectKey);
+    return flightLayers.length ? L.featureGroup(flightLayers) : null;
   };
 
   const loadProjectTrackers = async () => {
@@ -841,24 +839,8 @@
     assertProjectOperations(pointData, "Project control points", "control_reference_point");
     state.trackerData = trackerData;
     state.projectControlData = pointData;
-    const layerOptions = {
-      pane: "surveyPane",
-      pointToLayer: trackerPoint,
-      onEachFeature(feature, item) { item.bindPopup(trackerPointPopup(feature)); },
-    };
-    const aggregate = L.geoJSON(pointData, layerOptions);
-    for (const projectKey of Object.keys(trackerData.projects || {})) {
-      const features = pointData.features.filter((feature) => feature.properties?.projectKey === projectKey);
-      state.projectControlLayers.set(projectKey, L.geoJSON({ type: "FeatureCollection", features }, layerOptions));
-    }
-    registerBaseControl(
-      "trackerControl",
-      "Project control points",
-      `${Object.keys(trackerData.projects || {}).length} project · ${pointData.featureCount || pointData.features.length} Base/GCP`,
-      aggregate,
-      false,
-      "tracker",
-    );
+    // Base/GCP remains source metadata only. It is intentionally not rendered:
+    // control points are not a flown trajectory and must not appear as blue dots.
   };
 
   const loadProjectFlights = async () => {
@@ -992,16 +974,87 @@
 
   const flightDateColor = () => "#39d9ff";
 
-  const selectedActualLayers = () => {
-    if (state.selectedFlightDate === "all") return [...state.actualTrackLayers.values()];
-    const layer = state.actualTrackLayers.get(state.selectedFlightDate);
-    return layer ? [layer] : [];
+  const pointInRing = ([x, y], ring) => {
+    let inside = false;
+    for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+      const [x1, y1] = ring[previous];
+      const [x2, y2] = ring[index];
+      if ((y1 > y) !== (y2 > y) && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) inside = !inside;
+    }
+    return inside;
   };
+
+  const pointInPolygon = (point, polygon) => polygon?.length
+    && pointInRing(point, polygon[0])
+    && !polygon.slice(1).some((hole) => pointInRing(point, hole));
+
+  const orientation = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  const onSegment = (a, b, point) => point[0] >= Math.min(a[0], b[0]) && point[0] <= Math.max(a[0], b[0])
+    && point[1] >= Math.min(a[1], b[1]) && point[1] <= Math.max(a[1], b[1]);
+  const segmentsIntersect = (a, b, c, d) => {
+    const o1 = orientation(a, b, c);
+    const o2 = orientation(a, b, d);
+    const o3 = orientation(c, d, a);
+    const o4 = orientation(c, d, b);
+    if (o1 !== o2 && o3 !== o4) return true;
+    return (o1 === 0 && onSegment(a, b, c)) || (o2 === 0 && onSegment(a, b, d))
+      || (o3 === 0 && onSegment(c, d, a)) || (o4 === 0 && onSegment(c, d, b));
+  };
+
+  const lineIntersectsPolygon = (line, polygon) => {
+    if (line.some((point) => pointInPolygon(point, polygon))) return true;
+    for (let index = 1; index < line.length; index += 1) {
+      for (const ring of polygon || []) {
+        for (let edge = 1; edge < ring.length; edge += 1) {
+          if (segmentsIntersect(line[index - 1], line[index], ring[edge - 1], ring[edge])) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const trackIntersectsAreaScope = (feature) => {
+    const scopeFeatures = state.areaScope?.features || [];
+    if (!scopeFeatures.length || state.areaScope?.label === "Бүх лиценз") return true;
+    const lineGeometry = feature.geometry || {};
+    const lines = lineGeometry.type === "MultiLineString" ? lineGeometry.coordinates : [lineGeometry.coordinates || []];
+    return scopeFeatures.some((scopeFeature) => {
+      const geometry = scopeFeature.geometry || {};
+      const polygons = geometry.type === "MultiPolygon" ? geometry.coordinates : geometry.type === "Polygon" ? [geometry.coordinates] : [];
+      return lines.some((line) => polygons.some((polygon) => lineIntersectsPolygon(line, polygon)));
+    });
+  };
+
+  const actualFeaturesInArea = () => (state.actualTrackData?.features || [])
+    .filter((feature) => trackIntersectsAreaScope(feature));
+
+  const selectedActualFeatures = () => actualFeaturesInArea().filter((feature) => (
+    state.selectedFlightDate === "all" || feature.properties?.date === state.selectedFlightDate
+  ));
+
+  const selectedActualLayers = () => [...state.actualTrackLayers.values()];
+
+  const actualTrackLayer = (features) => L.geoJSON({ type: "FeatureCollection", features }, {
+    pane: "actualPane",
+    style: { color: flightDateColor(), weight: 2.8, opacity: 0.98 },
+    onEachFeature(feature, item) { item.bindPopup(actualPopup(feature)); },
+  });
 
   const syncActualTrackVisibility = () => {
     for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
+    state.actualTrackLayers.clear();
     if (state.activeSensor !== "MagArrow") return;
-    for (const layer of selectedActualLayers()) layer.addTo(state.map);
+    const grouped = new Map();
+    for (const feature of selectedActualFeatures()) {
+      const date = feature.properties?.date;
+      if (!grouped.has(date)) grouped.set(date, []);
+      grouped.get(date).push(feature);
+    }
+    for (const [date, features] of grouped) {
+      const layer = actualTrackLayer(features);
+      state.actualTrackLayers.set(date, layer);
+      layer.addTo(state.map);
+    }
   };
 
   const loadActualTracks = async () => {
@@ -1017,21 +1070,6 @@
     }
     state.actualTrackData = data;
     state.actualCoverage = coverage;
-    const grouped = new Map();
-    for (const feature of data.features) {
-      const date = feature.properties?.date;
-      if (!grouped.has(date)) grouped.set(date, []);
-      grouped.get(date).push(feature);
-    }
-    for (const [date, features] of grouped) {
-      const color = flightDateColor(date);
-      const layer = L.geoJSON({ type: "FeatureCollection", features }, {
-        pane: "actualPane",
-        style: { color, weight: 2.5, opacity: 0.95 },
-        onEachFeature(feature, item) { item.bindPopup(actualPopup(feature)); },
-      });
-      state.actualTrackLayers.set(date, layer);
-    }
     syncActualTrackVisibility();
     renderAreaSummary();
   };
@@ -1114,8 +1152,9 @@
 
   const renderMagArrowPanel = () => {
     const missions = dataset("magarrow-mission-plans")?.missions || [];
-    const dates = state.actualCoverage?.dates || [];
-    const acquisitionCount = state.actualCoverage?.acquisitionCount || 0;
+    const scopedFeatures = actualFeaturesInArea();
+    const dates = [...new Set(scopedFeatures.map((feature) => feature.properties?.date).filter(Boolean))].sort();
+    const acquisitionCount = scopedFeatures.length;
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>MagArrow</strong><span>Heseg Uul hoid</span></div><span class="status-badge available">TRACKS AVAILABLE</span></div>
       <h3>Planned Survey Lines</h3>
@@ -1127,7 +1166,6 @@
       </details>
       <h3>Ниссэн trajectory</h3>
       <div id="flight-date-list" class="flight-date-list"></div>
-      <button class="status-row" type="button" data-dataset="magarrow-measurements"><span>10 Hz measurements</span><em>OFF · SOURCE AVAILABLE</em></button>
       <p class="panel-note">${acquisitionCount} acquisition · Огноо сонгоход тухайн өдрийн trajectory болон ниссэн талбай харагдана.</p>`;
     const planToggles = ui.sensorPanel.querySelector("#plan-toggles");
     const planRows = [
@@ -1149,7 +1187,7 @@
       .concat(dates.map((date) => ({
         value: date,
         label: date,
-        count: state.actualTrackData?.features.filter((feature) => feature.properties?.date === date).length || 0,
+        count: scopedFeatures.filter((feature) => feature.properties?.date === date).length,
       })));
     for (const option of dateOptions) {
       const button = document.createElement("button");
@@ -1199,18 +1237,19 @@
     const records = (state.trackerData.records || []).filter((record) => (
       record.projectKey === state.selectedTrackerProject && record.sensor === sensor
     ));
-    const dates = [...new Set(records.map((record) => record.date).filter(Boolean))].sort().reverse();
+    const trajectoryDates = [...new Set(projectFlightFeatures(state.selectedTrackerProject, sensor, "all")
+      .map((feature) => feature.properties?.date).filter(Boolean))].sort().reverse();
     const selectedRecords = state.selectedTrackerDate === "all"
       ? records
       : records.filter((record) => record.date === state.selectedTrackerDate);
     const geometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, "all").length;
     const visibleGeometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, state.selectedTrackerDate).length;
-    const dateOptions = [{ value: "all", label: "Бүх огноо", count: records.length }]
-      .concat(dates.map((date) => ({
+    const dateOptions = geometryCount ? [{ value: "all", label: "Бүх trajectory", count: geometryCount }]
+      .concat(trajectoryDates.map((date) => ({
         value: date,
         label: date,
-        count: records.filter((record) => record.date === date).length,
-      })));
+        count: projectFlightFeatures(state.selectedTrackerProject, sensor, date).length,
+      }))) : [];
     const missionRows = selectedRecords.map((record) => {
       const hasGeometry = projectFlightFeatures(record.projectKey, record.sensor, record.date)
         .some((feature) => feature.properties?.trackerId === record.id);
@@ -1218,8 +1257,8 @@
     }).join("");
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>
-      <h3>Ниссэн өдөр</h3>
-      <div id="tracker-flight-date-list" class="flight-date-list"></div>
+      <h3>Ниссэн trajectory өдөр</h3>
+      ${geometryCount ? '<div id="tracker-flight-date-list" class="flight-date-list"></div>' : '<p class="truth-note">Энэ sensor-д coordinate бүхий trajectory файл олдоогүй. Өдрийн бүртгэлийг доороос харна уу.</p>'}
       <h3>Бодит нислэгийн бүртгэл</h3>
       <div class="tracker-flight-records">${missionRows}</div>
       <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
@@ -1230,9 +1269,9 @@
       button.className = `flight-date-button${state.selectedTrackerDate === option.value ? " is-active" : ""}`;
       button.dataset.trackerDate = option.value;
       button.style.setProperty("--date-color", "#39d9ff");
-      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} бүртгэл</small>`;
+      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} trajectory</small>`;
       button.addEventListener("click", () => selectTrackerDate(option.value));
-      dateList.appendChild(button);
+      dateList?.appendChild(button);
     }
     state.activeDatasetId = geometryCount ? "context-project-flight-tracks" : "context-project-trackers";
     renderDatasetInfo();
