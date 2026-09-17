@@ -56,7 +56,12 @@ def validate_geojson(
             )
         if props.get("dataType") == "actual_flight_track":
             source_file = str(props.get("sourceFile", "")).lower()
-            if re.search(r"\.(kmz|kml|wpmz|zip)$", source_file) or props.get("plannedActual") != "actual":
+            verified_flight_record = (
+                props.get("flightRecordVerified") is True
+                and source_file.startswith("djiflightrecord_")
+                and source_file.endswith(".kmz")
+            )
+            if (re.search(r"\.(kmz|kml|wpmz|zip)$", source_file) and not verified_flight_record) or props.get("plannedActual") != "actual":
                 errors.append(f"{path}:{fid}: mission plan cannot be an actual flight track")
             if geometry.get("type") not in ("LineString", "MultiLineString"):
                 errors.append(f"{path}:{fid}: actual track must be a line")

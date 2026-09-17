@@ -35,7 +35,7 @@ const scripts = {
   shapefile: path.join(projectRoot, "tools", "export_shapefile.py"),
 };
 const port = Number(process.env.PORT || 4173);
-const host = process.env.HOST || "0.0.0.0";
+const host = process.env.HOST || "127.0.0.1";
 const types = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],

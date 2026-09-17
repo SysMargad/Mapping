@@ -1,6 +1,6 @@
 {
   "project": "Nergui Undur",
-  "version": "2026-09-17.3",
+  "version": "2026-09-17.4",
   "datasets": [
     {
       "id": "base-licence",
@@ -125,6 +125,48 @@
       "crsVerified": true,
       "defaultVisible": false,
       "notes": "878 unique Base/GCP points assigned to the matching licence extent. Duplicate observations are consolidated and source provenance is preserved."
+    },
+    {
+      "id": "context-project-flight-tracks",
+      "project": "Multi-project operations",
+      "scope": "project_operations",
+      "area": "Buduunkhad",
+      "sensor": "Project Operations",
+      "dataType": "actual_flight_track",
+      "plannedActual": "actual",
+      "status": "confirmed_source",
+      "sourceFiles": [
+        "DJIFlightRecord_2026-06-20_[12-31-37].kmz",
+        "DJIFlightRecord_2026-06-20_[13-05-55].kmz",
+        "DJIFlightRecord_2026-06-20_[13-54-39].kmz"
+      ],
+      "sourceUrls": [
+        "https://drive.google.com/file/d/1zqFcmKbkY6yocNR-x5EHaDmb0OpUqYHT/view",
+        "https://drive.google.com/file/d/15PfSq4iBqASovU-u5dRXnkG2-scYVg3C/view",
+        "https://drive.google.com/file/d/1Cj2DBsXVBpuA2bsRrCkEcPCPlnT3QPlo/view"
+      ],
+      "webAsset": "./data/context/project-flight-tracks.geojson",
+      "sourceCrs": "EPSG:4326",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "Three verified Buduunkhad L2 trajectories matched to tracker records by date and start time. Unmatched tracker rows remain register-only records."
+    },
+    {
+      "id": "context-project-flight-coverage",
+      "project": "Multi-project operations",
+      "scope": "project_operations",
+      "area": "Buduunkhad",
+      "sensor": "Project Operations",
+      "dataType": "actual_coverage_summary",
+      "plannedActual": "derived_from_actual",
+      "status": "calculated",
+      "sourceFiles": ["Verified DJI FlightRecord KMZ trajectories"],
+      "webAsset": "./data/context/project-flight-coverage.json",
+      "displayCrs": null,
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to the Buduunkhad licence. It is available only for verified trajectory records."
     },
     {
       "id": "magarrow-planned-survey",

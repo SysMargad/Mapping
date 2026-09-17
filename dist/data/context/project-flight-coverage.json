@@ -1,0 +1,30 @@
+{
+  "project": "Multi-project operations",
+  "scope": "project_operations",
+  "dataType": "actual_coverage_summary",
+  "method": "Verified DJI FlightRecord trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to licence polygon.",
+  "cellSizeM": 10.0,
+  "swathWidthM": 50.0,
+  "projects": {
+    "buduunkhad": {
+      "licence": "XV-023222",
+      "sensors": {
+        "L2": {
+          "dates": [
+            "2026-06-20"
+          ],
+          "acquisitionCount": 3,
+          "scopes": {
+            "licence": {
+              "label": "Бүдүүн хад",
+              "totalAreaM2": 803800.0,
+              "dailyAreaM2": {
+                "2026-06-20": 803800.0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

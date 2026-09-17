@@ -51,6 +51,11 @@
     projectControlData: null,
     projectControlLayers: new Map(),
     selectedTrackerProject: null,
+    selectedTrackerSensor: null,
+    selectedTrackerDate: "all",
+    projectFlightData: null,
+    projectFlightCoverage: null,
+    projectFlightLayers: new Map(),
     licenseBrowserMode: "licence",
     uchastikData: null,
     uchastikFeatureLayers: new Map(),
@@ -284,6 +289,21 @@
     }
   };
 
+  const projectFlightPopup = (feature) => {
+    const props = feature.properties || {};
+    return popup([
+      ["Project", props.area || props.project],
+      ["Sensor", props.sensor],
+      ["Mission", props.mission],
+      ["Date", props.date],
+      ["Type", "Verified DJI FlightRecord trajectory"],
+      ["Start", props.startTime],
+      ["Points", props.pointCount],
+      ["Coverage model", `${props.coverageSwathWidthM || 50} m swath`],
+      ["Source", props.sourceFile],
+    ]);
+  };
+
   const assertLicenceContext = (payload) => assertExternalReference(payload, "Licence context", "licence_context");
 
   const assertProjectOperations = (payload, label, expectedDataType) => {
@@ -320,26 +340,27 @@
   const renderAreaSummary = () => {
     const features = state.areaScope?.features || [];
     const totalArea = features.length ? features.reduce((sum, feature) => sum + featureArea(feature), 0) : NaN;
-    const coverage = state.areaScope?.coverageKey
-      ? state.actualCoverage?.scopes?.[state.areaScope.coverageKey]
+    const projectSensorCoverage = state.selectedTrackerProject && state.selectedTrackerSensor
+      ? state.projectFlightCoverage?.projects?.[state.selectedTrackerProject]?.sensors?.[state.selectedTrackerSensor]
       : null;
-    const selectedDate = state.selectedFlightDate !== "all" ? state.selectedFlightDate : null;
+    const coverage = projectSensorCoverage?.scopes?.licence || (state.areaScope?.coverageKey
+      ? state.actualCoverage?.scopes?.[state.areaScope.coverageKey]
+      : null);
+    const dateFilter = projectSensorCoverage ? state.selectedTrackerDate : state.selectedFlightDate;
+    const selectedDate = dateFilter !== "all" ? dateFilter : null;
     const dailyAreas = Object.values(coverage?.dailyAreaM2 || {}).filter(Number.isFinite);
-    const selectedArea = selectedDate
-      ? coverage?.dailyAreaM2?.[selectedDate]
-      : coverage
-        ? dailyAreas.reduce((sum, area) => sum + area, 0)
-        : NaN;
+    const allDaysArea = coverage ? dailyAreas.reduce((sum, area) => sum + area, 0) : NaN;
+    const selectedArea = selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : coverage?.totalAreaM2;
     ui.primaryLabel.textContent = "Нийт талбай";
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
-    ui.secondaryValue.textContent = formatArea(coverage?.totalAreaM2);
-    ui.tertiaryLabel.textContent = selectedDate ? "Өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр";
-    ui.tertiaryValue.textContent = formatArea(selectedArea);
+    ui.secondaryValue.textContent = formatArea(selectedArea);
+    ui.tertiaryLabel.textContent = "Бүх өдрийн нийлбэр";
+    ui.tertiaryValue.textContent = formatArea(allDaysArea);
     ui.summaryNote.textContent = coverage
-      ? `${state.areaScope.label} · ${selectedDate || "Бүх огноо"} · GNSS trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
+      ? `${state.areaScope.label} · ${state.selectedTrackerSensor || "MagArrow"} · ${selectedDate || "Бүх огноо"} · Баталгаажсан trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
       : state.areaScope
-        ? `${state.areaScope.label} · Энэ сонголтод нислэгийн талбайн тооцоо байхгүй.`
+        ? `${state.areaScope.label} · Сонгосон sensor/өдөрт баталгаажсан trajectory geometry байхгүй.`
         : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
   };
 
@@ -397,6 +418,7 @@
     for (const layer of state.licenseContextLayers.values()) state.map.removeLayer(layer);
     if (state.hetsuuCadLayer) state.map.removeLayer(state.hetsuuCadLayer);
     for (const layer of state.projectControlLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
     const cadControl = state.baseLayers.get("hetsuuCad");
     if (cadControl) {
       cadControl.visible = false;
@@ -409,6 +431,8 @@
       if (trackerControl.input) trackerControl.input.checked = false;
     }
     state.selectedTrackerProject = null;
+    state.selectedTrackerSensor = null;
+    state.selectedTrackerDate = "all";
     ui.projectTrackerPanel.hidden = true;
     ui.projectTrackerPanel.replaceChildren();
     state.selectedContextLicense = null;
@@ -511,6 +535,7 @@
   const selectLicenceContext = (key, button) => {
     let activeContextDataset = "base-licence-context";
     clearLicenceContext();
+    selectSensor("MagArrow");
     state.licenseBrowserMode = "licence";
     state.selectedUchastikKey = null;
     state.selectedContextLicense = key;
@@ -545,7 +570,9 @@
             fitLayers.push(state.hetsuuCadLayer);
           }
           fitSingleLayer(L.featureGroup(fitLayers));
-          activeContextDataset = "context-project-trackers";
+          activeContextDataset = projectFlightFeatures(projectKey, null, "all").length
+            ? "context-project-flight-tracks"
+            : "context-project-trackers";
         } else {
           fitSingleLayer(layer);
         }
@@ -586,6 +613,7 @@
 
   const returnToLicenceBrowser = () => {
     clearLicenceContext();
+    selectSensor("MagArrow");
     state.licenseBrowserMode = "licence";
     state.selectedUchastikKey = null;
     syncUchastikLayerVisibility();
@@ -711,6 +739,25 @@
 
   const formatCount = (value) => Number(value || 0).toLocaleString("mn-MN");
 
+  const projectFlightFeatures = (projectKey = state.selectedTrackerProject, sensor = state.selectedTrackerSensor, date = state.selectedTrackerDate) => (
+    (state.projectFlightData?.features || []).filter((feature) => {
+      const props = feature.properties || {};
+      return (!projectKey || props.projectKey === projectKey)
+        && (!sensor || props.sensor === sensor)
+        && (!date || date === "all" || props.date === date);
+    })
+  );
+
+  const selectedProjectFlightLayers = () => projectFlightFeatures()
+    .map((feature) => state.projectFlightLayers.get(feature.id))
+    .filter(Boolean);
+
+  const syncProjectFlightVisibility = () => {
+    for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
+    if (!state.selectedTrackerProject || !state.selectedTrackerSensor) return;
+    for (const layer of selectedProjectFlightLayers()) layer.addTo(state.map);
+  };
+
   const renderTrackerProject = (projectKey) => {
     const project = state.trackerData?.projects?.[projectKey];
     if (!project) {
@@ -721,10 +768,11 @@
       const altitude = Number.isFinite(stats.altitudeMinM)
         ? `${stats.altitudeMinM}–${stats.altitudeMaxM} м`
         : "өндөр бүртгээгүй";
-      return `<div class="tracker-sensor-row"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл</b></div>`;
+      const geometryCount = projectFlightFeatures(projectKey, sensor, "all").length;
+      return `<button type="button" class="tracker-sensor-row${state.selectedTrackerSensor === sensor ? " is-active" : ""}" data-tracker-sensor="${escapeHtml(sensor)}"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл${geometryCount ? ` · ${geometryCount} line` : ""}</b></button>`;
     }).join("");
     const dailyRows = (project.daily || []).map((item) => (
-      `<div class="tracker-day"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></div>`
+      `<button type="button" class="tracker-day${state.selectedTrackerDate === item.date ? " is-active" : ""}" data-tracker-date="${escapeHtml(item.date)}"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></button>`
     )).join("");
     const copied = project.fileCopy?.["Хуулж дууссан"] || 0;
     const qaQcDone = project.qaqc?.["Тийм"] || 0;
@@ -743,21 +791,43 @@
         <summary>Өдрийн бүртгэл <span>${formatCount(project.flightDays)}</span></summary>
         <div class="tracker-daily">${dailyRows}</div>
       </details>
-      <p class="truth-note">Энэ нь actual flight register. Ниссэн trajectory geometry агуулаагүй.</p>
+      <p class="truth-note">Actual flight register: ${formatCount(project.records)} бүртгэл. Баталгаажсан trajectory geometry: ${formatCount(projectFlightFeatures(projectKey, null, "all").length)}. Geometry байхгүй бүртгэлийг шугам болгон таамаглаагүй.</p>
       <a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`;
+    for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-sensor]")) {
+      button.addEventListener("click", () => selectSensor(button.dataset.trackerSensor));
+    }
+    for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-date]")) {
+      button.addEventListener("click", () => {
+        const daily = project.daily?.find((item) => item.date === button.dataset.trackerDate);
+        if (!daily?.sensors?.[state.selectedTrackerSensor]) {
+          const fallbackSensor = Object.keys(daily?.sensors || {})[0];
+          if (fallbackSensor) selectSensor(fallbackSensor);
+        }
+        selectTrackerDate(button.dataset.trackerDate);
+      });
+    }
     ui.projectTrackerPanel.hidden = false;
   };
 
   const activateTrackerProject = (projectKey) => {
     state.selectedTrackerProject = projectKey;
+    const project = state.trackerData?.projects?.[projectKey];
+    state.selectedTrackerSensor = Object.keys(project?.sensors || {})[0] || null;
+    state.selectedTrackerDate = "all";
+    state.activeSensor = state.selectedTrackerSensor || "MagArrow";
+    const hasVerifiedFlights = projectFlightFeatures(projectKey, null, "all").length > 0;
     const control = state.baseLayers.get("trackerControl");
     if (control) {
-      control.visible = true;
-      if (control.input) control.input.checked = true;
+      control.visible = !hasVerifiedFlights;
+      if (control.input) control.input.checked = !hasVerifiedFlights;
     }
     syncProjectControlVisibility();
+    syncProjectFlightVisibility();
     renderTrackerProject(projectKey);
-    return state.projectControlLayers.get(projectKey);
+    renderSensorButtons();
+    if (state.selectedTrackerSensor) renderTrackerSensorPanel(state.selectedTrackerSensor);
+    const flightLayers = selectedProjectFlightLayers();
+    return flightLayers.length ? L.featureGroup(flightLayers) : state.projectControlLayers.get(projectKey);
   };
 
   const loadProjectTrackers = async () => {
@@ -789,6 +859,31 @@
       false,
       "tracker",
     );
+  };
+
+  const loadProjectFlights = async () => {
+    const tracksConfig = dataset("context-project-flight-tracks");
+    const coverageConfig = dataset("context-project-flight-coverage");
+    const [data, coverage] = await Promise.all([
+      fetchJson(tracksConfig.webAsset),
+      fetchJson(coverageConfig.webAsset),
+    ]);
+    assertProjectOperations(data, "Project flight tracks", "actual_flight_track");
+    if (coverage.project !== "Multi-project operations" || coverage.scope !== "project_operations") {
+      throw new Error("Project flight coverage is not isolated correctly");
+    }
+    state.projectFlightData = data;
+    state.projectFlightCoverage = coverage;
+    const colors = { L2: "#39d9ff", L3: "#71f6c1", P1: "#ff8fb8" };
+    for (const feature of data.features || []) {
+      const color = colors[feature.properties?.sensor] || "#ffffff";
+      const layer = L.geoJSON(feature, {
+        pane: "actualPane",
+        style: { color, weight: 3.2, opacity: 0.98 },
+        onEachFeature(itemFeature, item) { item.bindPopup(projectFlightPopup(itemFeature)); },
+      });
+      state.projectFlightLayers.set(feature.id, layer);
+    }
   };
 
   const loadUchastik = async () => {
@@ -956,6 +1051,7 @@
     for (const layer of state.planLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
   };
 
   const loadMissionPlans = async () => {
@@ -1097,6 +1193,63 @@
     updateMagArrowSummary();
   };
 
+  const renderTrackerSensorPanel = (sensor) => {
+    const project = state.trackerData?.projects?.[state.selectedTrackerProject];
+    if (!project?.sensors?.[sensor]) return;
+    const records = (state.trackerData.records || []).filter((record) => (
+      record.projectKey === state.selectedTrackerProject && record.sensor === sensor
+    ));
+    const dates = [...new Set(records.map((record) => record.date).filter(Boolean))].sort().reverse();
+    const selectedRecords = state.selectedTrackerDate === "all"
+      ? records
+      : records.filter((record) => record.date === state.selectedTrackerDate);
+    const geometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, "all").length;
+    const visibleGeometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, state.selectedTrackerDate).length;
+    const dateOptions = [{ value: "all", label: "Бүх огноо", count: records.length }]
+      .concat(dates.map((date) => ({
+        value: date,
+        label: date,
+        count: records.filter((record) => record.date === date).length,
+      })));
+    const missionRows = selectedRecords.map((record) => {
+      const hasGeometry = projectFlightFeatures(record.projectKey, record.sensor, record.date)
+        .some((feature) => feature.properties?.trackerId === record.id);
+      return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(record.date)} · ${escapeHtml(record.altitudeM ? `${record.altitudeM} м` : "өндөргүй")}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
+    }).join("");
+    ui.sensorPanel.innerHTML = `
+      <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>
+      <h3>Ниссэн өдөр</h3>
+      <div id="tracker-flight-date-list" class="flight-date-list"></div>
+      <h3>Бодит нислэгийн бүртгэл</h3>
+      <div class="tracker-flight-records">${missionRows}</div>
+      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
+    const dateList = ui.sensorPanel.querySelector("#tracker-flight-date-list");
+    for (const option of dateOptions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `flight-date-button${state.selectedTrackerDate === option.value ? " is-active" : ""}`;
+      button.dataset.trackerDate = option.value;
+      button.style.setProperty("--date-color", "#39d9ff");
+      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} бүртгэл</small>`;
+      button.addEventListener("click", () => selectTrackerDate(option.value));
+      dateList.appendChild(button);
+    }
+    state.activeDatasetId = geometryCount ? "context-project-flight-tracks" : "context-project-trackers";
+    renderDatasetInfo();
+  };
+
+  const selectTrackerDate = (date, shouldFit = true) => {
+    state.selectedTrackerDate = date;
+    syncProjectFlightVisibility();
+    renderTrackerProject(state.selectedTrackerProject);
+    renderTrackerSensorPanel(state.selectedTrackerSensor);
+    renderAreaSummary();
+    if (shouldFit) {
+      const layers = selectedProjectFlightLayers();
+      if (layers.length) fitSingleLayer(L.featureGroup(layers));
+    }
+  };
+
   const renderStatusPanel = (sensor) => {
     const mapping = {
       L3: {
@@ -1128,7 +1281,19 @@
 
   const renderSensorButtons = () => {
     ui.sensors.replaceChildren();
-    for (const sensor of sensorConfig) {
+    const project = state.trackerData?.projects?.[state.selectedTrackerProject];
+    const sensors = project
+      ? Object.entries(project.sensors || {}).map(([id, stats]) => {
+        const base = sensorConfig.find((item) => item.id === id) || { id, label: id };
+        const geometryCount = projectFlightFeatures(state.selectedTrackerProject, id, "all").length;
+        return {
+          ...base,
+          status: geometryCount ? `${geometryCount} TRAJECTORY` : `${formatCount(stats.records)} ACTUAL RECORDS`,
+          tone: geometryCount ? "available" : "survey",
+        };
+      })
+      : sensorConfig;
+    for (const sensor of sensors) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `sensor-button ${sensor.tone} sensor-${sensor.id.toLowerCase()}${state.activeSensor === sensor.id ? " is-active" : ""}`;
@@ -1142,6 +1307,17 @@
   const selectSensor = (sensor) => {
     state.activeSensor = sensor;
     hideSensorLayers();
+    const project = state.trackerData?.projects?.[state.selectedTrackerProject];
+    if (project?.sensors?.[sensor]) {
+      state.selectedTrackerSensor = sensor;
+      state.selectedTrackerDate = "all";
+      renderSensorButtons();
+      syncProjectFlightVisibility();
+      renderTrackerProject(state.selectedTrackerProject);
+      renderTrackerSensorPanel(sensor);
+      renderAreaSummary();
+      return;
+    }
     renderSensorButtons();
     if (sensor === "MagArrow") {
       restoreMagArrowLayers();
@@ -1170,7 +1346,13 @@
     ui.datasetInfo.innerHTML = rows.map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
     const selectedTracker = state.trackerData?.projects?.[state.selectedTrackerProject];
     const links = config.scope === "project_operations" && selectedTracker
-      ? [{ sourceUrl: selectedTracker.url, dataType: `${selectedTracker.key}_tracker` }]
+      ? [
+        { sourceUrl: selectedTracker.url, dataType: `${selectedTracker.key}_tracker` },
+        ...projectFlightFeatures().map((feature) => ({
+          sourceUrl: feature.properties?.sourceUrl,
+          dataType: `${feature.properties?.sensor || "flight"}_${feature.properties?.date || "trajectory"}`,
+        })),
+      ].filter((item) => item.sourceUrl)
       : [...state.datasets.values()].filter((item) => item.sensor === config.sensor && item.sourceUrl);
     const unique = new Map();
     for (const item of links) if (!unique.has(item.sourceUrl)) unique.set(item.sourceUrl, item);
@@ -1183,6 +1365,7 @@
     for (const layer of state.uchastikFeatureLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of state.licenseContextLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of state.projectControlLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
+    for (const layer of selectedProjectFlightLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
@@ -1215,6 +1398,11 @@
     state.projectControlData = null;
     state.projectControlLayers.clear();
     state.selectedTrackerProject = null;
+    state.selectedTrackerSensor = null;
+    state.selectedTrackerDate = "all";
+    state.projectFlightData = null;
+    state.projectFlightCoverage = null;
+    state.projectFlightLayers.clear();
     state.licenseBrowserMode = "licence";
     state.uchastikData = null;
     state.uchastikFeatureLayers.clear();
@@ -1261,6 +1449,7 @@
         { label: "Uchastik", task: loadUchastik, errorType: "base" },
         { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
         { label: "Project trackers", task: loadProjectTrackers, errorType: "warning" },
+        { label: "Project flight tracks", task: loadProjectFlights, errorType: "warning" },
         { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
         { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
