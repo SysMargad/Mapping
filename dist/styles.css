@@ -102,8 +102,10 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .tracker-sensor-row span { color: var(--muted); }
 .tracker-sensor-row:hover, .tracker-sensor-row.is-active { border-color: var(--green); background: rgba(113, 246, 193, .09); }
 .tracker-daily { display: grid; gap: 4px; max-height: 154px; overflow-y: auto; padding: 8px 10px 10px; scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
-.tracker-day { display: grid; width: 100%; grid-template-columns: 82px 1fr auto; gap: 7px; padding: 4px 5px; border: 0; border-radius: 6px; background: transparent; color: #d5e6f2; text-align: left; font: inherit; font-size: 9px; }
+.tracker-day { display: grid; width: 100%; grid-template-columns: 82px 1fr auto; gap: 7px; padding: 5px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #d5e6f2; text-align: left; font: inherit; font-size: 9px; cursor: pointer; }
 .tracker-day span:nth-child(2) { color: var(--muted); }
+.tracker-day:hover, .tracker-day.is-active { border-color: rgba(57, 217, 255, .55); background: rgba(57, 217, 255, .09); }
+.tracker-day.is-active { box-shadow: inset 3px 0 0 var(--cyan); }
 .tracker-flight-records { display: grid; gap: 5px; max-height: 220px; overflow-y: auto; margin-bottom: 10px; padding-right: 3px; scrollbar-color: #4b6075 transparent; scrollbar-width: thin; }
 .tracker-flight-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); font-size: 9px; }
 .tracker-flight-record strong { grid-column: 1 / -1; overflow: hidden; color: #d9e9f5; text-overflow: ellipsis; white-space: nowrap; }

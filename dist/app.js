@@ -811,6 +811,36 @@
     .map((feature) => state.projectFlightLayers.get(feature.id))
     .filter(Boolean);
 
+  const trackerDateCadReferences = (
+    projectKey = state.selectedTrackerProject,
+    sensor = state.selectedTrackerSensor,
+    date = state.selectedTrackerDate,
+  ) => {
+    if (projectKey !== "hetsuu-hutul" || !date || date === "all") return [];
+    const blockLabels = new Set((state.trackerData?.records || [])
+      .filter((record) => record.projectKey === projectKey && record.sensor === sensor && record.date === date)
+      .flatMap((record) => String(record.mission || "").match(/XT-B\d+/gi) || [])
+      .map((label) => label.toUpperCase()));
+    if (!blockLabels.size) return [];
+    return (state.hetsuuCadData?.features || []).filter((feature) => (
+      blockLabels.has(String(feature.properties?.text_value || "").toUpperCase())
+    ));
+  };
+
+  const fitTrackerDateSelection = () => {
+    const layers = selectedProjectFlightLayers();
+    if (layers.length) {
+      fitSingleLayer(L.featureGroup(layers));
+      return;
+    }
+    const references = trackerDateCadReferences();
+    if (references.length) {
+      fitSingleLayer(L.geoJSON({ type: "FeatureCollection", features: references }));
+      return;
+    }
+    fitSingleLayer(state.licenseContextLayers.get(state.selectedContextLicense));
+  };
+
   const syncProjectFlightVisibility = () => {
     for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
     if (!state.selectedTrackerProject || !state.selectedTrackerSensor) return;
@@ -830,9 +860,12 @@
       const geometryCount = projectFlightFeatures(projectKey, sensor, "all").length;
       return `<button type="button" class="tracker-sensor-row${state.selectedTrackerSensor === sensor ? " is-active" : ""}" data-tracker-sensor="${escapeHtml(sensor)}"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл${geometryCount ? ` · ${geometryCount} line` : ""}</b></button>`;
     }).join("");
-    const dailyRows = (project.daily || []).map((item) => (
-      `<div class="tracker-day"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></div>`
-    )).join("");
+    const dailyRows = (project.daily || []).map((item) => {
+      const sensors = Object.keys(item.sensors || {});
+      const isActive = state.selectedTrackerDate === item.date
+        && (!state.selectedTrackerSensor || sensors.includes(state.selectedTrackerSensor));
+      return `<button type="button" class="tracker-day${isActive ? " is-active" : ""}" data-tracker-day="${escapeHtml(item.date)}" data-tracker-sensors="${escapeHtml(sensors.join(","))}"><strong>${escapeHtml(item.date)}</strong><span>${escapeHtml(Object.entries(item.sensors || {}).map(([key, count]) => `${key} ${count}`).join(" · "))}</span><b>${formatCount(item.records)}</b></button>`;
+    }).join("");
     const copied = project.fileCopy?.["Хуулж дууссан"] || 0;
     const qaQcDone = project.qaqc?.["Тийм"] || 0;
     const baseCount = project.controlPoints?.base || 0;
@@ -869,6 +902,18 @@
       <a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`;
     for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-sensor]")) {
       button.addEventListener("click", () => selectSensor(button.dataset.trackerSensor));
+    }
+    for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-day]")) {
+      button.addEventListener("click", () => {
+        const sensors = button.dataset.trackerSensors.split(",").filter(Boolean);
+        const sensor = sensors.includes(state.selectedTrackerSensor) ? state.selectedTrackerSensor : sensors[0];
+        if (sensor) {
+          state.selectedTrackerSensor = sensor;
+          state.activeSensor = sensor;
+          renderSensorButtons();
+        }
+        selectTrackerDate(button.dataset.trackerDay);
+      });
     }
     ui.projectTrackerPanel.hidden = false;
   };
@@ -1316,6 +1361,8 @@
       ));
     const geometryCount = allGeometry.length;
     const visibleGeometryCount = projectFlightFeatures(state.selectedTrackerProject, sensor, state.selectedTrackerDate).length;
+    const cadReferences = trackerDateCadReferences(state.selectedTrackerProject, sensor, state.selectedTrackerDate);
+    const cadReferenceLabels = cadReferences.map((feature) => feature.properties?.text_value).filter(Boolean);
     const dateOptions = geometryCount ? [{ value: "all", label: "Бүх trajectory", count: geometryCount }]
       .concat(trajectoryDates.map((date) => ({
         value: date,
@@ -1334,6 +1381,9 @@
       ${geometryCount ? '<div id="tracker-flight-date-list" class="flight-date-list"></div>' : '<p class="truth-note">Энэ sensor-д coordinate бүхий trajectory файл олдоогүй. Өдрийн бүртгэлийг доороос харна уу.</p>'}
       <h3>Бодит нислэгийн бүртгэл</h3>
       <div class="tracker-flight-records">${missionRows}</div>
+      ${state.selectedTrackerDate !== "all" && !visibleGeometryCount && cadReferenceLabels.length
+        ? `<p class="truth-note">Trajectory координат хараахан ирээгүй. Mission нэртэй таарсан CAD хэсэг рүү төвлөрөв: ${escapeHtml(cadReferenceLabels.join(", "))}.</p>`
+        : ""}
       <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. MRK/KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
     const dateList = ui.sensorPanel.querySelector("#tracker-flight-date-list");
     for (const option of dateOptions) {
@@ -1356,10 +1406,7 @@
     renderTrackerProject(state.selectedTrackerProject);
     renderTrackerSensorPanel(state.selectedTrackerSensor);
     renderAreaSummary();
-    if (shouldFit) {
-      const layers = selectedProjectFlightLayers();
-      if (layers.length) fitSingleLayer(L.featureGroup(layers));
-    }
+    if (shouldFit) fitTrackerDateSelection();
   };
 
   const renderStatusPanel = (sensor) => {
