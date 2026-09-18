@@ -291,6 +291,11 @@
 
   const projectFlightPopup = (feature) => {
     const props = feature.properties || {};
+    const altitude = Number.isFinite(props.flightHeightMinM)
+      ? `${Math.round(props.flightHeightMinM)}–${Math.round(props.flightHeightMaxM)} m AGL/relative`
+      : Number.isFinite(props.sourceAltitudeMinM)
+        ? `${Math.round(props.sourceAltitudeMinM)}–${Math.round(props.sourceAltitudeMaxM)} m GNSS/absolute`
+        : null;
     return popup([
       ["Project", props.area || props.project],
       ["Sensor", props.sensor],
@@ -298,6 +303,7 @@
       ["Date", props.date],
       ["Type", props.sourceKind || "Verified actual flight trajectory"],
       ["Start", props.startTime],
+      ["Flight altitude", altitude],
       ["Points", props.pointCount],
       ["Coverage model", `${props.coverageSwathWidthM || 50} m swath`],
       ["Source", props.sourceFile],
@@ -1373,7 +1379,13 @@
       const geometry = geometryByTrackerId.get(record.id);
       const hasGeometry = Boolean(geometry);
       const displayDate = geometry?.properties?.date || record.date;
-      return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(displayDate)} · ${escapeHtml(record.altitudeM ? `${record.altitudeM} м` : "өндөргүй")}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
+      const geometryProps = geometry?.properties || {};
+      const altitude = Number.isFinite(geometryProps.flightHeightMeanM)
+        ? `${Math.round(geometryProps.flightHeightMeanM)} м AGL/relative`
+        : Number.isFinite(geometryProps.sourceAltitudeMeanM)
+          ? `${Math.round(geometryProps.sourceAltitudeMeanM)} м GNSS/absolute`
+          : record.altitudeM ? `${record.altitudeM} м` : "өндөргүй";
+      return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(displayDate)} · ${escapeHtml(altitude)}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
     }).join("");
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>

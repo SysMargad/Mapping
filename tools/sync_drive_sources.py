@@ -34,6 +34,14 @@ DATE_DASH_RE = re.compile(r"(?<!\d)(20\d{2})-(\d{2})-(\d{2})(?!\d)")
 DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
 RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
 DJI_FILE_COUNT_SENSORS = {4: "P1", 11: "L3"}
+DRONE_FOLDER_RE = re.compile(
+    r"(?:^|[^a-z0-9])(drone|uav|magnetic[ _-]*survey|magarrow|flight[ _-]*(?:log|record))(?:$|[^a-z0-9])",
+    re.IGNORECASE,
+)
+DRONE_SOURCE_RE = re.compile(
+    r"(?:DJIFlightRecord|Timestamp|(?:^|[_-])DJI(?:[_-]|$)|SRVY\d*[-_]ACQU\d*|flight[ _-]*(?:log|record|track)|trajectory)",
+    re.IGNORECASE,
+)
 
 
 def clean(value) -> str:
@@ -164,6 +172,104 @@ def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
             if Path(item.get("name", "")).suffix.lower() in SUPPORTED_SUFFIXES:
                 found.append(item)
     return found
+
+
+def source_date_from_path(value: str) -> str | None:
+    """Read a full date, or a YYYY ancestor plus MMDD child folder, from a Drive path."""
+    direct = source_date(value)
+    if direct:
+        return direct
+    parts = [part for part in re.split(r"[/\\]+", value) if part]
+    for index, part in enumerate(parts):
+        year_match = re.fullmatch(r"(?:\d+[._ -]*)?(20\d{2})", part)
+        if not year_match:
+            continue
+        year = year_match.group(1)
+        for child in parts[index + 1:]:
+            day_match = re.match(r"(\d{2})(\d{2})(?:\D|$)", child)
+            if not day_match:
+                continue
+            try:
+                return date(int(year), int(day_match.group(1)), int(day_match.group(2))).isoformat()
+            except ValueError:
+                continue
+    return None
+
+
+def is_drone_coordinate_source(name: str) -> bool:
+    suffix = Path(name).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        return False
+    if suffix == ".mrk":
+        return True
+    return bool(DRONE_SOURCE_RE.search(Path(name).name))
+
+
+def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) -> list[dict]:
+    """Locate explicitly named drone/UAV/magnetic-survey branches under a project root."""
+    found = []
+    queue = [(root_folder_id, "", 0)]
+    visited = set()
+    while queue:
+        current, parent_path, depth = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        for raw_item in list_children(service, current):
+            item = resolve_shortcut(service, raw_item)
+            if item.get("mimeType") != FOLDER_MIME:
+                continue
+            path = f"{parent_path}/{item.get('name', '')}".strip("/")
+            if DRONE_FOLDER_RE.search(item.get("name", "")):
+                found.append({**item, "relativePath": path})
+                # The matching branch is scanned separately below, so do not
+                # rediscover every nested raw/processed folder as another root.
+                continue
+            if depth < max_depth:
+                queue.append((item["id"], path, depth + 1))
+    return found
+
+
+def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, scan_depth: int = 8) -> tuple[list[dict], dict]:
+    """Return strong coordinate-source candidates without exposing private paths in the summary."""
+    roots = find_drone_source_roots(service, root_folder_id, discovery_depth)
+    found = []
+    seen_files = set()
+    scanned_folders = 0
+    for root in roots:
+        queue = [(root["id"], root.get("relativePath", root.get("name", "")), 0)]
+        visited = set()
+        while queue:
+            current, parent_path, depth = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            scanned_folders += 1
+            for raw_item in list_children(service, current):
+                item = resolve_shortcut(service, raw_item)
+                path = f"{parent_path}/{item.get('name', '')}".strip("/")
+                if item.get("mimeType") == FOLDER_MIME:
+                    if depth < scan_depth:
+                        queue.append((item["id"], path, depth + 1))
+                    continue
+                if item.get("id") in seen_files or not is_drone_coordinate_source(item.get("name", "")):
+                    continue
+                seen_files.add(item["id"])
+                found.append({**item, "relativePath": path, "sourceDate": source_date_from_path(path)})
+    dated = sorted(item["sourceDate"] for item in found if item.get("sourceDate"))
+    suffix_counts = {}
+    for item in found:
+        suffix = Path(item.get("name", "")).suffix.lower().lstrip(".") or "unknown"
+        suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
+    summary = {
+        "matchedBranchCount": len(roots),
+        "scannedFolderCount": scanned_folders,
+        "coordinateSourceCount": len(found),
+        "sourceCountByType": dict(sorted(suffix_counts.items())),
+        "dateFrom": dated[0] if dated else None,
+        "dateTo": dated[-1] if dated else None,
+    }
+    return found, summary
 
 
 def folder_name_key(value: str) -> str:
@@ -306,6 +412,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     reports_dir.mkdir(parents=True)
     service = build_drive_service()
     raw_root_folder_id = os.environ.get("NERGUI_UNDUR_RAW_ROOT_FOLDER_ID", "").strip()
+    hetsuu_root_folder_id = os.environ.get("HETSUU_HUTUL_ROOT_FOLDER_ID", "").strip()
     raw_sensor_summary = None
     if raw_root_folder_id:
         try:
@@ -316,6 +423,22 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             print(f"::warning::Nergui Undur Raw Data sensor classification skipped: {error}")
     else:
         print("::notice::NERGUI_UNDUR_RAW_ROOT_FOLDER_ID is not configured; Raw Data sensor classification skipped.")
+    hetsuu_root_sources = []
+    hetsuu_drone_summary = None
+    if hetsuu_root_folder_id:
+        try:
+            hetsuu_root_sources, hetsuu_drone_summary = find_drone_sources(
+                service,
+                hetsuu_root_folder_id,
+                int(config.get("projectRootDiscoveryDepth", 5)),
+                int(config.get("projectRootScanDepth", 8)),
+            )
+            print("Hetsuu Hutul project-root drone source discovery:")
+            print(json.dumps(hetsuu_drone_summary, ensure_ascii=False, indent=2))
+        except Exception as error:
+            print(f"::warning::Hetsuu Hutul project-root drone source discovery skipped: {error}")
+    else:
+        print("::notice::HETSUU_HUTUL_ROOT_FOLDER_ID is not configured; project-root drone discovery skipped.")
     max_depth = int(config.get("folderScanDepth", 2))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
     workbook_paths = []
@@ -354,6 +477,44 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 "mission": row["mission"],
                 "sourceUrl": f"https://drive.google.com/file/d/{chosen['id']}/view",
             })
+        if project["key"] == "hetsuu-hutul" and hetsuu_root_sources:
+            tracker_dates = {row["date"] for row in rows if row.get("date")}
+            tracker_missions = {
+                comparable_name(row["mission"]): row
+                for row in rows
+                if comparable_name(row.get("mission", ""))
+            }
+            for candidate in hetsuu_root_sources:
+                if candidate.get("id") in used_source_ids:
+                    continue
+                candidate_key = comparable_name(candidate.get("relativePath", candidate.get("name", "")))
+                exact_rows = [row for key, row in tracker_missions.items() if key in candidate_key]
+                candidate_date = candidate.get("sourceDate")
+                if len(exact_rows) != 1 and candidate_date not in tracker_dates:
+                    # The current Hetsuu root also contains verified 2025 UAV
+                    # magnetic survey lines. Keep them in the inventory log,
+                    # but never attach them to an unrelated 2026 tracker row.
+                    continue
+                try:
+                    size = int(candidate.get("size") or 0)
+                except (TypeError, ValueError):
+                    size = 0
+                if size > max_size:
+                    continue
+                used_source_ids.add(candidate["id"])
+                local_name = f"root__{candidate['id']}__{safe_filename(candidate['name'])}"
+                local_path = project_source_dir / local_name
+                download_file(service, candidate, local_path)
+                entry = {
+                    "file": local_name,
+                    "sourceUrl": f"https://drive.google.com/file/d/{candidate['id']}/view",
+                }
+                if len(exact_rows) == 1:
+                    entry.update({
+                        "trackerId": exact_rows[0]["trackerId"],
+                        "mission": exact_rows[0]["mission"],
+                    })
+                mapping_entries.append(entry)
         mapping_path = workspace / f"{project['key']}-mapping.json"
         mapping_path.write_text(json.dumps({"sources": mapping_entries}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         project_results[project["key"]] = {
@@ -363,6 +524,8 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             "sourceDir": project_source_dir,
             "mapping": mapping_path,
         }
+        if project["key"] == "hetsuu-hutul" and hetsuu_drone_summary is not None:
+            project_results[project["key"]]["projectRootDroneDiscovery"] = hetsuu_drone_summary
 
     context_dir = repo / "dist" / "data" / "context"
     python = sys.executable
@@ -399,7 +562,11 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "--licences", str(context_dir / "licenses.geojson"),
         "--output", str(context_dir / "project-flight-coverage.json"),
     ], repo)
-    summary = {"projects": project_results, "nerguiUndurRawSensorCounts": raw_sensor_summary}
+    summary = {
+        "projects": project_results,
+        "nerguiUndurRawSensorCounts": raw_sensor_summary,
+        "hetsuuHutulDroneSources": hetsuu_drone_summary,
+    }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
 

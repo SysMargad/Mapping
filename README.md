@@ -19,6 +19,8 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 
 Нэргүй өндөр төслийн `Raw Data` хавтсыг тоолохдоо root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дэд хавтас бүрийн `DJI...` нэртэй файлыг тоолж, яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж log-д нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset-д нийтлэхгүй; 4/11-ээс өөр тоотой хавтсыг `unclassifiedFolderCountsByDjiFileCount` хэсэгт зөвхөн тоогоор тайлагнана.
 
+Хэцүү хөтлийн үндсэн project folder ID-г `HETSUU_HUTUL_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь `Drone`, `UAV`, `Magnetic_Survey`, `MagArrow`, `Flight log/record` нэртэй салбаруудыг олж, `DJIFlightRecord`, `Timestamp.MRK`, `SRVY*-ACQU*`, KML/KMZ зэрэг coordinate эх үүсвэрийг бүртгэнэ. Project root дахь 2025 UAV magnetic survey болон 2026 tracker бүртгэлийг огноо/mission баталгаагүйгээр хооронд нь холихгүй; tracker-ийн огноо эсвэл бүтэн mission нэр таарсан үед л trajectory importer-т дамжуулна. Coordinate source-д altitude/relative-height багана байвал trajectory asset-д min/max/mean өндөр хадгалагдаж, map popup болон нислэгийн бүртгэлд харагдана.
+
 ## Data truth model
 
 - `dist/data/datasets.json` — dataset registry ба canonical metadata.

@@ -17,5 +17,7 @@
     }
   ],
   "folderScanDepth": 2,
+  "projectRootDiscoveryDepth": 5,
+  "projectRootScanDepth": 8,
   "maxSourceSizeBytes": 104857600
 }

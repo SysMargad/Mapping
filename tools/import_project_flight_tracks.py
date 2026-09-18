@@ -186,6 +186,133 @@ def parse_source(path: Path) -> list[list[float]]:
     return parse_delimited_text(text)
 
 
+def rounded_stats(values: list[float], prefix: str, column: str, reference: str) -> dict:
+    finite = [value for value in values if math.isfinite(value) and -1000 <= value <= 10000]
+    if not finite:
+        return {}
+    return {
+        f"{prefix}MinM": round(min(finite), 2),
+        f"{prefix}MaxM": round(max(finite), 2),
+        f"{prefix}MeanM": round(sum(finite) / len(finite), 2),
+        f"{prefix}SampleCount": len(finite),
+        f"{prefix}Column": column,
+        f"{prefix}Reference": reference,
+    }
+
+
+def kml_altitudes(content: bytes) -> list[float]:
+    root = ET.fromstring(content)
+    values = []
+    for node in root.findall(".//kml:coordinates", KML_NS):
+        for coordinate in (node.text or "").split():
+            parts = coordinate.split(",")
+            if len(parts) >= 3:
+                try:
+                    values.append(float(parts[2]))
+                except ValueError:
+                    pass
+    for node in root.findall(".//gx:coord", KML_NS):
+        parts = (node.text or "").split()
+        if len(parts) >= 3:
+            try:
+                values.append(float(parts[2]))
+            except ValueError:
+                pass
+    return values
+
+
+def delimited_altitude_stats(text: str) -> dict:
+    sample = text[:8192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    rows = csv.reader(io.StringIO(text), dialect)
+    try:
+        raw_headers = next(rows)
+    except StopIteration:
+        return {}
+    headers = [normalise(value) for value in raw_headers]
+
+    def find_column(candidates: tuple[str, ...], excluded: tuple[str, ...] = ()) -> int | None:
+        for candidate in candidates:
+            for index, header in enumerate(headers):
+                if any(value in header for value in excluded):
+                    continue
+                if header == candidate or header.startswith(candidate):
+                    return index
+        return None
+
+    absolute_index = find_column(
+        ("altitude", "gpsaltitude", "heightoverellipsoid", "elevation"),
+        ("relative", "agl", "80m"),
+    )
+    relative_index = find_column(
+        ("relativealtitude", "heightagl", "altitudeagl", "flightheight", "relativeheight", "height"),
+        ("ellipsoid",),
+    )
+    # A generic Height column is often relative flight height. Do not reuse an
+    # explicitly selected absolute column as relative height.
+    if relative_index == absolute_index:
+        relative_index = None
+    absolute_values, relative_values = [], []
+    for row in rows:
+        if absolute_index is not None:
+            try:
+                absolute_values.append(float(row[absolute_index]))
+            except (IndexError, TypeError, ValueError):
+                pass
+        if relative_index is not None:
+            try:
+                relative_values.append(float(row[relative_index]))
+            except (IndexError, TypeError, ValueError):
+                pass
+    result = {}
+    if absolute_index is not None:
+        result.update(rounded_stats(
+            absolute_values,
+            "sourceAltitude",
+            raw_headers[absolute_index].strip(),
+            "source-provided GNSS/absolute altitude",
+        ))
+    if relative_index is not None:
+        result.update(rounded_stats(
+            relative_values,
+            "flightHeight",
+            raw_headers[relative_index].strip(),
+            "source-provided relative/AGL height",
+        ))
+    return result
+
+
+def source_altitude_stats(path: Path) -> dict:
+    """Extract source-provided altitude without inferring AGL from terrain."""
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".kmz":
+            with zipfile.ZipFile(path) as archive:
+                name = next((name for name in archive.namelist() if name.lower().endswith(".kml")), None)
+                if not name:
+                    return {}
+                return rounded_stats(kml_altitudes(archive.read(name)), "sourceAltitude", "KML altitude", "KML altitude")
+        if suffix == ".kml":
+            return rounded_stats(kml_altitudes(path.read_bytes()), "sourceAltitude", "KML altitude", "KML altitude")
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        if suffix in {".csv", ".txt"}:
+            return delimited_altitude_stats(text)
+        if suffix == ".mrk":
+            values = []
+            pattern = re.compile(r"(?:ellh|alt(?:itude)?|height)\s*[:=,\t ]+([+-]?\d+(?:\.\d+)?)", re.IGNORECASE)
+            for line in text.splitlines():
+                match = pattern.search(line)
+                if match:
+                    values.append(float(match.group(1)))
+            return rounded_stats(values, "sourceAltitude", "MRK altitude", "MRK source altitude")
+    except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile):
+        return {}
+    return {}
+
+
 def clean_points(points: list[list[float]], extent) -> list[list[float]]:
     cleaned = []
     for lon, lat in points:
@@ -315,6 +442,7 @@ def build(args) -> dict:
                 "sourceFile": path.name, "sourceKind": f"{path.suffix.upper()[1:]} coordinate trajectory",
                 "flightRecordVerified": True, "sourceCrs": "EPSG:4326", "displayCrs": "EPSG:4326",
                 "crsVerified": True, "pointCount": len(raw_points), "coverageSwathWidthM": 50,
+                **source_altitude_stats(path),
                 **({"sourceUrl": source_url} if source_url else {}),
             },
             "geometry": {"type": "LineString", "coordinates": simplify(points)},

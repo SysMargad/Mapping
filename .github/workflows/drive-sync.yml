@@ -50,6 +50,7 @@ jobs:
         env:
           GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
           NERGUI_UNDUR_RAW_ROOT_FOLDER_ID: ${{ secrets.NERGUI_UNDUR_RAW_ROOT_FOLDER_ID }}
+          HETSUU_HUTUL_ROOT_FOLDER_ID: ${{ secrets.HETSUU_HUTUL_ROOT_FOLDER_ID }}
         run: |
           python tools/sync_drive_sources.py \
             --config drive-sync-sources.json \
