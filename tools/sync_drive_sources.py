@@ -344,6 +344,32 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
     return found, summary
 
 
+def verbose_audit() -> bool:
+    """Whether to print file-level audit rows.
+
+    This repository is public, so its Actions logs are public too. File-level
+    audit rows name Drive files that were inspected but never published, so
+    they are off unless someone deliberately turns them on for a private run.
+    """
+    return os.environ.get("SYNC_VERBOSE_AUDIT", "").strip().lower() in {"1", "true", "yes"}
+
+
+# Report keys that carry no file or folder name and are safe to print.
+SAFE_REPORT_KEYS = (
+    "project", "imported", "trackerRecords", "sourceFilesSeen", "reasonCounts",
+    "declaredSources", "importedSources", "segments",
+)
+
+
+def redact_report(report: dict) -> dict:
+    """Keep only the counting fields of an importer report."""
+    redacted = {key: report[key] for key in SAFE_REPORT_KEYS if key in report}
+    for key in ("unmatched", "rejected", "audit"):
+        if report.get(key):
+            redacted[f"{key}Count"] = len(report[key])
+    return redacted
+
+
 def match_campaign(campaigns: list[dict], project_key: str, candidate: dict) -> dict | None:
     """Return the one campaign that explicitly claims this source, else None.
 
@@ -722,11 +748,10 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             "--report", str(report),
         ], repo)
         import_report = json.loads(report.read_text(encoding="utf-8"))
-        result["importReport"] = {key: value for key, value in import_report.items() if key != "audit"}
-        # The per-file audit names Drive files and folders, so it stays in the
-        # private workflow log and never reaches a published asset.
-        print(f"{project['key']} tracker import audit:")
-        print(json.dumps(import_report.get("audit", []), ensure_ascii=False, indent=2))
+        result["importReport"] = redact_report(import_report)
+        print(f"{project['key']} tracker import: {json.dumps(result['importReport'], ensure_ascii=False)}")
+        if verbose_audit():
+            print(json.dumps(import_report.get("audit", []), ensure_ascii=False, indent=2))
         result.pop("sourceDir")
         result.pop("mapping")
 
@@ -750,9 +775,10 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             "--audit", str(campaign_report),
         ], repo)
         payload = json.loads(campaign_report.read_text(encoding="utf-8"))
-        result["campaignImportReport"] = {key: value for key, value in payload.items() if key != "audit"}
-        print(f"{project['key']} campaign import audit:")
-        print(json.dumps(payload.get("audit", []), ensure_ascii=False, indent=2))
+        result["campaignImportReport"] = redact_report(payload)
+        print(f"{project['key']} campaign import: {json.dumps(result['campaignImportReport'], ensure_ascii=False)}")
+        if verbose_audit():
+            print(json.dumps(payload.get("audit", []), ensure_ascii=False, indent=2))
 
     run([
         python, str(repo / "tools" / "export_project_flight_coverage.py"),

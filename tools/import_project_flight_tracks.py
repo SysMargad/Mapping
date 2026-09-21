@@ -542,7 +542,16 @@ def main() -> None:
     parser.add_argument("--mapping", type=Path)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
-    print(json.dumps(build(args), ensure_ascii=False, indent=2))
+    report = build(args)
+    # Only counts go to stdout: this runs in a public CI log, while the file
+    # names live in the --report file.
+    summary = {
+        key: value for key, value in report.items()
+        if key not in ("unmatched", "rejected", "audit")
+    }
+    summary["unmatchedCount"] = len(report["unmatched"])
+    summary["rejectedCount"] = len(report["rejected"])
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
