@@ -170,6 +170,30 @@
       "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to each matching project licence. It is available only for verified trajectory records."
     },
     {
+      "id": "context-project-campaign-tracks",
+      "project": "Multi-project operations",
+      "scope": "project_operations",
+      "area": "Хэцүү хөтөл",
+      "sensor": "Survey campaign",
+      "dataType": "survey_campaign_track",
+      "plannedActual": "actual",
+      "status": "confirmed_source",
+      "sourceFiles": [
+        "SRVY0-ACQU0_60m-10Hz.csv (7,100 rows, 2025-11-03 03:17:00–07:19:50 UTC)",
+        "SRVY0-ACQU1_40m-10Hz.csv (7,473 rows, 2025-11-03 07:29:16–10:28:16 UTC)"
+      ],
+      "sourceUrls": [
+        "https://drive.google.com/file/d/1YHXfLrAeB1DOgvCqnsjwY_nPiheuPjpR/view",
+        "https://drive.google.com/file/d/1y_yPTowPhBgeIQgGTuCOAaaSwD_YuLBh/view"
+      ],
+      "webAsset": "./data/context/project-campaign-tracks.geojson",
+      "sourceCrs": "EPSG:4326",
+      "displayCrs": "EPSG:4326",
+      "crsVerified": true,
+      "defaultVisible": false,
+      "notes": "Acquisition campaigns that sit outside the 2026 tracker register, kept in their own dataset so no tracker mission, date or sensor is copied onto them. Currently holds 14 segments from the two verified per-acquisition files of 2025-11-03; 1103_latlong.csv was rejected as a duplicate because it is the merge of those two. This is one survey day of the 36 dated folders in the 2025 magnetic campaign — the remaining days are imported when the scheduled Drive sync runs with HETSUU_HUTUL_ROOT_FOLDER_ID configured. Coverage is deliberately not calculated because the swath/line spacing of this campaign is unverified."
+    },
+    {
       "id": "magarrow-planned-survey",
       "project": "Nergui Undur",
       "area": "Heseg Uul hoid",

@@ -14,10 +14,14 @@ import io
 import json
 import math
 import re
+import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree as ET
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import coordinate_sources as cs  # noqa: E402
 
 
 SUPPORTED_SUFFIXES = {".mrk", ".kml", ".kmz", ".csv", ".txt"}
@@ -118,31 +122,31 @@ def parse_kml_bytes(content: bytes) -> list[list[float]]:
     return max(candidates, key=len)
 
 
+class UnsupportedFlightLog(ValueError):
+    """A DJI flight log that this importer cannot decode into coordinates."""
+
+
+def is_binary_flight_log(payload: bytes) -> bool:
+    """DJIFlightRecord .txt is an encoded container, not a text table.
+
+    A .txt extension says nothing about the contents, so the bytes decide.
+    """
+    head = payload[:4096]
+    if not head:
+        return False
+    if head[:1] == b"\x55" or head[:4] in {b"PK\x03\x04", b"\x1f\x8b\x08\x00"}:
+        return True
+    if b"\x00" in head:
+        return True
+    printable = sum(1 for byte in head if 9 <= byte <= 13 or 32 <= byte <= 126 or byte >= 128)
+    return printable / len(head) < 0.9
+
+
 def parse_delimited_text(text: str) -> list[list[float]]:
-    sample = text[:8192]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-    except csv.Error:
-        dialect = csv.excel
-    rows = list(csv.reader(io.StringIO(text), dialect))
-    if not rows:
-        raise ValueError("empty coordinate text")
-    headers = [normalise(value) for value in rows[0]]
-    lon_names = {"lon", "lng", "longitude", "gpslongitude", "gpslon", "long"}
-    lat_names = {"lat", "latitude", "gpslatitude", "gpslat"}
-    lon_index = next((index for index, value in enumerate(headers) if value in lon_names), None)
-    lat_index = next((index for index, value in enumerate(headers) if value in lat_names), None)
-    if lon_index is None or lat_index is None:
-        raise ValueError("coordinate columns not found")
-    points = []
-    for row in rows[1:]:
-        try:
-            points.append([float(row[lon_index]), float(row[lat_index])])
-        except (IndexError, TypeError, ValueError):
-            continue
-    if len(points) < 2:
+    table = cs.parse_table(text)
+    if len(table.points) < 2:
         raise ValueError("fewer than two coordinate rows")
-    return points
+    return [[point.lon, point.lat] for point in table.points]
 
 
 def parse_mrk(text: str) -> list[list[float]]:
@@ -180,7 +184,12 @@ def parse_source(path: Path) -> list[list[float]]:
             return parse_kml_bytes(archive.read(name))
     if suffix == ".kml":
         return parse_kml_bytes(path.read_bytes())
-    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    payload = path.read_bytes()
+    if suffix == ".txt" and is_binary_flight_log(payload):
+        raise UnsupportedFlightLog(
+            "DJI flight log is a binary/encoded container; export coordinates before import"
+        )
+    text = payload.decode("utf-8-sig", errors="replace")
     if suffix == ".mrk":
         return parse_mrk(text)
     return parse_delimited_text(text)
@@ -313,6 +322,10 @@ def source_altitude_stats(path: Path) -> dict:
     return {}
 
 
+class OutsideLicenceExtent(ValueError):
+    """Coordinates do not belong to this project's licence area."""
+
+
 def clean_points(points: list[list[float]], extent) -> list[list[float]]:
     cleaned = []
     for lon, lat in points:
@@ -322,7 +335,7 @@ def clean_points(points: list[list[float]], extent) -> list[list[float]]:
         if not cleaned or point != cleaned[-1]:
             cleaned.append(point)
     if len(cleaned) < 2:
-        raise ValueError("coordinates are outside the project licence extent")
+        raise OutsideLicenceExtent("coordinates are outside the project licence extent")
     return cleaned
 
 
@@ -375,30 +388,49 @@ def load_mapping(path: Path | None) -> dict[str, dict]:
     return result
 
 
-def match_record(path: Path, records: list[dict], mapping: dict[str, dict]) -> tuple[dict | None, dict]:
+def match_record(path: Path, records: list[dict], mapping: dict[str, dict]) -> tuple[dict | None, dict, str]:
+    """Resolve one source file to at most one tracker mission.
+
+    Returns (record, source config, reason). An explicit mapping wins, then a
+    unique exact mission name, then a single unambiguous same-day flight. When
+    two flights on the same day are equally close the file is left unmatched
+    rather than assigned to a guess.
+    """
     config = mapping.get(normalise(path.name), {})
     if config.get("trackerId"):
         matches = [record for record in records if record.get("id") == config["trackerId"]]
-        return (matches[0] if len(matches) == 1 else None), config
+        if len(matches) == 1:
+            return matches[0], config, cs.IMPORTED
+        return None, config, cs.AMBIGUOUS_MATCH if matches else cs.MISSION_UNMATCHED
     if config.get("mission"):
         matches = [record for record in records if record.get("mission") == config["mission"]]
-        return (matches[0] if len(matches) == 1 else None), config
+        if len(matches) == 1:
+            return matches[0], config, cs.IMPORTED
+        return None, config, cs.AMBIGUOUS_MATCH if matches else cs.MISSION_UNMATCHED
     filename_key = normalise(path.stem)
     exact = [record for record in records if normalise(record.get("mission", "")) in filename_key]
     if len(exact) == 1:
-        return exact[0], config
+        return exact[0], config, cs.IMPORTED
+    if len(exact) > 1:
+        return None, config, cs.AMBIGUOUS_MATCH
     started = file_time(path)
     if not started:
-        return None, config
+        return None, config, cs.MISSION_UNMATCHED
     same_day = []
     for record in records:
         candidate = mission_time(record.get("mission", ""))
         if candidate and candidate.date() == started.date():
             same_day.append((abs((candidate - started).total_seconds()), record))
     same_day.sort(key=lambda item: item[0])
-    if same_day and same_day[0][0] <= 20 * 60 and (len(same_day) == 1 or same_day[1][0] - same_day[0][0] >= 3 * 60):
-        return same_day[0][1], config
-    return None, config
+    if not same_day:
+        return None, config, cs.MISSION_UNMATCHED
+    if same_day[0][0] > 20 * 60:
+        return None, config, cs.DATE_MISMATCH
+    # More than one flight that day sits within the separation window, so the
+    # nearest-in-time rule cannot pick a winner on its own.
+    if len(same_day) > 1 and same_day[1][0] - same_day[0][0] < 3 * 60:
+        return None, config, cs.AMBIGUOUS_MATCH
+    return same_day[0][1], config, cs.IMPORTED
 
 
 def build(args) -> dict:
@@ -411,21 +443,41 @@ def build(args) -> dict:
     existing = json.loads(args.existing.read_text(encoding="utf-8")) if args.existing.exists() else {"type": "FeatureCollection", "features": []}
     features = list(existing.get("features", []))
     imported, unmatched, rejected = [], [], []
+    audit = []
     seen_tracker_ids = set()
+
+    def note(path, code, detail, tracker_id=None):
+        item = {"file": path.name, "reason": code, "detail": detail}
+        if tracker_id:
+            item["trackerId"] = tracker_id
+        audit.append(item)
+
     for path in sorted(item for item in args.source_dir.rglob("*") if item.suffix.lower() in SUPPORTED_SUFFIXES):
-        record, source_config = match_record(path, records, mapping)
+        record, source_config, reason = match_record(path, records, mapping)
         if not record:
             unmatched.append(str(path.relative_to(args.source_dir)))
+            note(path, reason, "no single tracker mission could be resolved")
             continue
         if record["id"] in seen_tracker_ids:
             rejected.append({"file": path.name, "reason": f"duplicate tracker match {record['id']}"})
+            note(path, cs.DUPLICATE_SOURCE, f"tracker mission {record['id']} already has a source", record["id"])
             continue
         try:
             raw_points = parse_source(path)
             points = clean_points(raw_points, extent)
+        except UnsupportedFlightLog as error:
+            rejected.append({"file": path.name, "trackerId": record["id"], "reason": str(error)})
+            note(path, cs.UNSUPPORTED_FLIGHT_LOG, str(error), record["id"])
+            continue
+        except OutsideLicenceExtent as error:
+            rejected.append({"file": path.name, "trackerId": record["id"], "reason": str(error)})
+            note(path, cs.WRONG_PROJECT_LOCATION, str(error), record["id"])
+            continue
         except Exception as error:
             rejected.append({"file": path.name, "trackerId": record["id"], "reason": str(error)})
+            note(path, cs.INVALID_COORDINATES, str(error), record["id"])
             continue
+        note(path, cs.IMPORTED, f"{len(points)} points inside the licence extent", record["id"])
         seen_tracker_ids.add(record["id"])
         project = PROJECTS[args.project]
         source_url = source_config.get("sourceUrl")
@@ -461,7 +513,19 @@ def build(args) -> dict:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    report = {"project": args.project, "imported": len(imported), "unmatched": unmatched, "rejected": rejected}
+    reason_counts: dict[str, int] = {}
+    for item in audit:
+        reason_counts[item["reason"]] = reason_counts.get(item["reason"], 0) + 1
+    report = {
+        "project": args.project,
+        "imported": len(imported),
+        "trackerRecords": len(records),
+        "sourceFilesSeen": len(audit),
+        "reasonCounts": dict(sorted(reason_counts.items())),
+        "unmatched": unmatched,
+        "rejected": rejected,
+        "audit": audit,
+    }
     if args.report:
         args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report

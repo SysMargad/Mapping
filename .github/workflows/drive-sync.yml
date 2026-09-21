@@ -60,6 +60,7 @@ jobs:
       - name: Validate generated site data
         if: steps.credential.outputs.available == 'true'
         run: |
+          python -m unittest discover -s tests -t .
           python tools/validate_data.py
           node --check dist/app.js
 
@@ -68,15 +69,20 @@ jobs:
         id: changes
         shell: bash
         run: |
-          if git diff --quiet -- \
-            dist/data/context/project-trackers.json \
-            dist/data/context/project-control-points.geojson \
-            dist/data/context/project-flight-tracks.geojson \
-            dist/data/context/project-flight-coverage.json; then
+          if git diff --quiet -- dist/data; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # The manifest is only rebuilt when the data actually changed, otherwise
+      # its version string would make every run look like a change.
+      - name: Rebuild asset manifest
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python tools/build_manifest.py \
+            --version "$(date -u +%Y-%m-%d).${GITHUB_RUN_NUMBER}" \
+            --updated "$(date -u +%Y-%m-%d)"
 
       - name: Commit and push verified changes
         if: steps.changes.outputs.changed == 'true'
@@ -84,11 +90,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            dist/data/context/project-trackers.json \
-            dist/data/context/project-control-points.geojson \
-            dist/data/context/project-flight-tracks.geojson \
-            dist/data/context/project-flight-coverage.json
+          git add -- dist/data
+          git status --short -- dist/data
           git commit -m "Sync verified Drive survey data"
           git push origin HEAD:main
 

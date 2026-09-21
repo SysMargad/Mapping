@@ -32,6 +32,7 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн provenance asset. Control point нь trajectory биш тул map дээр цэнхэр цэгээр дүрслэхгүй.
 - `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ болон зураг авалтын `Timestamp.MRK` GNSS байрлалаас баталгаажсан бодит trajectory. Бүдүүн хадын 120, Арцатын 1 нислэг огноо/sensor-оор харагдана.
 - `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
+- `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
 - `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
@@ -134,6 +135,22 @@ Coverage нь trajectory-н төв шугамаас тал бүрт 25 м бую
 
 Importer нь coordinate-той файлгүй tracker мөрөөс шугам зохиохгүй. Mission/огноо зөрсөн, лицензийн талбайгаас гадуур координаттай, эсвэл нэг mission-тэй давхар таарсан файлыг `rejected`/`unmatched` тайланд үлдээнэ. Амжилттай орсон Хэцүү хөтлийн trajectory нь одоо байгаа map-ийн sensor → өдөр сонголтоор Нэргүй өндөр, Бүдүүн хадтай адил шугамаар харагдаж, ниссэн талбайн тооцоонд орно.
 
+Tracker-т хамаарахгүй судалгааны campaign (жишээ нь Хэцүү хөтлийн 2025 оны соронзон хэмжилтийн GPS зам):
+
+```powershell
+& $python .\tools\import_campaign_tracks.py `
+  "<Drive-аас татсан campaign файлын хавтас>" `
+  --project hetsuu-hutul `
+  --campaigns .\drive-sync-sources.json `
+  --licences .\dist\data\context\licenses.geojson `
+  --mapping "<campaign-mapping.json>" `
+  --existing .\dist\data\context\project-campaign-tracks.geojson `
+  --output .\dist\data\context\project-campaign-tracks.geojson `
+  --audit "<private audit зам>"
+```
+
+Campaign нь `drive-sync-sources.json`-ы `campaigns` хэсэгт **тодорхой зарлагдсан** байх ёстой: зөвхөн байршлаасаа болж ямар ч хүснэгт замд хувирахгүй. Importer нь файлын өөрийнх нь header-ээс latitude/longitude-г танина (`tools/coordinate_sources.py`), GCP/sample цэгийн хүснэгтийг татгалзана, огноо/цагийг файлын өөрийн баганаас л авна, бичлэгийн тасалдал бүрээр замыг салгана, raw болон merged CSV-ийн давхардлыг checksum ба координатын давхцалаар шийдэж canonical сонголтоо audit-д тэмдэглэнэ. Мэдэгдэхүйц огноо/цаггүй эх сурвалж нь `review_required` статустай үлдэнэ. Audit нь `IMPORTED`, `MISSING_SOURCE`, `ACCESS_DENIED`, `UNSUPPORTED_FLIGHT_LOG`, `INVALID_COORDINATES`, `AMBIGUOUS_DATE_TIME`, `DATE_MISMATCH`, `MISSION_UNMATCHED`, `AMBIGUOUS_MATCH`, `DUPLICATE_SOURCE`, `WRONG_PROJECT_LOCATION` шалтгааны кодуудыг ашиглана. Audit нь Drive-ийн файл/хавтасны нэрийг агуулдаг тул зөвхөн workflow-ийн private log-д үлдэж, public asset-д гардаггүй.
+
 Nergui Undur licence only:
 
 ```powershell
@@ -172,10 +189,13 @@ The exporter stops instead of guessing ambiguous coordinate or time columns.
 ## Validation and release
 
 ```powershell
+& $python -m unittest discover -s tests -t .
 & $python .\tools\normalise_assets.py
 & $python .\tools\validate_data.py
 & $python .\tools\build_manifest.py --version 2026-09-17.7 --updated 2026-09-17
 node --check .\dist\app.js
 ```
+
+`tests/` нь зөвхөн стандарт сангаар ажилладаг (openpyxl, Drive SDK шаардахгүй) тул `pages.yml` болон `drive-sync.yml` хоёулаа ажиллуулдаг.
 
 `main` branch руу push хийхэд `.github/workflows/pages.yml` нь `dist/`-ийг GitHub Pages-д deploy хийнэ. Static Pages deploy хийхийн өмнө registry, GeoJSON, manifest-ийг нэг commit-д хамт шинэчилнэ.
