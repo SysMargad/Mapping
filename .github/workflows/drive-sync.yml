@@ -55,7 +55,8 @@ jobs:
           python tools/sync_drive_sources.py \
             --config drive-sync-sources.json \
             --repo . \
-            --workspace "$RUNNER_TEMP/mapping-drive-sync"
+            --workspace "$RUNNER_TEMP/mapping-drive-sync" \
+            --step-summary "$GITHUB_STEP_SUMMARY"
 
       - name: Validate generated site data
         if: steps.credential.outputs.available == 'true'

@@ -15,6 +15,8 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 3. GitHub repository-н `Settings → Secrets and variables → Actions` хэсэгт `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` нэртэй repository secret үүсгээд JSON key-ийн бүтэн агуулгыг оруулна. Key файлыг repository-д commit хийж болохгүй.
 4. `Actions → Sync Google Drive survey data → Run workflow` гэж нэг удаа гараар ажиллуулж, амжилттай болсныг шалгана. Secret байхгүй үед scheduled run нь өгөгдөл өөрчлөхгүйгээр safe skip хийнэ.
 
+Sync ажилласны дараа `Actions → Sync Google Drive survey data → <run>` хуудасны **Summary** хэсэгт шатны тоолуур гарна: аль secret тохируулагдсан, хэдэн хавтас скан хийсэн, хэдэн файл шалгасан, хэдэн header probe зарцуулсан, хэдийг татсан, project бүрийн reason code-ийн тоо. Уг хүснэгт нь зөвхөн тоо агуулах бөгөөд Drive-ийн файл/хавтасны нэр, secret-ийн утгыг хэвлэдэггүй; файлын нэр бүхий дэлгэрэнгүй audit нь зөвхөн job-ийн log-д үлдэнэ. `Unreadable` багана өндөр байвал энэ нь код биш, **share эрхийн** асуудал.
+
 Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
 
 Нэргүй өндөр төслийн `Raw Data` хавтсыг тоолохдоо root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дэд хавтас бүрийн `DJI...` нэртэй файлыг тоолж, яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж log-д нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset-д нийтлэхгүй; 4/11-ээс өөр тоотой хавтсыг `unclassifiedFolderCountsByDjiFileCount` хэсэгт зөвхөн тоогоор тайлагнана.

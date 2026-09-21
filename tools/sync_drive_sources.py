@@ -764,9 +764,59 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "projects": project_results,
         "nerguiUndurRawSensorCounts": raw_sensor_summary,
         "hetsuuHutulDroneSources": hetsuu_drone_summary,
+        "secretsConfigured": {
+            "HETSUU_HUTUL_ROOT_FOLDER_ID": bool(hetsuu_root_folder_id),
+            "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": bool(raw_root_folder_id),
+        },
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
+
+
+def step_summary(summary: dict) -> str:
+    """Render the sync outcome as markdown, counts only.
+
+    This goes to the Actions run summary, so it must name no Drive file or
+    folder. Only whether a secret is present is reported, never its value.
+    """
+    lines = ["## Drive sync", ""]
+    secrets = summary.get("secretsConfigured", {})
+    lines.append("| Secret | Configured |")
+    lines.append("| --- | --- |")
+    for name, present in sorted(secrets.items()):
+        lines.append(f"| `{name}` | {'yes' if present else '**no**'} |")
+    discovery = summary.get("hetsuuHutulDroneSources")
+    lines += ["", "### Hetsuu project-root discovery", ""]
+    if discovery:
+        for key in ("matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
+                    "headerProbesUsed", "coordinateSourceCount", "dateFrom", "dateTo"):
+            lines.append(f"- {key}: `{discovery.get(key)}`")
+        for label in ("sourceCountByType", "discoveryDecisions"):
+            if discovery.get(label):
+                lines.append(f"- {label}: `{json.dumps(discovery[label], ensure_ascii=False)}`")
+    else:
+        lines.append("- not run (secret missing or discovery failed)")
+    lines += ["", "### Per project", "",
+              "| Project | Tracker rows | Folders scanned | Unreadable | Candidates | Downloaded | Tracker tracks | Campaign segments |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for key, result in sorted(summary.get("projects", {}).items()):
+        stage = result.get("stages", {})
+        lines.append(
+            f"| {key} | {result.get('trackerMissionRows', 0)} | {stage.get('missionFoldersScanned', 0)} "
+            f"| {stage.get('missionFoldersUnreadable', 0)} | {stage.get('candidateFilesFound', 0)} "
+            f"| {stage.get('sourcesDownloaded', 0)} | {result.get('importReport', {}).get('imported', 0)} "
+            f"| {result.get('campaignImportReport', {}).get('segments', 0)} |"
+        )
+    lines += ["", "### Reason codes", ""]
+    for key, result in sorted(summary.get("projects", {}).items()):
+        merged: dict[str, int] = {}
+        for source in (result.get("reasons", {}),
+                       result.get("importReport", {}).get("reasonCounts", {}),
+                       result.get("campaignImportReport", {}).get("reasonCounts", {})):
+            for code, count in (source or {}).items():
+                merged[code] = merged.get(code, 0) + count
+        lines.append(f"- **{key}**: `{json.dumps(merged, ensure_ascii=False) if merged else '{}'}`")
+    return "\n".join(lines) + "\n"
 
 
 def main() -> None:
@@ -774,8 +824,12 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--repo", required=True, type=Path)
     parser.add_argument("--workspace", required=True, type=Path)
+    parser.add_argument("--step-summary", type=Path, help="Write a counts-only markdown summary here.")
     args = parser.parse_args()
-    sync(args.config.resolve(), args.repo.resolve(), args.workspace.resolve())
+    summary = sync(args.config.resolve(), args.repo.resolve(), args.workspace.resolve())
+    if args.step_summary:
+        with args.step_summary.open("a", encoding="utf-8") as handle:
+            handle.write(step_summary(summary))
 
 
 if __name__ == "__main__":
