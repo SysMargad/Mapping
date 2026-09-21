@@ -53,6 +53,20 @@ class Registry(unittest.TestCase):
         result = subprocess.run(["node", "--check", str(DIST / "app.js")], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_app_script_cache_key_is_current(self):
+        index = (DIST / "index.html").read_text(encoding="utf-8")
+        self.assertIn('app.js?v=2026-09-21.1', index)
+
+    def test_fit_map_includes_filtered_campaign_tracks(self):
+        app = (DIST / "app.js").read_text(encoding="utf-8")
+        start = app.index("const visibleLayers = () =>")
+        fit_start = app.index("const fitMap = () =>", start)
+        fit_end = app.index("const removeAllDataLayers = () =>", fit_start)
+        self.assertIn("selectedCampaignLayers()", app[start:fit_start])
+        fit_map = app[fit_start:fit_end]
+        self.assertIn("state.selectedCampaignId", fit_map)
+        self.assertIn("focused.length ? focused : visibleLayers()", fit_map)
+
 
 class ExistingProjectsUnaffected(unittest.TestCase):
     """Requirement 8.11: the other projects and layers keep working."""

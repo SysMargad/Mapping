@@ -1793,6 +1793,10 @@
     for (const layer of state.licenseContextLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of state.projectControlLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     for (const layer of selectedProjectFlightLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
+    // Campaign tracks are not part of the tracker-flight collection. Include
+    // their currently filtered layers explicitly so the shared “Fit map”
+    // control has the same bounds as the campaign/date auto-focus flow.
+    for (const layer of selectedCampaignLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
@@ -1802,7 +1806,13 @@
   };
 
   const fitMap = () => {
-    const group = L.featureGroup(visibleLayers());
+    // When a flight or campaign is selected, fit that trajectory alone. Base,
+    // licence and CAD reference layers can span a much larger area and would
+    // otherwise shrink the selected track to an unreadable dot.
+    const focused = state.selectedCampaignId
+      ? selectedCampaignLayers()
+      : (state.selectedTrackerProject && state.selectedTrackerSensor ? selectedProjectFlightLayers() : []);
+    const group = L.featureGroup(focused.length ? focused : visibleLayers());
     const bounds = group.getBounds();
     if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
   };
