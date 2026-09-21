@@ -19,5 +19,34 @@
   "folderScanDepth": 2,
   "projectRootDiscoveryDepth": 5,
   "projectRootScanDepth": 8,
-  "maxSourceSizeBytes": 104857600
+  "maxSourceSizeBytes": 104857600,
+  "campaigns": [
+    {
+      "id": "hetsuu-hutul-2025-magnetic",
+      "projectKey": "hetsuu-hutul",
+      "label": "2025 Соронзон хэмжилтийн GPS зам",
+      "campaignYear": 2025,
+      "sensor": "Magnetic survey",
+      "sensorVerified": false,
+      "gnssSource": "unverified",
+      "timeZone": "unverified",
+      "sourceKind": "Survey GNSS coordinate table",
+      "coverageStatus": "not_calculated",
+      "coverageNote": "Зурвасын өргөн болон шугамын алхам баталгаажаагүй тул хамрах талбайг тооцоогүй.",
+      "timeGapSeconds": 30,
+      "distanceGapM": 250,
+      "minSegmentPoints": 20,
+      "simplifyToleranceM": 2.5,
+      "licenceMarginDegrees": 0.02,
+      "maxOutsideFraction": 0.5,
+      "acquisitionFilePatterns": ["SRVY\\d+[-_]ACQU\\d+"],
+      "match": {
+        "fileNamePatterns": [
+          "SRVY\\d+[-_]ACQU\\d+.*\\.csv$",
+          "^\\d{4}_latlong\\.csv$",
+          "^\\d{4}-\\d{4}_all\\.csv$"
+        ]
+      }
+    }
+  ]
 }

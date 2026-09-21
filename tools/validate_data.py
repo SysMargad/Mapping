@@ -54,6 +54,18 @@ def validate_geojson(
             errors.append(
                 f"{path}:{fid}: expected dataType {expected_data_type!r}, got {props.get('dataType')!r}"
             )
+        if props.get("dataType") == "survey_campaign_track":
+            if geometry.get("type") not in ("LineString", "MultiLineString"):
+                errors.append(f"{path}:{fid}: campaign track must be a line")
+            # A campaign is a separate acquisition programme. Borrowing a
+            # tracker mission or tracker id would merge the two registers.
+            for field in ("trackerId", "mission", "flightRecordVerified"):
+                if field in props:
+                    errors.append(f"{path}:{fid}: campaign track must not carry {field}")
+            if not props.get("campaignId"):
+                errors.append(f"{path}:{fid}: campaign track needs a campaignId")
+            if props.get("coverageStatus") not in ("not_calculated", "calculated"):
+                errors.append(f"{path}:{fid}: campaign track needs an explicit coverageStatus")
         if props.get("dataType") == "actual_flight_track":
             source_file = str(props.get("sourceFile", "")).lower()
             verified_flight_record = (

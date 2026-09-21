@@ -56,6 +56,10 @@
     projectFlightData: null,
     projectFlightCoverage: null,
     projectFlightLayers: new Map(),
+    campaignData: null,
+    campaignLayers: new Map(),
+    selectedCampaignId: null,
+    selectedCampaignDate: "all",
     licenseBrowserMode: "licence",
     uchastikData: null,
     uchastikFeatureLayers: new Map(),
@@ -357,17 +361,29 @@
     const dailyAreas = Object.values(coverage?.dailyAreaM2 || {}).filter(Number.isFinite);
     const allDaysArea = coverage ? dailyAreas.reduce((sum, area) => sum + area, 0) : NaN;
     const selectedArea = selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : coverage?.totalAreaM2;
+    // A campaign whose swath is unverified has no coverage figure at all. That
+    // is not the same as a measured zero, so it is never rendered as 0 м².
+    const campaign = state.selectedCampaignId
+      ? projectCampaigns(state.selectedTrackerProject).find((item) => item.id === state.selectedCampaignId)
+      : null;
+    const coverageText = (value) => {
+      if (campaign) return "Тооцоогүй";
+      if (Number.isFinite(value)) return formatArea(value);
+      return coverage ? "Өгөгдөл дутуу" : "Тооцоогүй";
+    };
     ui.primaryLabel.textContent = "Нийт талбай";
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
-    ui.secondaryValue.textContent = formatArea(selectedArea);
+    ui.secondaryValue.textContent = coverageText(selectedArea);
     ui.tertiaryLabel.textContent = "Бүх өдрийн нийлбэр";
-    ui.tertiaryValue.textContent = formatArea(allDaysArea);
-    ui.summaryNote.textContent = coverage
-      ? `${state.areaScope.label} · ${state.selectedTrackerSensor || "MagArrow"} · ${selectedDate || "Бүх огноо"} · Баталгаажсан trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
-      : state.areaScope
-        ? `${state.areaScope.label} · Сонгосон sensor/өдөрт баталгаажсан trajectory geometry байхгүй.`
-        : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
+    ui.tertiaryValue.textContent = coverageText(coverage ? allDaysArea : undefined);
+    ui.summaryNote.textContent = campaign
+      ? `${state.areaScope?.label || ""} · ${campaign.label} · Зурвасын өргөн баталгаажаагүй тул ниссэн талбайг тооцоогүй. ${campaign.coverageNote || ""}`.trim()
+      : coverage
+        ? `${state.areaScope.label} · ${state.selectedTrackerSensor || "MagArrow"} · ${selectedDate || "Бүх огноо"} · Баталгаажсан trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
+        : state.areaScope
+          ? `${state.areaScope.label} · Сонгосон sensor/өдөрт баталгаажсан trajectory geometry байхгүй тул ниссэн талбайг тооцоогүй.`
+          : "Талбай сонгоход үзүүлэлт шинэчлэгдэнэ.";
   };
 
   const setAreaScope = (label, features, coverageKey = null) => {
@@ -890,24 +906,52 @@
         </div>
         <p class="truth-note">DWG-ийн талбай, участик, хэсгийн хүрээг map дээр зураасаар харуулав. CAD цэгүүдийг Base layers хэсгээс тусад нь асаана. Эдгээр нь reference geometry бөгөөд ниссэн trajectory биш.</p>
       </details>` : "";
+    // Tracker rows with a trajectory, versus rows whose coordinate source has
+    // not arrived. A segment count is never presented as a flight count.
+    const trackerGeometry = projectFlightFeatures(projectKey, null, "all");
+    const mappedTrackerIds = new Set(trackerGeometry.map((feature) => feature.properties?.trackerId));
+    const missingSource = (state.trackerData?.records || [])
+      .filter((record) => record.projectKey === projectKey && !mappedTrackerIds.has(record.id)).length;
+    const campaigns = projectCampaigns(projectKey);
+    const campaignRows = campaigns.map((campaign) => `
+      <button type="button" class="tracker-sensor-row${state.selectedCampaignId === campaign.id ? " is-active" : ""}" data-campaign="${escapeHtml(campaign.id)}">
+        <strong>${escapeHtml(campaign.year ? String(campaign.year) : campaign.id)}</strong>
+        <span>${escapeHtml(campaign.sensor)}${campaign.sensorVerified ? "" : " (баталгаажаагүй)"}</span>
+        <b>${formatCount(campaign.acquisitions.size)} acquisition · ${formatCount(campaign.segments)} сегмент</b>
+      </button>`).join("");
+    const campaignSection = campaigns.length ? `
+      <details class="nested-panel" open>
+        <summary>Судалгааны campaign <span>${formatCount(campaigns.length)}</span></summary>
+        <div class="tracker-sensors">${campaignRows}</div>
+        <p class="truth-note">Эдгээр нь tracker бүртгэлээс тусдаа acquisition campaign. Огноо, sensor, mission-ийг 2026 оны бүртгэлтэй холбоогүй. Хамрах талбайг тооцоогүй.</p>
+      </details>` : "";
     ui.projectTrackerPanel.innerHTML = `
       <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge survey">ACTUAL RECORDS</span></div>
       <div class="tracker-kpis">
         <div><span>Нислэгийн бүртгэл</span><strong>${formatCount(project.records)}</strong></div>
+        <div><span>GPS замтай нислэг</span><strong>${formatCount(mappedTrackerIds.size)}</strong></div>
+        <div><span>Эх сурвалж дутуу</span><strong>${formatCount(missingSource)}</strong></div>
+      </div>
+      <div class="tracker-kpis">
         <div><span>Ниссэн өдөр</span><strong>${formatCount(project.flightDays)}</strong></div>
         <div><span>Зургийн тоо</span><strong>${formatCount(project.images)}</strong></div>
+        <div><span>Campaign acquisition</span><strong>${formatCount(campaigns.reduce((sum, item) => sum + item.acquisitions.size, 0))}</strong></div>
       </div>
       <div class="tracker-sensors">${sensorRows}</div>
       <p class="panel-note">${formatCount(copied)}/${formatCount(project.records)} файл хуулсан · QAQC “Тийм”: ${formatCount(qaQcDone)} · Base ${formatCount(baseCount)} · GCP ${formatCount(gcpCount)}.</p>
+      ${campaignSection}
       ${cadReference}
       <details class="nested-panel">
         <summary>Өдрийн бүртгэл <span>${formatCount(project.flightDays)}</span></summary>
         <div class="tracker-daily">${dailyRows}</div>
       </details>
-      <p class="truth-note">Actual flight register: ${formatCount(project.records)} бүртгэл. Баталгаажсан trajectory geometry: ${formatCount(projectFlightFeatures(projectKey, null, "all").length)}. Geometry байхгүй бүртгэлийг шугам болгон таамаглаагүй.</p>
+      <p class="truth-note">Actual flight register: ${formatCount(project.records)} бүртгэл. Баталгаажсан trajectory geometry: ${formatCount(trackerGeometry.length)}. ${missingSource ? `${formatCount(missingSource)} бүртгэлд GPS замын эх файл импортлогдоогүй.` : ""} Geometry байхгүй бүртгэлийг шугам болгон таамаглаагүй.</p>
       <a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`;
     for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-sensor]")) {
       button.addEventListener("click", () => selectSensor(button.dataset.trackerSensor));
+    }
+    for (const button of ui.projectTrackerPanel.querySelectorAll("[data-campaign]")) {
+      button.addEventListener("click", () => selectSensor(`${CAMPAIGN_PREFIX}${button.dataset.campaign}`));
     }
     for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-day]")) {
       button.addEventListener("click", () => {
@@ -929,6 +973,9 @@
     const project = state.trackerData?.projects?.[projectKey];
     state.selectedTrackerSensor = Object.keys(project?.sensors || {})[0] || null;
     state.selectedTrackerDate = "all";
+    state.selectedCampaignId = null;
+    state.selectedCampaignDate = "all";
+    syncCampaignVisibility();
     state.activeSensor = state.selectedTrackerSensor || "MagArrow";
     const control = state.baseLayers.get("trackerControl");
     if (control) {
@@ -981,6 +1028,113 @@
         onEachFeature(itemFeature, item) { item.bindPopup(projectFlightPopup(itemFeature)); },
       });
       state.projectFlightLayers.set(feature.id, layer);
+    }
+  };
+
+  const CAMPAIGN_PREFIX = "campaign:";
+
+  const acquisitionDay = (feature) => {
+    const start = feature.properties?.startTime;
+    return typeof start === "string" && start.length >= 10 ? start.slice(0, 10) : null;
+  };
+
+  const campaignFeatures = (projectKey, campaignId = null, date = "all") => (
+    (state.campaignData?.features || []).filter((feature) => {
+      const props = feature.properties || {};
+      if (props.projectKey !== projectKey) return false;
+      if (campaignId && props.campaignId !== campaignId) return false;
+      if (date && date !== "all" && acquisitionDay(feature) !== date) return false;
+      return true;
+    })
+  );
+
+  const projectCampaigns = (projectKey) => {
+    const byId = new Map();
+    for (const feature of campaignFeatures(projectKey)) {
+      const props = feature.properties || {};
+      const entry = byId.get(props.campaignId) || {
+        id: props.campaignId,
+        label: props.campaignLabel || props.campaignId,
+        year: props.campaignYear,
+        sensor: props.sensor,
+        sensorVerified: props.sensorVerified === true,
+        gnssSource: props.gnssSource,
+        coverageStatus: props.coverageStatus,
+        coverageNote: props.coverageNote,
+        segments: 0,
+        acquisitions: new Set(),
+        dates: new Set(),
+        qaFlags: new Set(),
+        reviewRequired: 0,
+        sourceFiles: new Set(),
+        sourceKinds: new Set(),
+      };
+      entry.segments += 1;
+      entry.acquisitions.add(String(props.acquisitionId || "").split("#")[0]);
+      const day = acquisitionDay(feature);
+      if (day) entry.dates.add(day);
+      for (const flag of props.qaFlags || []) entry.qaFlags.add(flag);
+      if (props.status === "review_required") entry.reviewRequired += 1;
+      if (props.sourceFile) entry.sourceFiles.add(props.sourceFile);
+      if (props.sourceKind) entry.sourceKinds.add(props.sourceKind);
+      byId.set(props.campaignId, entry);
+    }
+    return [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  };
+
+  const selectedCampaignLayers = () => campaignFeatures(
+    state.selectedTrackerProject, state.selectedCampaignId, state.selectedCampaignDate,
+  ).map((feature) => state.campaignLayers.get(feature.id)).filter(Boolean);
+
+  const syncCampaignVisibility = () => {
+    for (const layer of state.campaignLayers.values()) state.map.removeLayer(layer);
+    if (!state.selectedCampaignId) return;
+    for (const layer of selectedCampaignLayers()) layer.addTo(state.map);
+  };
+
+  const campaignPopup = (feature) => {
+    const props = feature.properties || {};
+    const sourceAltitude = Number.isFinite(props.sourceAltitudeMinM)
+      ? `${Math.round(props.sourceAltitudeMinM)}–${Math.round(props.sourceAltitudeMaxM)} m (${props.sourceAltitudeReference || "source altitude"})`
+      : null;
+    const relative = Number.isFinite(props.flightHeightMinM)
+      ? `${Math.round(props.flightHeightMinM)}–${Math.round(props.flightHeightMaxM)} m (${props.flightHeightReference || "relative height"})`
+      : null;
+    return popup([
+      ["Project", props.area || props.project],
+      ["Campaign", `${props.campaignLabel || props.campaignId}${props.campaignYear ? ` (${props.campaignYear})` : ""}`],
+      ["Sensor", `${props.sensor}${props.sensorVerified ? "" : " · төхөөрөмж баталгаажаагүй"}`],
+      ["GNSS байрлал", props.gnssSource === "unverified" ? "Мэдрэгч/дрон аль нь эсэх баталгаажаагүй" : props.gnssSource],
+      ["Acquisition", props.acquisitionId],
+      ["Segment", `${props.segmentIndex}/${props.segmentCount}`],
+      ["Start", props.startTime ? `${props.startTime} (${props.timeZone || "tz unverified"})` : "цаг баталгаажаагүй"],
+      ["End", props.endTime || null],
+      ["Sampling", Number.isFinite(props.samplingIntervalSeconds) ? `${props.samplingIntervalSeconds} s` : null],
+      ["Огнооны эх сурвалж", props.timestampProvenance],
+      ["Points", `${props.pointCount} → ${props.simplifiedPointCount} (simplified)`],
+      ["Type", props.sourceKind],
+      ["QA", (props.qaFlags || []).length ? props.qaFlags.join(", ") : "clean"],
+      ["Status", props.status],
+      ["Coverage", props.coverageStatus === "not_calculated" ? "Тооцоогүй — зурвасын өргөн баталгаажаагүй" : props.coverageStatus],
+      ["Source altitude", sourceAltitude],
+      ["Relative height", relative],
+      ["Source", props.sourceFile],
+    ]);
+  };
+
+  const loadProjectCampaigns = async () => {
+    const config = dataset("context-project-campaign-tracks");
+    if (!config) return;
+    const data = await fetchJson(config.webAsset);
+    assertProjectOperations(data, "Project campaign tracks", "survey_campaign_track");
+    state.campaignData = data;
+    for (const feature of data.features || []) {
+      const layer = L.geoJSON(feature, {
+        pane: "actualPane",
+        style: { color: "#ffd166", weight: 3, opacity: 0.95, dashArray: "6 3" },
+        onEachFeature(itemFeature, item) { item.bindPopup(campaignPopup(itemFeature)); },
+      });
+      state.campaignLayers.set(feature.id, layer);
     }
   };
 
@@ -1206,6 +1360,7 @@
     for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.campaignLayers.values()) state.map.removeLayer(layer);
   };
 
   const loadMissionPlans = async () => {
@@ -1380,23 +1535,27 @@
       const hasGeometry = Boolean(geometry);
       const displayDate = geometry?.properties?.date || record.date;
       const geometryProps = geometry?.properties || {};
+      // Source altitude, relative height and true AGL are different things, so
+      // each value states which one it is.
       const altitude = Number.isFinite(geometryProps.flightHeightMeanM)
-        ? `${Math.round(geometryProps.flightHeightMeanM)} м AGL/relative`
+        ? `${Math.round(geometryProps.flightHeightMeanM)} м relative (эх файлын багана)`
         : Number.isFinite(geometryProps.sourceAltitudeMeanM)
           ? `${Math.round(geometryProps.sourceAltitudeMeanM)} м GNSS/absolute`
-          : record.altitudeM ? `${record.altitudeM} м` : "өндөргүй";
+          : record.altitudeM ? `${record.altitudeM} м (tracker-ийн төлөвлөсөн өндөр)` : "өндөргүй";
       return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(displayDate)} · ${escapeHtml(altitude)}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
     }).join("");
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>
       <h3>Ниссэн trajectory өдөр</h3>
-      ${geometryCount ? '<div id="tracker-flight-date-list" class="flight-date-list"></div>' : '<p class="truth-note">Энэ sensor-д coordinate бүхий trajectory файл олдоогүй. Өдрийн бүртгэлийг доороос харна уу.</p>'}
+      ${geometryCount
+        ? '<div id="tracker-flight-date-list" class="flight-date-list"></div>'
+        : `<p class="truth-note">Нислэгийн бүртгэл байна (${formatCount(records.length)}), GPS замын эх файл импортлогдоогүй. Ниссэн талбайг тооцоогүй — 0 гэсэн үг биш.</p>`}
       <h3>Бодит нислэгийн бүртгэл</h3>
       <div class="tracker-flight-records">${missionRows}</div>
       ${state.selectedTrackerDate !== "all" && !visibleGeometryCount && cadReferenceLabels.length
         ? `<p class="truth-note">Trajectory координат хараахан ирээгүй. Mission нэртэй таарсан CAD хэсэг рүү төвлөрөв: ${escapeHtml(cadReferenceLabels.join(", "))}.</p>`
         : ""}
-      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory. MRK/KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
+      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory · ${formatCount(records.length - geometryByTrackerId.size)} бүртгэлд эх сурвалж дутуу. MRK/KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
     const dateList = ui.sensorPanel.querySelector("#tracker-flight-date-list");
     for (const option of dateOptions) {
       const button = document.createElement("button");
@@ -1419,6 +1578,75 @@
     renderTrackerSensorPanel(state.selectedTrackerSensor);
     renderAreaSummary();
     if (shouldFit) fitTrackerDateSelection();
+  };
+
+  const fitCampaignSelection = () => {
+    const layers = selectedCampaignLayers();
+    if (layers.length) fitSingleLayer(L.featureGroup(layers));
+    else fitSingleLayer(state.licenseContextLayers.get(state.selectedContextLicense));
+  };
+
+  const selectCampaignDate = (date, shouldFit = true) => {
+    state.selectedCampaignDate = date;
+    syncCampaignVisibility();
+    renderCampaignPanel(state.selectedCampaignId);
+    renderAreaSummary();
+    if (shouldFit) fitCampaignSelection();
+  };
+
+  const renderCampaignPanel = (campaignId) => {
+    const campaign = projectCampaigns(state.selectedTrackerProject)
+      .find((item) => item.id === campaignId);
+    if (!campaign) return;
+    const all = campaignFeatures(state.selectedTrackerProject, campaignId, "all");
+    const visible = campaignFeatures(state.selectedTrackerProject, campaignId, state.selectedCampaignDate);
+    const dates = [...campaign.dates].sort();
+    const undatedCount = all.filter((feature) => !acquisitionDay(feature)).length;
+    const dateOptions = [{ value: "all", label: "Бүх acquisition", count: all.length }]
+      .concat(dates.map((date) => ({
+        value: date,
+        label: date,
+        count: campaignFeatures(state.selectedTrackerProject, campaignId, date).length,
+      })));
+    const intervals = all
+      .map((feature) => feature.properties?.samplingIntervalSeconds)
+      .filter((value) => Number.isFinite(value));
+    const sampling = intervals.length
+      ? `${Math.min(...intervals)}–${Math.max(...intervals)} s`
+      : "хэмжигдээгүй";
+    const dateRange = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : "огноо баталгаажаагүй";
+    const qa = campaign.qaFlags.size ? [...campaign.qaFlags].join(", ") : "clean";
+    ui.sensorPanel.innerHTML = `
+      <div class="sensor-heading">
+        <div><strong>${escapeHtml(campaign.label)}</strong><span>${escapeHtml(state.trackerData?.projects?.[state.selectedTrackerProject]?.label || "")} · ${escapeHtml(String(campaign.year ?? ""))}</span></div>
+        <span class="status-badge ${campaign.reviewRequired ? "survey" : "available"}">${campaign.reviewRequired ? "REVIEW REQUIRED" : "CAMPAIGN TRACKS"}</span>
+      </div>
+      <div class="tracker-kpis">
+        <div><span>Acquisition</span><strong>${formatCount(campaign.acquisitions.size)}</strong></div>
+        <div><span>Зам сегмент</span><strong>${formatCount(campaign.segments)}</strong></div>
+        <div><span>Эх файл</span><strong>${formatCount(campaign.sourceFiles.size)}</strong></div>
+      </div>
+      <p class="panel-note">Сегмент нь нислэгийн тоо биш: нэг acquisition бичлэгийн тасалдлаар хэд хэдэн сегментэд хуваагдаж болно.</p>
+      <h3>Acquisition өдөр</h3>
+      <div id="campaign-date-list" class="flight-date-list"></div>
+      ${undatedCount ? `<p class="truth-note">${formatCount(undatedCount)} сегментэд баталгаатай огноо алга; “Бүх acquisition” сонголтод л харагдана.</p>` : ""}
+      <p class="panel-note">Огнооны хүрээ: ${escapeHtml(dateRange)} · Sampling: ${escapeHtml(sampling)} · Цагийн бүс: ${escapeHtml(all[0]?.properties?.timeZone || "unverified")}</p>
+      <p class="panel-note">Sensor: ${escapeHtml(campaign.sensor)}${campaign.sensorVerified ? "" : " (төхөөрөмж баталгаажаагүй)"} · GNSS: ${escapeHtml(campaign.gnssSource === "unverified" ? "мэдрэгч/дрон аль нь эсэх тодорхойгүй" : campaign.gnssSource)}</p>
+      <p class="panel-note">Эх сурвалжийн төрөл: ${escapeHtml([...campaign.sourceKinds].join(", ") || "—")} · QA: ${escapeHtml(qa)}</p>
+      <p class="truth-note">Хамрах талбай: ${escapeHtml(campaign.coverageStatus === "not_calculated" ? "тооцоогүй" : campaign.coverageStatus)}. ${escapeHtml(campaign.coverageNote || "")}</p>
+      <p class="panel-note">${formatCount(visible.length)} сегмент харагдаж байна.</p>`;
+    const list = ui.sensorPanel.querySelector("#campaign-date-list");
+    for (const option of dateOptions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `flight-date-button${state.selectedCampaignDate === option.value ? " is-active" : ""}`;
+      button.style.setProperty("--date-color", "#ffd166");
+      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} сегмент</small>`;
+      button.addEventListener("click", () => selectCampaignDate(option.value));
+      list?.appendChild(button);
+    }
+    state.activeDatasetId = "context-project-campaign-tracks";
+    renderDatasetInfo();
   };
 
   const renderStatusPanel = (sensor) => {
@@ -1453,6 +1681,17 @@
   const renderSensorButtons = () => {
     ui.sensors.replaceChildren();
     const project = state.trackerData?.projects?.[state.selectedTrackerProject];
+    // Selectable programmes are the union of the tracker register's sensors and
+    // the campaigns imported for this project. Both lists are scoped to the
+    // selected project, so no other project's sensors or dates can appear.
+    const campaignOptions = state.selectedTrackerProject
+      ? projectCampaigns(state.selectedTrackerProject).map((campaign) => ({
+        id: `${CAMPAIGN_PREFIX}${campaign.id}`,
+        label: campaign.year ? `${campaign.year} · ${campaign.sensor}` : campaign.label,
+        status: `${formatCount(campaign.acquisitions.size)} ACQUISITION`,
+        tone: campaign.reviewRequired ? "survey" : "available",
+      }))
+      : [];
     const sensors = project
       ? Object.entries(project.sensors || {}).map(([id, stats]) => {
         const base = sensorConfig.find((item) => item.id === id) || { id, label: id };
@@ -1462,7 +1701,7 @@
           status: geometryCount ? `${geometryCount} TRAJECTORY` : `${formatCount(stats.records)} ACTUAL RECORDS`,
           tone: geometryCount ? "available" : "survey",
         };
-      })
+      }).concat(campaignOptions)
       : sensorConfig;
     for (const sensor of sensors) {
       const button = document.createElement("button");
@@ -1479,6 +1718,23 @@
     state.activeSensor = sensor;
     hideSensorLayers();
     const project = state.trackerData?.projects?.[state.selectedTrackerProject];
+    if (String(sensor).startsWith(CAMPAIGN_PREFIX)) {
+      // A campaign is its own programme: clear the tracker trajectory
+      // selection so the two registers never draw together.
+      state.selectedCampaignId = sensor.slice(CAMPAIGN_PREFIX.length);
+      state.selectedCampaignDate = "all";
+      state.selectedTrackerSensor = null;
+      syncProjectFlightVisibility();
+      syncCampaignVisibility();
+      renderSensorButtons();
+      renderTrackerProject(state.selectedTrackerProject);
+      renderCampaignPanel(state.selectedCampaignId);
+      renderAreaSummary();
+      fitCampaignSelection();
+      return;
+    }
+    state.selectedCampaignId = null;
+    syncCampaignVisibility();
     if (project?.sensors?.[sensor]) {
       state.selectedTrackerSensor = sensor;
       state.selectedTrackerDate = "all";
@@ -1574,6 +1830,10 @@
     state.projectFlightData = null;
     state.projectFlightCoverage = null;
     state.projectFlightLayers.clear();
+    state.campaignData = null;
+    state.campaignLayers.clear();
+    state.selectedCampaignId = null;
+    state.selectedCampaignDate = "all";
     state.licenseBrowserMode = "licence";
     state.uchastikData = null;
     state.uchastikFeatureLayers.clear();
@@ -1621,6 +1881,7 @@
         { label: "Survey boundaries", task: loadBoundaries, errorType: "base" },
         { label: "Project trackers", task: loadProjectTrackers, errorType: "warning" },
         { label: "Project flight tracks", task: loadProjectFlights, errorType: "warning" },
+        { label: "Project campaign tracks", task: loadProjectCampaigns, errorType: "warning" },
         { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
         { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
