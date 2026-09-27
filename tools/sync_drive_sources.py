@@ -681,8 +681,10 @@ def sync_nergui_magarrow(
 
     for feature in features_by_acquisition.values():
         magarrow.write_feature(feature, parsed_dir)
-    licence_path = repo / "dist" / "data" / "base" / "licence.geojson"
-    uchastik_path = repo / "dist" / "data" / "base" / "uchastik.geojson"
+    # The published base layers use plural filenames. Keep these paths aligned
+    # with the repository rather than the singular names used by early fixtures.
+    licence_path = repo / "dist" / "data" / "base" / "licenses.geojson"
+    uchastik_path = repo / "dist" / "data" / "base" / "uchastics.geojson"
     magarrow.build(parsed_dir, licence_path, uchastik_path, tracks_path, coverage_path)
     dates = sorted({
         feature.get("properties", {}).get("date")

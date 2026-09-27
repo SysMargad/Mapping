@@ -95,13 +95,13 @@ class IncrementalSync(unittest.TestCase):
                 [113.4, 49.0], [113.7, 49.0], [113.7, 49.3],
                 [113.4, 49.3], [113.4, 49.0],
             ]]
-            (base / "licence.geojson").write_text(json.dumps({
+            (base / "licenses.geojson").write_text(json.dumps({
                 "type": "FeatureCollection", "features": [{
                     "type": "Feature", "id": "licence", "properties": {"name": "Licence"},
                     "geometry": {"type": "Polygon", "coordinates": polygon},
                 }],
             }), encoding="utf-8")
-            (base / "uchastik.geojson").write_text(json.dumps({
+            (base / "uchastics.geojson").write_text(json.dumps({
                 "type": "FeatureCollection", "features": [{
                     "type": "Feature", "id": "U1", "properties": {"name": "U1"},
                     "geometry": {"type": "Polygon", "coordinates": polygon},
