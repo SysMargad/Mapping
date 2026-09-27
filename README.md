@@ -19,7 +19,7 @@ Sync ажилласны дараа `Actions → Sync Google Drive survey data �
 
 Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
 
-Нэргүй өндөр төслийн `Raw Data` хавтсыг тоолохдоо root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дэд хавтас бүрийн `DJI...` нэртэй файлыг тоолж, яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж log-д нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset-д нийтлэхгүй; 4/11-ээс өөр тоотой хавтсыг `unclassifiedFolderCountsByDjiFileCount` хэсэгт зөвхөн тоогоор тайлагнана.
+Нэргүй өндөр төслийн root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь бүх дэд хавтсаас `SRVY*-ACQU*-10Hz.csv` болон fallback `.magdata` файлыг acquisition-аар нь олж, CSV-г түрүүлж сонгон 1 Hz trajectory болгон задлана. Өмнө нийтлэгдсэн acquisition-ийг дахин татахгүй; шинэ эсвэл өөрчлөгдсөн эх үүсвэрийг импортлоод trajectory, 50 м coverage болон dataset registry-г шинэчилнэ. Мөн `Raw Data` доторх `DJI...` файлын тоогоор яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset болон Actions summary-д нийтлэхгүй.
 
 Хэцүү хөтлийн үндсэн project folder ID-г `HETSUU_HUTUL_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь `Drone`, `UAV`, `Magnetic_Survey`, `MagArrow`, `Flight log/record` нэртэй салбаруудыг олж, `DJIFlightRecord`, `Timestamp.MRK`, `SRVY*-ACQU*`, KML/KMZ зэрэг coordinate эх үүсвэрийг бүртгэнэ. Project root дахь 2025 UAV magnetic survey болон 2026 tracker бүртгэлийг огноо/mission баталгаагүйгээр хооронд нь холихгүй; tracker-ийн огноо эсвэл бүтэн mission нэр таарсан үед л trajectory importer-т дамжуулна. Coordinate source-д altitude/relative-height багана байвал trajectory asset-д min/max/mean өндөр хадгалагдаж, map popup болон нислэгийн бүртгэлд харагдана.
 
@@ -36,7 +36,7 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
 - `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
-- `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
+- `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, шаардлагатай үед raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
 Project tracker өгөгдөл нь `project_operations` scope-д тусгаарлагдана. Nergui Undur sensor/trajectory өгөгдөлтэй нийлүүлэхгүй. Tracker-ийн mission бүртгэл дангаараа geometry биш: зөвхөн tracker холбоостой таарсан `DJIFlightRecord_*.kmz` эсвэл `Timestamp.MRK` coordinate эх үүсвэртэй үед trajectory болно. Үлдсэн бүртгэлийг map дээр шугам болгон таамаглахгүй.

@@ -26,6 +26,22 @@ SUMMARY = {
         "dateFrom": "2025-09-22",
         "dateTo": "2025-11-03",
     },
+    "nerguiUndurMagArrow": {
+        "discoveredSourceCount": 125,
+        "chosenAcquisitionCount": 125,
+        "csvSourceCount": 124,
+        "magdataSourceCount": 1,
+        "retainedCount": 71,
+        "downloadedCount": 54,
+        "importedCount": 54,
+        "updatedCount": 0,
+        "skippedOversizeCount": 0,
+        "failedCount": 0,
+        "publishedAcquisitionCount": 125,
+        "publishedDateCount": 15,
+        "dateFrom": "2026-08-21",
+        "dateTo": "2026-09-21",
+    },
     "projects": {
         "hetsuu-hutul": {
             "trackerMissionRows": 138,
@@ -65,6 +81,12 @@ class StepSummary(unittest.TestCase):
         for token in ("scannedFolderCount", "inspectedFileCount", "headerProbesUsed",
                       "coordinateSourceCount", "discoveryDecisions"):
             self.assertIn(token, self.text)
+
+    def test_nergui_magarrow_import_counts_are_reported(self):
+        for token in ("chosenAcquisitionCount", "downloadedCount", "importedCount",
+                      "publishedAcquisitionCount", "dateTo"):
+            self.assertIn(token, self.text)
+        self.assertIn("2026-09-21", self.text)
 
     def test_unreadable_folders_are_visible_as_an_access_problem(self):
         # 138 unreadable mission folders is the signature of a sharing gap,

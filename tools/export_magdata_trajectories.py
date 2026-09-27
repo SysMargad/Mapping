@@ -9,6 +9,7 @@ calculated on a 10 m grid and clipped to the licence/uchastik polygons.
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 import math
@@ -26,6 +27,15 @@ METRES_PER_DEGREE = 111_320.0
 COS_LAT0 = math.cos(math.radians(LAT0))
 CELL_SIZE = 10.0
 SWATH_RADIUS = 25.0
+
+
+def acquisition_name(value: str) -> str:
+    match = ACQUISITION.search(value)
+    return match.group(0).upper().replace(" ", "") if match else Path(value).stem
+
+
+def feature_id(acquisition: str) -> str:
+    return f"magarrow-actual-{re.sub(r'[^a-z0-9]+', '-', acquisition.lower()).strip('-')}"
 
 
 def nmea_coordinate(value: str, hemisphere: str, longitude: bool) -> float:
@@ -124,12 +134,11 @@ def parse_file(path: Path, output_dir: Path) -> Path:
     if not match:
         raise ValueError(f"{path.name}: expected YYYY-MM-DD__ source prefix")
     fallback_date, source_name = match.groups()
-    acquisition_match = ACQUISITION.search(source_name)
-    acquisition = acquisition_match.group(0).upper().replace(" ", "") if acquisition_match else Path(source_name).stem
+    acquisition = acquisition_name(source_name)
     points, started, ended = extract_points(path, fallback_date)
     payload = {
         "type": "Feature",
-        "id": f"magarrow-actual-{re.sub(r'[^a-z0-9]+', '-', acquisition.lower()).strip('-')}",
+        "id": feature_id(acquisition),
         "properties": {
             "project": "Nergui Undur",
             "area": "Nergui Undur",
@@ -154,7 +163,106 @@ def parse_file(path: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / f"{path.stem}.json"
     target.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"{source_name}: {len(points)} GGA points -> {len(payload['geometry']['coordinates'])} display points")
+    print(f"Parsed MagArrow trajectory: {len(points)} GGA points -> {len(payload['geometry']['coordinates'])} display points")
+    return target
+
+
+def _csv_headers(fieldnames: list[str] | None) -> dict[str, str]:
+    if not fieldnames:
+        raise ValueError("CSV has no header")
+    return {
+        re.sub(r"[^a-z0-9]+", "", field.strip().lower()): field
+        for field in fieldnames
+        if field
+    }
+
+
+def _csv_time(date_value: str, time_value: str) -> dt.datetime:
+    text = f"{date_value.strip()} {time_value.strip()}"
+    for pattern in (
+        "%Y/%m/%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return dt.datetime.strptime(text, pattern).replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+    raise ValueError(f"unsupported Date/Time {text!r}")
+
+
+def parse_10hz_csv(
+    path: Path,
+    *,
+    source_name: str | None = None,
+    source_url: str | None = None,
+    source_fingerprint: str | None = None,
+) -> dict:
+    """Convert a verified MagArrow 10 Hz CSV into a compact 1 Hz trajectory."""
+    original_name = source_name or path.name
+    acquisition = acquisition_name(original_name)
+    sampled: list[tuple[dt.datetime, list[float]]] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        headers = _csv_headers(reader.fieldnames)
+        required = {name: headers.get(name) for name in ("date", "time", "latitude", "longitude")}
+        missing = [name for name, header in required.items() if not header]
+        if missing:
+            raise ValueError(f"{original_name}: missing required column(s): {', '.join(missing)}")
+        last_second = None
+        for row_number, row in enumerate(reader, start=2):
+            try:
+                when = _csv_time(row[required["date"]], row[required["time"]])
+                lat = float(row[required["latitude"]])
+                lon = float(row[required["longitude"]])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"{original_name}:{row_number}: {error}") from error
+            if not (112.0 <= lon <= 115.0 and 47.0 <= lat <= 51.0):
+                raise ValueError(f"{original_name}:{row_number}: invalid Nergui Undur coordinate {lat}, {lon}")
+            second = when.replace(microsecond=0)
+            if second == last_second:
+                continue
+            sampled.append((when, [round(lon, 8), round(lat, 8)]))
+            last_second = second
+    if len(sampled) < 2:
+        raise ValueError(f"{original_name}: fewer than two 1 Hz coordinate samples")
+    coordinates = rdp([point for _, point in sampled])
+    started = sampled[0][0]
+    ended = sampled[-1][0]
+    properties = {
+        "project": "Nergui Undur",
+        "area": "Nergui Undur",
+        "sensor": "MagArrow",
+        "acquisition": acquisition,
+        "dataType": "actual_flight_track",
+        "plannedActual": "actual",
+        "status": "confirmed_source",
+        "date": started.date().isoformat(),
+        "startTime": started.isoformat().replace("+00:00", "Z"),
+        "endTime": ended.isoformat().replace("+00:00", "Z"),
+        "sourceFile": original_name,
+        "sourceUrl": source_url or "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
+        "sourceCrs": "EPSG:4326",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": True,
+        "pointCount": len(sampled),
+        "nmeaSource": "verified 10 Hz CSV",
+    }
+    if source_fingerprint:
+        properties["sourceFingerprint"] = source_fingerprint
+    return {
+        "type": "Feature",
+        "id": feature_id(acquisition),
+        "properties": properties,
+        "geometry": {"type": "LineString", "coordinates": coordinates},
+    }
+
+
+def write_feature(feature: dict, output_dir: Path) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    target = output_dir / f"{feature['id']}.json"
+    target.write_text(json.dumps(feature, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return target
 
 
@@ -279,6 +387,11 @@ def main() -> None:
     parse_parser = subparsers.add_parser("parse")
     parse_parser.add_argument("source", type=Path)
     parse_parser.add_argument("output_dir", type=Path)
+    csv_parser = subparsers.add_parser("parse-csv")
+    csv_parser.add_argument("source", type=Path)
+    csv_parser.add_argument("output_dir", type=Path)
+    csv_parser.add_argument("--source-name")
+    csv_parser.add_argument("--source-url")
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("parsed_dir", type=Path)
     build_parser.add_argument("licence", type=Path)
@@ -288,6 +401,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "parse":
         parse_file(args.source, args.output_dir)
+    elif args.command == "parse-csv":
+        write_feature(parse_10hz_csv(
+            args.source,
+            source_name=args.source_name,
+            source_url=args.source_url,
+        ), args.output_dir)
     else:
         build(args.parsed_dir, args.licence, args.uchastik, args.tracks_output, args.stats_output)
 
