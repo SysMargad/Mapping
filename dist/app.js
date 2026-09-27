@@ -38,7 +38,7 @@
     registry: null,
     datasets: new Map(),
     activeSensor: "MagArrow",
-    activeDatasetId: "magarrow-planned-survey",
+    activeDatasetId: "magarrow-actual-tracks",
     baseLayers: new Map(),
     licenceData: null,
     licenseContextLayers: new Map(),
@@ -65,8 +65,6 @@
     uchastikFeatureLayers: new Map(),
     selectedUchastikKey: null,
     areaScope: null,
-    planLayers: new Map(),
-    planVisibility: { boundary: true, main: true, tie: true },
     missionLayers: new Map(),
     selectedMissions: new Set(),
     missionData: null,
@@ -75,8 +73,6 @@
     actualCoverage: null,
     actualTrackLayers: new Map(),
     selectedFlightDate: "all",
-    planArea: 0,
-    mainCoverage: 0,
     warnings: new Set(),
   };
 
@@ -163,23 +159,6 @@
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .map(([label, value]) => `<span class="popup-label">${escapeHtml(label)}</span><span class="popup-value">${escapeHtml(value)}</span>`)
     .join("");
-
-  const plannedPopup = (feature) => {
-    const props = feature.properties || {};
-    const main = props.dataType === "planned_main_line";
-    const tie = props.dataType === "planned_tie_line";
-    const type = main ? "Planned main line" : tie ? "Planned tie line" : "Planned survey geometry";
-    return popup([
-      ["Sensor", "MagArrow"],
-      ["Type", type],
-      ["Direction", props.direction || (main ? "E-W" : tie ? "N-S" : "")],
-      ["Azimuth", Number.isFinite(Number(props.azimuth_deg)) ? `${props.azimuth_deg}°` : ""],
-      ["Spacing", Number.isFinite(Number(props.spacing_m)) ? `${props.spacing_m} m` : ""],
-      ["AGL", Number.isFinite(Number(props.planned_sensor_agl_m)) ? `${props.planned_sensor_agl_m} m` : "30 m"],
-      ["Speed", Number.isFinite(Number(props.planned_speed_mps)) ? `${props.planned_speed_mps} m/s` : "6 m/s"],
-      ["Status", "Planned"],
-    ]);
-  };
 
   const missionPopup = (feature) => {
     const props = feature.properties || {};
@@ -1212,36 +1191,6 @@
     );
   };
 
-  const loadMagArrowPlan = async () => {
-    const config = dataset("magarrow-planned-survey");
-    const data = await fetchJson(config.webAsset);
-    assertProjectTruth(data, "MagArrow planned survey");
-    const boundaryFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_survey_boundary");
-    const mainFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_main_line");
-    const tieFeatures = data.features.filter((feature) => feature.properties?.dataType === "planned_tie_line");
-    state.planArea = boundaryFeatures.reduce((sum, feature) => sum + featureArea(feature), 0);
-    state.mainCoverage = mainFeatures.reduce((sum, feature) => sum + lineLength(feature) * (Number(feature.properties?.spacing_m) || 100), 0);
-    const boundary = L.geoJSON({ type: "FeatureCollection", features: boundaryFeatures }, {
-      pane: "surveyPane",
-      style: { color: "#39d9ff", weight: 2.6, fillColor: "#39d9ff", fillOpacity: 0.035 },
-      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
-    });
-    const main = L.geoJSON({ type: "FeatureCollection", features: mainFeatures }, {
-      pane: "plannedPane",
-      style: { color: "#71f6c1", weight: 2.2, opacity: 0.94 },
-      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
-    });
-    const tie = L.geoJSON({ type: "FeatureCollection", features: tieFeatures }, {
-      pane: "plannedPane",
-      style: { color: "#39a8ff", weight: 1.7, opacity: 0.9, dashArray: "8 6" },
-      onEachFeature(feature, item) { item.bindPopup(plannedPopup(feature)); },
-    });
-    state.planLayers.set("boundary", boundary);
-    state.planLayers.set("main", main);
-    state.planLayers.set("tie", tie);
-    restoreMagArrowLayers();
-  };
-
   const flightDateColor = () => "#39d9ff";
 
   const pointInRing = ([x, y], ring) => {
@@ -1346,9 +1295,6 @@
 
   const restoreMagArrowLayers = () => {
     if (state.activeSensor !== "MagArrow") return;
-    for (const [id, layer] of state.planLayers) {
-      if (state.planVisibility[id]) layer.addTo(state.map);
-    }
     for (const [id, layer] of state.missionLayers) {
       if (state.selectedMissions.has(id)) layer.addTo(state.map);
     }
@@ -1356,7 +1302,6 @@
   };
 
   const hideSensorLayers = () => {
-    for (const layer of state.planLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
@@ -1392,9 +1337,7 @@
       state.activeDatasetId = "magarrow-mission-plans";
     } else if (state.selectedFlightDate) {
       state.activeDatasetId = "magarrow-actual-tracks";
-    } else {
-      state.activeDatasetId = "magarrow-planned-survey";
-    }
+    } else state.activeDatasetId = "magarrow-actual-tracks";
     renderDatasetInfo();
   };
 
@@ -1428,8 +1371,6 @@
     const acquisitionCount = scopedFeatures.length;
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>MagArrow</strong><span>Heseg Uul hoid</span></div><span class="status-badge available">TRACKS AVAILABLE</span></div>
-      <h3>Planned Survey Lines</h3>
-      <div id="plan-toggles" class="control-list"></div>
       <details class="nested-panel">
         <summary>DJI Mission Plans <span>${missions.length}</span></summary>
         <p class="panel-note">L01–L11 нь planned WPMZ/KMZ route. Actual flown track биш.</p>
@@ -1438,21 +1379,6 @@
       <h3>Ниссэн trajectory</h3>
       <div id="flight-date-list" class="flight-date-list"></div>
       <p class="panel-note">${acquisitionCount} acquisition · Огноо сонгоход тухайн өдрийн trajectory болон ниссэн талбай харагдана.</p>`;
-    const planToggles = ui.sensorPanel.querySelector("#plan-toggles");
-    const planRows = [
-      ["boundary", "Survey boundary", "Planning footprint"],
-      ["main", "Main lines", "E-W · 100 м · AZ≈88°/268°"],
-      ["tie", "Tie lines", "N-S · 200 м · AZ≈178°/358°"],
-    ];
-    for (const [id, label, detail] of planRows) {
-      planToggles.appendChild(makeToggle(label, detail, state.planVisibility[id], (checked) => {
-        state.planVisibility[id] = checked;
-        const layer = state.planLayers.get(id);
-        if (!layer) return;
-        if (checked) layer.addTo(state.map);
-        else state.map.removeLayer(layer);
-      }));
-    }
     const flightDateList = ui.sensorPanel.querySelector("#flight-date-list");
     const dateOptions = [{ value: "all", label: "Бүх огноо", count: acquisitionCount }]
       .concat(dates.map((date) => ({
@@ -1798,7 +1724,6 @@
     // control has the same bounds as the campaign/date auto-focus flow.
     for (const layer of selectedCampaignLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
     if (state.activeSensor === "MagArrow") {
-      for (const [id, layer] of state.planLayers) if (state.planVisibility[id]) layers.push(layer);
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
       for (const layer of selectedActualLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
     }
@@ -1849,7 +1774,6 @@
     state.uchastikFeatureLayers.clear();
     state.selectedUchastikKey = null;
     state.areaScope = null;
-    state.planLayers.clear();
     state.missionLayers.clear();
     state.selectedMissions.clear();
     state.missionData = null;
@@ -1858,8 +1782,6 @@
     state.actualCoverage = null;
     state.actualTrackLayers.clear();
     state.selectedFlightDate = "all";
-    state.planArea = 0;
-    state.mainCoverage = 0;
     ui.baseLayers.replaceChildren();
     ui.licenseContextList.replaceChildren();
     ui.licenseBrowserTitle.textContent = "Лицензийн талбай сонгох";
@@ -1893,7 +1815,6 @@
         { label: "Project flight tracks", task: loadProjectFlights, errorType: "warning" },
         { label: "Project campaign tracks", task: loadProjectCampaigns, errorType: "warning" },
         { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
-        { label: "MagArrow planned survey", task: loadMagArrowPlan, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
         { label: "Licence context", task: loadLicenceContext, errorType: "warning" },
       ];
@@ -1910,7 +1831,7 @@
       const defaultLicence = state.licenceData?.features?.[0];
       setAreaScope(featureLabel(defaultLicence, "Нэргүй өндөр"), defaultLicence, "licence");
       fitMap();
-      const usable = state.baseLayers.size + state.planLayers.size;
+      const usable = state.baseLayers.size;
       if (!usable) throw new Error("No base or active sensor layers could be loaded.");
     } catch (error) {
       console.error(error);

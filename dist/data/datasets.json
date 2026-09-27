@@ -191,23 +191,7 @@
       "displayCrs": "EPSG:4326",
       "crsVerified": true,
       "defaultVisible": false,
-      "notes": "Acquisition campaigns that sit outside the 2026 tracker register, kept in their own dataset so no tracker mission, date or sensor is copied onto them. Currently holds 14 segments from the two verified per-acquisition files of 2025-11-03; 1103_latlong.csv was rejected as a duplicate because it is the merge of those two. This is one survey day of the 36 dated folders in the 2025 magnetic campaign — the remaining days are imported when the scheduled Drive sync runs with HETSUU_HUTUL_ROOT_FOLDER_ID configured. Coverage is deliberately not calculated because the swath/line spacing of this campaign is unverified."
-    },
-    {
-      "id": "magarrow-planned-survey",
-      "project": "Nergui Undur",
-      "area": "Heseg Uul hoid",
-      "sensor": "MagArrow",
-      "dataType": "planned_survey",
-      "plannedActual": "planned",
-      "status": "source_available",
-      "sourceFile": "NU_DR_MagArrow_Plan.gpkg",
-      "webAsset": "./data/magarrow/planned-survey.geojson",
-      "sourceCrs": "EPSG:32649",
-      "displayCrs": "EPSG:4326",
-      "crsVerified": true,
-      "defaultVisible": true,
-      "notes": "Planning geometry with E-W main lines at 100 m spacing and near-N-S tie lines at 200 m spacing."
+      "notes": "Acquisition campaigns that sit outside the 2026 tracker register, kept in their own dataset so no tracker mission, date or sensor is copied onto them. The scheduled Drive sync imports every explicitly matched, verified coordinate source and replaces this asset only after validation succeeds. Coverage is deliberately not calculated because the swath/line spacing of this campaign is unverified."
     },
     {
       "id": "magarrow-mission-plans",

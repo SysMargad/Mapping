@@ -17,20 +17,17 @@ const dwgread = process.env.LIBREDWG_DWGREAD
   ? path.resolve(process.env.LIBREDWG_DWGREAD)
   : path.join(desktopRoot, ".tools", "libredwg", "dwgread.exe");
 const sources = {
-  plan: path.join(areaDataRoot, "NU_DR_MagArrow_Plan.gpkg"),
   hetsuuCad: path.join(areaDataRoot, "Hetsuu hutul.DWG"),
   licence: path.join(desktopRoot, "Talbain license.zip"),
   uchastik: path.join(desktopRoot, "23099_uchastic_20260806.zip"),
 };
 const outputs = {
-  plan: path.join(root, "data", "magarrow", "planned-survey.geojson"),
   hetsuuCad: path.join(root, "data", "context", "hetsuu-hutul-dwg.geojson"),
   licence: path.join(root, "data", "base", "licenses.geojson"),
   uchastik: path.join(root, "data", "base", "uchastics.geojson"),
   licenceContext: path.join(root, "data", "context", "licenses.geojson"),
 };
 const scripts = {
-  plan: path.join(projectRoot, "tools", "export_gpkg.py"),
   dwg: path.join(projectRoot, "tools", "export_dwg.py"),
   shapefile: path.join(projectRoot, "tools", "export_shapefile.py"),
 };
@@ -79,9 +76,6 @@ async function isNewer(source, output) {
 }
 
 async function syncFor(target) {
-  if (target === outputs.plan && await isNewer(sources.plan, outputs.plan)) {
-    await runExport("MagArrow plan", scripts.plan, [sources.plan, outputs.plan, "--profile", "magarrow-plan"]);
-  }
   if (target === outputs.hetsuuCad && await isNewer(sources.hetsuuCad, outputs.hetsuuCad)) {
     await runExport("Hetsuu hutul DWG", scripts.dwg, [
       sources.hetsuuCad,
@@ -123,5 +117,4 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Local: http://127.0.0.1:${port}`);
   console.log(`Area Data: ${areaDataRoot}`);
-  console.log("Only the explicitly named MagArrow plan can auto-export; the L3 plan is never selected as a fallback.");
 });

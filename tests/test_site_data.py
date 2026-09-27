@@ -38,6 +38,10 @@ class Registry(unittest.TestCase):
         self.assertEqual(entry["dataType"], "survey_campaign_track")
         self.assertEqual(entry["project"], "Multi-project operations")
 
+    def test_retired_magarrow_plan_is_not_published(self):
+        self.assertNotIn("magarrow-planned-survey", self.by_id)
+        self.assertFalse((DATA / "magarrow" / "planned-survey.geojson").exists())
+
     def test_every_web_asset_exists_and_is_in_the_manifest(self):
         manifest = load("manifest.json")
         for entry in self.registry["datasets"]:
@@ -55,7 +59,7 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-21.1', index)
+        self.assertIn('app.js?v=2026-09-27.1', index)
 
     def test_fit_map_includes_filtered_campaign_tracks(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -90,8 +94,7 @@ class ExistingProjectsUnaffected(unittest.TestCase):
         # the UI renders as "Тооцоогүй" rather than 0 м².
         self.assertNotIn("hetsuu-hutul", self.coverage["projects"])
 
-    def test_plan_and_cad_layers_are_intact(self):
-        self.assertGreater(len(load("magarrow/planned-survey.geojson")["features"]), 0)
+    def test_current_cad_and_mission_layers_are_intact(self):
         self.assertGreater(len(load("magarrow/mission-plans.geojson")["features"]), 0)
         self.assertGreater(len(load("context/hetsuu-hutul-dwg.geojson")["features"]), 0)
 
@@ -109,12 +112,12 @@ class CampaignDataset(unittest.TestCase):
         self.assertEqual(self.data["featureCount"], len(self.data["features"]))
 
     def test_the_hetsuu_2025_magnetic_campaign_is_present(self):
-        # The problem this dataset was added to fix: Hetsuu had no GPS track of
-        # any kind. These 14 segments come from the two verified 2025-11-03
-        # per-acquisition files.
+        # The scheduled sync can discover more verified source days over time.
+        # Guard the campaign identity and geometry without freezing a segment
+        # count that is expected to grow as Drive receives new sources.
         hetsuu = [f for f in self.data["features"]
                   if f["properties"]["projectKey"] == "hetsuu-hutul"]
-        self.assertEqual(len(hetsuu), 14)
+        self.assertGreater(len(hetsuu), 0)
         campaigns = {f["properties"]["campaignId"] for f in hetsuu}
         self.assertEqual(campaigns, {"hetsuu-hutul-2025-magnetic"})
         years = {f["properties"]["campaignYear"] for f in hetsuu}

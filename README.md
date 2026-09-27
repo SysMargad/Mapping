@@ -1,6 +1,6 @@
 # Mapping
 
-Nergui Undur төслийн суурь хил, MagArrow төлөвлөгөө, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, баталгаажсан trajectory-г харуулдаг static Leaflet map.
+Nergui Undur төслийн суурь хил, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, баталгаажсан trajectory-г харуулдаг static Leaflet map.
 
 Public URL: <https://sysmargad.github.io/Mapping/>
 
@@ -35,7 +35,6 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ болон зураг авалтын `Timestamp.MRK` GNSS байрлалаас баталгаажсан бодит trajectory. Бүдүүн хадын 120, Арцатын 1 нислэг огноо/sensor-оор харагдана.
 - `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
 - `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
-- `dist/data/magarrow/planned-survey.geojson` — батлагдсан MagArrow survey plan.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — зөвхөн verified 10 Hz CSV-ээс үүснэ; CSV байхгүй үед хоосон, `pending_ingestion`.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
@@ -48,7 +47,7 @@ Project tracker өгөгдөл нь `project_operations` scope-д тусгаар
 node .\tools\serve.mjs
 ```
 
-Дараа нь <http://127.0.0.1:4173> хаягийг нээнэ. Сервер `G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track` Drive Desktop хавтсыг үндсэн Area Data эх үүсвэр болгоно; Drive холбогдоогүй үед хуучин `Desktop\Drone Track\Area Data` руу fallback хийнэ. Өөр зам ашиглах бол `AREA_DATA_ROOT` environment variable тохируулна. Сервер зөвхөн яг нэрлэсэн `NU_DR_MagArrow_Plan.gpkg`-ийг MagArrow plan болгон шинэчилнэ; `NU_DT_L3_PLAN.gpkg`-ийг fallback болгон сонгохгүй. Page өөрөө 30 секунд тутам refresh хийхгүй; UI дахь refresh товчийг хэрэглэнэ.
+Дараа нь <http://127.0.0.1:4173> хаягийг нээнэ. Сервер `G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track` Drive Desktop хавтсыг үндсэн Area Data эх үүсвэр болгоно; Drive холбогдоогүй үед хуучин `Desktop\Drone Track\Area Data` руу fallback хийнэ. Өөр зам ашиглах бол `AREA_DATA_ROOT` environment variable тохируулна. Хуучин `NU_DR_MagArrow_Plan.gpkg` source-ийг site asset болгон дахин үүсгэхгүй. Page өөрөө 30 секунд тутам refresh хийхгүй; UI дахь refresh товчийг хэрэглэнэ.
 
 ## Export commands
 
@@ -56,15 +55,6 @@ node .\tools\serve.mjs
 
 ```powershell
 $python = "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-```
-
-MagArrow plan:
-
-```powershell
-& $python .\tools\export_gpkg.py `
-  "G:\.shortcut-targets-by-id\1hopqTCeMJknMkkvMa_wCY6OQ_GHXt4ub\Drone Track\NU_DR_MagArrow_Plan.gpkg" `
-  .\dist\data\magarrow\planned-survey.geojson `
-  --profile magarrow-plan
 ```
 
 Hetsuu hutul DWG (WGS 84 / UTM zone 46N):

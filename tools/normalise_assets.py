@@ -31,58 +31,6 @@ def assert_nergui_source(payload: dict, path: Path) -> None:
         raise ValueError(f"{path}: cross-project marker(s) found: {', '.join(found)}")
 
 
-def normalise_magarrow_plan() -> None:
-    path = ROOT / "magarrow" / "planned-survey.geojson"
-    data = load(path)
-    assert_nergui_source(data, path)
-    rename = {
-        "P1_Main_50m": "MagArrow_Main_50m",
-        "P1_Main_100m_AZ88": "MagArrow_Main_100m_AZ88",
-        "P1_Tie_300m": "MagArrow_Tie_300m",
-        "P1_Tie_200m_AZ178": "MagArrow_Tie_200m_AZ178",
-    }
-    for feature in data.get("features", []):
-        props = feature.setdefault("properties", {})
-        old_layer = str(props.get("layer", ""))
-        layer = rename.get(old_layer, old_layer)
-        props["layer"] = layer
-        props.update({
-            "project": "Nergui Undur",
-            "area": "Heseg Uul hoid",
-            "sensor": "MagArrow",
-            "plannedActual": "planned",
-            "status": "confirmed",
-            "source_epsg": 32649,
-            "display_epsg": 4326,
-            "crs_verified": True,
-        })
-        if layer.startswith("MagArrow_Main"):
-            props["dataType"] = "planned_main_line"
-        elif layer.startswith("MagArrow_Tie"):
-            props["dataType"] = "planned_tie_line"
-        elif layer == "Survey_Area":
-            props["dataType"] = "planned_survey_boundary"
-        elif layer == "Track_Start_End":
-            props["dataType"] = "planned_waypoint"
-        else:
-            props["dataType"] = "planned_metadata"
-        if isinstance(feature.get("id"), str):
-            feature["id"] = feature["id"].replace(old_layer, layer, 1)
-    for summary in data.get("layers", []):
-        summary["name"] = rename.get(summary.get("name"), summary.get("name"))
-        summary["display_epsg"] = 4326
-        summary["crs_verified"] = summary.get("source_epsg") == 32649
-    data.update({
-        "name": "Nergui Undur MagArrow Planned Survey",
-        "project": "Nergui Undur",
-        "area": "Heseg Uul hoid",
-        "sensor": "MagArrow",
-        "dataType": "planned_survey",
-        "plannedActual": "planned",
-    })
-    save(path, data)
-
-
 def normalise_missions() -> None:
     path = ROOT / "magarrow" / "mission-plans.geojson"
     data = load(path)
@@ -230,7 +178,6 @@ def normalise_base_file(filename: str, layer: str, data_type: str, source_crs: s
 
 
 if __name__ == "__main__":
-    normalise_magarrow_plan()
     normalise_missions()
     normalise_boundaries()
     normalise_base_file("licenses.geojson", "Base_Licence_Boundary", "licence_boundary", "EPSG:4326")
