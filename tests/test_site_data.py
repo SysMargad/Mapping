@@ -59,7 +59,13 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-27.1', index)
+        self.assertIn('app.js?v=2026-09-27.2', index)
+
+    def test_all_flown_track_renderers_use_the_same_blue(self):
+        app = (DIST / "app.js").read_text(encoding="utf-8")
+        self.assertIn('const FLIGHT_TRACK_COLOR = "#2563eb";', app)
+        self.assertEqual(app.count("color: FLIGHT_TRACK_COLOR"), 2)
+        self.assertIn("const flightDateColor = () => FLIGHT_TRACK_COLOR;", app)
 
     def test_fit_map_includes_filtered_campaign_tracks(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -97,6 +103,20 @@ class ExistingProjectsUnaffected(unittest.TestCase):
     def test_current_cad_and_mission_layers_are_intact(self):
         self.assertGreater(len(load("magarrow/mission-plans.geojson")["features"]), 0)
         self.assertGreater(len(load("context/hetsuu-hutul-dwg.geojson")["features"]), 0)
+
+
+class NerguiUndurActualTracks(unittest.TestCase):
+    def setUp(self):
+        self.data = load("magarrow/actual-tracks.geojson")
+
+    def test_verified_flown_tracks_are_present(self):
+        self.assertGreater(len(self.data["features"]), 0)
+        self.assertTrue(all(
+            feature["properties"]["project"] == "Nergui Undur"
+            and feature["properties"]["plannedActual"] == "actual"
+            and feature["geometry"]["type"] == "LineString"
+            for feature in self.data["features"]
+        ))
 
 
 class CampaignDataset(unittest.TestCase):

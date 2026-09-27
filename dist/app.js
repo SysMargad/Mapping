@@ -3,6 +3,7 @@
 
   const PROJECT = "Nergui Undur";
   const FORBIDDEN_PROJECTS = ["artsat", "будуун хад", "buduunkhad", "buduun khad"];
+  const FLIGHT_TRACK_COLOR = "#2563eb";
   const $ = (selector) => document.querySelector(selector);
   const ui = {
     loading: $("#loading"),
@@ -998,12 +999,10 @@
     }
     state.projectFlightData = data;
     state.projectFlightCoverage = coverage;
-    const colors = { L2: "#39d9ff", L3: "#71f6c1", P1: "#ff8fb8" };
     for (const feature of data.features || []) {
-      const color = colors[feature.properties?.sensor] || "#ffffff";
       const layer = L.geoJSON(feature, {
         pane: "actualPane",
-        style: { color, weight: 3.2, opacity: 0.98 },
+        style: { color: FLIGHT_TRACK_COLOR, weight: 3.2, opacity: 0.98 },
         onEachFeature(itemFeature, item) { item.bindPopup(projectFlightPopup(itemFeature)); },
       });
       state.projectFlightLayers.set(feature.id, layer);
@@ -1110,7 +1109,7 @@
     for (const feature of data.features || []) {
       const layer = L.geoJSON(feature, {
         pane: "actualPane",
-        style: { color: "#ffd166", weight: 3, opacity: 0.95, dashArray: "6 3" },
+        style: { color: FLIGHT_TRACK_COLOR, weight: 3, opacity: 0.95, dashArray: "6 3" },
         onEachFeature(itemFeature, item) { item.bindPopup(campaignPopup(itemFeature)); },
       });
       state.campaignLayers.set(feature.id, layer);
@@ -1191,7 +1190,7 @@
     );
   };
 
-  const flightDateColor = () => "#39d9ff";
+  const flightDateColor = () => FLIGHT_TRACK_COLOR;
 
   const pointInRing = ([x, y], ring) => {
     let inside = false;
