@@ -79,8 +79,12 @@ class IncrementalSync(unittest.TestCase):
     def setUp(self):
         self._find = sync.find_nergui_magarrow_sources
         self._download = sync.download_file
+        self._parse_file = magarrow.parse_file
+        self._build = magarrow.build
         self.addCleanup(lambda: setattr(sync, "find_nergui_magarrow_sources", self._find))
         self.addCleanup(lambda: setattr(sync, "download_file", self._download))
+        self.addCleanup(lambda: setattr(magarrow, "parse_file", self._parse_file))
+        self.addCleanup(lambda: setattr(magarrow, "build", self._build))
 
     def test_new_csv_is_imported_and_published(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -140,6 +144,59 @@ class IncrementalSync(unittest.TestCase):
             published = json.loads((mag_dir / "actual-tracks.geojson").read_text(encoding="utf-8"))
             self.assertEqual(published["features"][0]["properties"]["acquisition"], "SRVY0-ACQU122")
             self.assertNotIn("driveFileId", json.dumps(published))
+
+    def test_raw_magdata_staging_does_not_duplicate_final_feature(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            repo = root / "repo"
+            workspace = root / "workspace"
+            mag_dir = repo / "dist" / "data" / "magarrow"
+            mag_dir.mkdir(parents=True)
+            (mag_dir / "actual-tracks.geojson").write_text(json.dumps({
+                "type": "FeatureCollection", "features": [],
+            }), encoding="utf-8")
+            (mag_dir / "coverage-stats.json").write_text("{}", encoding="utf-8")
+            datasets = repo / "dist" / "data" / "datasets.json"
+            datasets.parent.mkdir(parents=True, exist_ok=True)
+            datasets.write_text(json.dumps({
+                "datasets": [{"id": name} for name in (
+                    "magarrow-actual-tracks", "magarrow-coverage-stats", "magarrow-raw",
+                )],
+            }), encoding="utf-8")
+
+            item = {
+                "id": "raw-drive-id", "name": "SRVY0-ACQU151.magdata", "size": "10",
+                "md5Checksum": "checksum", "modifiedTime": "2026-09-22T09:24:52Z",
+                "relativePath": "Raw data/2026.09.21/SRVY0-ACQU151.magdata",
+            }
+            sync.find_nergui_magarrow_sources = lambda *_args: [item]
+            sync.download_file = lambda _service, _item, target: target.write_bytes(b"raw")
+
+            feature = {
+                "type": "Feature", "id": "magarrow-actual-srvy0-acqu151",
+                "properties": {
+                    "acquisition": "SRVY0-ACQU151", "date": "2026-09-21",
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[113.54, 49.12], [113.55, 49.13]],
+                },
+            }
+
+            def parse_file(_source, output_dir):
+                self.assertEqual(output_dir.name, "nergui-magarrow-raw-staging")
+                target = output_dir / "intermediate.json"
+                target.write_text(json.dumps(feature), encoding="utf-8")
+                return target
+
+            def build(parsed_dir, _licence, _uchastik, _tracks, _coverage):
+                parsed = list(parsed_dir.glob("*.json"))
+                self.assertEqual([path.name for path in parsed], ["magarrow-actual-srvy0-acqu151.json"])
+
+            magarrow.parse_file = parse_file
+            magarrow.build = build
+            summary = sync.sync_nergui_magarrow(None, "root", repo, workspace, 8, 1024)
+            self.assertEqual(summary["publishedAcquisitionCount"], 1)
 
 
 if __name__ == "__main__":

@@ -612,8 +612,10 @@ def sync_nergui_magarrow(
     }
     source_dir = workspace / "nergui-magarrow-sources"
     parsed_dir = workspace / "nergui-magarrow-parsed"
+    raw_parsed_dir = workspace / "nergui-magarrow-raw-staging"
     source_dir.mkdir(parents=True, exist_ok=True)
     parsed_dir.mkdir(parents=True, exist_ok=True)
+    raw_parsed_dir.mkdir(parents=True, exist_ok=True)
     summary = {
         "discoveredSourceCount": len(sources),
         "chosenAcquisitionCount": len(by_acquisition),
@@ -660,7 +662,11 @@ def sync_nergui_magarrow(
                     raise ValueError("raw MagArrow source has no verified date")
                 dated_path = source_dir / f"{source_date_value}__{safe_filename(source_name)}"
                 local_path.replace(dated_path)
-                parsed_path = magarrow.parse_file(dated_path, parsed_dir)
+                # parse_file writes its intermediate JSON. Keep that staging
+                # output separate from parsed_dir, which is rebuilt below with
+                # exactly one canonical feature per acquisition. Mixing the
+                # two directories duplicates every raw .magdata acquisition.
+                parsed_path = magarrow.parse_file(dated_path, raw_parsed_dir)
                 feature = json.loads(parsed_path.read_text(encoding="utf-8"))
                 feature["properties"].update({
                     "sourceFile": source_name,
