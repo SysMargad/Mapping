@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -54,6 +55,8 @@ DRONE_SOURCE_RE = re.compile(
 PROBE_SUFFIXES = {".csv", ".txt"}
 PROBE_BYTES = 64 * 1024
 MAX_HEADER_PROBES = 400
+TRANSIENT_DRIVE_STATUSES = {429, 500, 502, 503, 504}
+DRIVE_API_MAX_ATTEMPTS = 6
 
 
 def clean(value) -> str:
@@ -136,19 +139,38 @@ def build_drive_service():
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
+def execute_with_retry(request, *, max_attempts: int = DRIVE_API_MAX_ATTEMPTS, sleep_fn=time.sleep):
+    """Execute a Drive request, retrying quota and transient server failures."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return request.execute()
+        except Exception as error:
+            status = getattr(getattr(error, "resp", None), "status", None)
+            if status not in TRANSIENT_DRIVE_STATUSES or attempt == max_attempts:
+                raise
+            delay = min(16, 2 ** (attempt - 1))
+            print(
+                "::warning::Drive API transient error "
+                f"(status={status}, attempt={attempt}/{max_attempts}); retrying"
+            )
+            sleep_fn(delay)
+    raise AssertionError("unreachable")
+
+
 def metadata(service, file_id: str) -> dict:
-    return service.files().get(
+    request = service.files().get(
         fileId=file_id,
         fields="id,name,mimeType,size,modifiedTime,md5Checksum,shortcutDetails,webViewLink",
         supportsAllDrives=True,
-    ).execute()
+    )
+    return execute_with_retry(request)
 
 
 def list_children(service, parent_id: str) -> list[dict]:
     result = []
     token = None
     while True:
-        response = service.files().list(
+        request = service.files().list(
             q=f"'{parent_id}' in parents and trashed = false",
             fields="nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum,shortcutDetails,webViewLink)",
             pageSize=1000,
@@ -156,7 +178,8 @@ def list_children(service, parent_id: str) -> list[dict]:
             spaces="drive",
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
-        ).execute()
+        )
+        response = execute_with_retry(request)
         result.extend(response.get("files", []))
         token = response.get("nextPageToken")
         if not token:

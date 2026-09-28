@@ -74,6 +74,48 @@ class DriveSourceNames(unittest.TestCase):
     def test_dotted_drive_folder_date_is_understood(self):
         self.assertEqual(sync.source_date_from_path("Raw data/2026.09.21/SRVY0-ACQU122.magdata"), "2026-09-21")
 
+    def test_transient_drive_error_is_retried(self):
+        class Response:
+            status = 500
+
+        class TransientError(Exception):
+            resp = Response()
+
+        class Request:
+            calls = 0
+
+            def execute(self):
+                self.calls += 1
+                if self.calls < 3:
+                    raise TransientError("temporary")
+                return {"files": []}
+
+        request = Request()
+        delays = []
+        result = sync.execute_with_retry(request, sleep_fn=delays.append)
+        self.assertEqual(result, {"files": []})
+        self.assertEqual(request.calls, 3)
+        self.assertEqual(delays, [1, 2])
+
+    def test_non_transient_drive_error_is_not_retried(self):
+        class Response:
+            status = 403
+
+        class FatalError(Exception):
+            resp = Response()
+
+        class Request:
+            calls = 0
+
+            def execute(self):
+                self.calls += 1
+                raise FatalError("forbidden")
+
+        request = Request()
+        with self.assertRaises(FatalError):
+            sync.execute_with_retry(request, sleep_fn=lambda _delay: None)
+        self.assertEqual(request.calls, 1)
+
 
 class IncrementalSync(unittest.TestCase):
     def setUp(self):
