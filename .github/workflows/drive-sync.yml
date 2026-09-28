@@ -1,6 +1,13 @@
 name: Sync Google Drive survey data
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/drive-sync.yml"
+      - "drive-sync-sources.json"
+      - "tools/export_magdata_trajectories.py"
+      - "tools/sync_drive_sources.py"
   schedule:
     # GitHub cron is UTC. 00:00 UTC = 08:00 Asia/Shanghai.
     - cron: "0 0 * * *"
