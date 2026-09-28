@@ -116,6 +116,19 @@ class DriveSourceNames(unittest.TestCase):
             sync.execute_with_retry(request, sleep_fn=lambda _delay: None)
         self.assertEqual(request.calls, 1)
 
+    def test_media_chunks_use_the_drive_retry_budget(self):
+        class Downloader:
+            retries = None
+
+            def next_chunk(self, *, num_retries):
+                self.retries = num_retries
+                return "status", True
+
+        downloader = Downloader()
+        result = sync.download_next_chunk_with_retry(downloader)
+        self.assertEqual(result, ("status", True))
+        self.assertEqual(downloader.retries, sync.DRIVE_API_MAX_ATTEMPTS - 1)
+
 
 class IncrementalSync(unittest.TestCase):
     def setUp(self):

@@ -157,6 +157,11 @@ def execute_with_retry(request, *, max_attempts: int = DRIVE_API_MAX_ATTEMPTS, s
     raise AssertionError("unreachable")
 
 
+def download_next_chunk_with_retry(downloader):
+    """Read one media chunk with the same transient retry budget as Drive requests."""
+    return downloader.next_chunk(num_retries=max(0, DRIVE_API_MAX_ATTEMPTS - 1))
+
+
 def metadata(service, file_id: str) -> dict:
     request = service.files().get(
         fileId=file_id,
@@ -290,7 +295,7 @@ def probe_header_text(service, item: dict) -> str | None:
         request = service.files().get_media(fileId=item["id"], supportsAllDrives=True)
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request, chunksize=PROBE_BYTES)
-        downloader.next_chunk()
+        download_next_chunk_with_retry(downloader)
         return buffer.getvalue().decode("utf-8-sig", errors="replace")
     except Exception:
         return None
@@ -572,7 +577,7 @@ def download_file(service, item: dict, target: Path) -> None:
     downloader = MediaIoBaseDownload(buffer, request, chunksize=4 * 1024 * 1024)
     done = False
     while not done:
-        _, done = downloader.next_chunk()
+        _, done = download_next_chunk_with_retry(downloader)
     target.write_bytes(buffer.getvalue())
 
 
@@ -700,7 +705,11 @@ def sync_nergui_magarrow(
             summary["updatedCount" if existing else "importedCount"] += 1
         except Exception as error:
             summary["failedCount"] += 1
-            print(f"::warning::Nergui Undur MagArrow source import failed ({type(error).__name__})")
+            status = getattr(getattr(error, "resp", None), "status", None)
+            print(
+                "::warning::Nergui Undur MagArrow source import failed "
+                f"(acquisition={acquisition}, error={type(error).__name__}, status={status})"
+            )
 
     if summary["failedCount"] or summary["skippedOversizeCount"]:
         raise RuntimeError(
