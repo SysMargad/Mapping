@@ -32,8 +32,8 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/hetsuu-hutul-dwg.geojson` — Drive дахь `Hetsuu hutul.DWG`-ийн 628 байрлалтай entity. `Hetsuu hutul` лиценз сонгоход автоматаар нээгдэнэ.
 - `dist/data/context/project-trackers.json` — Арцат, Хэцүү хөтөл, Бүдүүн хадын Checklist-ээс гаргасан 780 actual flight-register record. Энэ бүртгэл нь trajectory geometry биш; pilot нэр web asset-д ороогүй.
 - `dist/data/context/project-control-points.geojson` — гурван tracker-ийн Base/GCP хүснэгтээс нэгтгэсэн provenance asset. Control point нь trajectory биш тул map дээр цэнхэр цэгээр дүрслэхгүй.
-- `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ болон зураг авалтын `Timestamp.MRK` GNSS байрлалаас баталгаажсан бодит trajectory. Бүдүүн хадын 120, Арцатын 1 нислэг огноо/sensor-оор харагдана.
-- `dist/data/context/project-flight-coverage.json` — дээрх баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary.
+- `dist/data/context/project-flight-tracks.geojson` — DJI FlightRecord KMZ, зураг авалтын `Timestamp.MRK`, Medusa-гийн QC-cleaned traverse GNSS байрлалаас баталгаажсан бодит trajectory. Бүдүүн хадын 120 DJI нислэг, Арцатын 1 L2 нислэг болон 24 Medusa traverse шугам огноо/sensor-оор харагдана.
+- `dist/data/context/project-flight-coverage.json` — зурвасын өргөн баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary. Medusa-гийн footprint/swath баталгаажаагүй тул улаан track харагдах боловч coverage-д оруулахгүй.
 - `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, шаардлагатай үед raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
@@ -94,6 +94,18 @@ Verified DJI FlightRecord trajectory (татаж авсан read-only `.kmz` cop
 ```
 
 Coverage нь trajectory-н төв шугамаас тал бүрт 25 м буюу нийт 50 м зурвасыг 10 м grid-ээр тооцож, тухайн төслийн лицензийн polygon-д тайрна. Sensor ба огноо сонгоход “Ниссэн нийт талбай” тухайн шүүлтүүрээр, “Бүх өдрийн нийлбэр” бүх огнооны нийлбэрээр шинэчлэгдэнэ.
+
+Арцатын боловсруулсан Medusa traverse CSV-г tracker-оос тусад нь session/line ID-гаар импортлох:
+
+```powershell
+& $python .\tools\import_medusa_traverse_tracks.py `
+  "<final_traverse_points.csv>" `
+  --licences .\dist\data\context\licenses.geojson `
+  --existing .\dist\data\context\project-flight-tracks.geojson `
+  --output .\dist\data\context\project-flight-tracks.geojson
+```
+
+Importer нь зөвхөн `TRAVERSE` ангилалтай, `hard_qc_pass=True` цэгүүдийг авна. Medusa-ийн footprint/swath өргөн баталгаажаагүй тул эдгээр шугамыг coverage тооцоонд оруулахгүй.
 
 Нэгтгэсэн MRK/KMZ trajectory asset-аас бүх төслийн coverage-г дахин бодох:
 

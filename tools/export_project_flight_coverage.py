@@ -97,7 +97,11 @@ def build(tracks_path: Path, licences_path: Path, output: Path) -> None:
         "projects": {},
     }
     for project_key, licence_id in PROJECT_LICENCES.items():
-        project_tracks = [feature for feature in tracks if feature.get("properties", {}).get("projectKey") == project_key]
+        project_tracks = [
+            feature for feature in tracks
+            if feature.get("properties", {}).get("projectKey") == project_key
+            and feature.get("properties", {}).get("coverageStatus") != "not_calculated"
+        ]
         if not project_tracks:
             continue
         points = [point for feature in project_tracks for point in feature["geometry"]["coordinates"]]

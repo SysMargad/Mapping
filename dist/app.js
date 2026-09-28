@@ -301,7 +301,9 @@
       ["Start", props.startTime],
       ["Flight altitude", altitude],
       ["Points", props.pointCount],
-      ["Coverage model", `${props.coverageSwathWidthM || 50} m swath`],
+      ["Coverage model", props.coverageStatus === "not_calculated"
+        ? "Not calculated — footprint/swath unverified"
+        : `${props.coverageSwathWidthM || 50} m swath`],
       ["Source", props.sourceFile],
     ]);
   };
@@ -350,6 +352,10 @@
       : null);
     const dateFilter = projectSensorCoverage ? state.selectedTrackerDate : state.selectedFlightDate;
     const selectedDate = dateFilter !== "all" ? dateFilter : null;
+    const uncalculatedTrackCount = state.selectedTrackerProject && state.selectedTrackerSensor
+      ? projectFlightFeatures(state.selectedTrackerProject, state.selectedTrackerSensor, dateFilter)
+        .filter((feature) => feature.properties?.coverageStatus === "not_calculated").length
+      : 0;
     const dailyAreas = Object.values(coverage?.dailyAreaM2 || {}).filter(Number.isFinite);
     const allDaysArea = coverage ? dailyAreas.reduce((sum, area) => sum + area, 0) : NaN;
     const selectedArea = selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : coverage?.totalAreaM2;
@@ -371,6 +377,8 @@
     ui.tertiaryValue.textContent = coverageText(coverage ? allDaysArea : undefined);
     ui.summaryNote.textContent = campaign
       ? `${state.areaScope?.label || ""} · ${campaign.label} · Зурвасын өргөн баталгаажаагүй тул ниссэн талбайг тооцоогүй. ${campaign.coverageNote || ""}`.trim()
+      : uncalculatedTrackCount
+        ? `${state.areaScope?.label || ""} · ${state.selectedTrackerSensor} · ${selectedDate || "Бүх огноо"} · ${formatCount(uncalculatedTrackCount)} баталгаажсан trajectory харагдаж байна. Footprint/swath өргөн баталгаажаагүй тул ниссэн талбайг тооцоогүй.`
       : coverage
         ? `${state.areaScope.label} · ${state.selectedTrackerSensor || "MagArrow"} · ${selectedDate || "Бүх огноо"} · Баталгаажсан trajectory-д суурилсан 50 м зурвасын тооцоо.${selectedDate ? "" : " Өдрийн нийлбэрт огноо хоорондын давхардал орж болно."}`
         : state.areaScope
@@ -821,6 +829,23 @@
     })
   );
 
+  const projectSensorIds = (projectKey) => {
+    const project = state.trackerData?.projects?.[projectKey];
+    const sensors = new Set(Object.keys(project?.sensors || {}));
+    for (const feature of projectFlightFeatures(projectKey, null, "all")) {
+      if (feature.properties?.sensor) sensors.add(feature.properties.sensor);
+    }
+    const preferredOrder = sensorConfig.map((item) => item.id);
+    return [...sensors].sort((left, right) => {
+      const leftIndex = preferredOrder.indexOf(left);
+      const rightIndex = preferredOrder.indexOf(right);
+      if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right);
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    });
+  };
+
   const selectedProjectFlightLayers = () => projectFlightFeatures()
     .map((feature) => state.projectFlightLayers.get(feature.id))
     .filter(Boolean);
@@ -867,12 +892,17 @@
       ui.projectTrackerPanel.hidden = true;
       return;
     }
-    const sensorRows = Object.entries(project.sensors || {}).map(([sensor, stats]) => {
+    const sensorRows = projectSensorIds(projectKey).map((sensor) => {
+      const stats = project.sensors?.[sensor] || {};
+      const geometry = projectFlightFeatures(projectKey, sensor, "all");
+      const geometryProps = geometry[0]?.properties || {};
       const altitude = Number.isFinite(stats.altitudeMinM)
         ? `${stats.altitudeMinM}–${stats.altitudeMaxM} м`
+        : Number.isFinite(geometryProps.flightHeightMinM)
+          ? `${Math.round(geometryProps.flightHeightMinM)}–${Math.round(geometryProps.flightHeightMaxM)} м AGL`
         : "өндөр бүртгээгүй";
-      const geometryCount = projectFlightFeatures(projectKey, sensor, "all").length;
-      return `<button type="button" class="tracker-sensor-row${state.selectedTrackerSensor === sensor ? " is-active" : ""}" data-tracker-sensor="${escapeHtml(sensor)}"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records)} бүртгэл${geometryCount ? ` · ${geometryCount} line` : ""}</b></button>`;
+      const geometryCount = geometry.length;
+      return `<button type="button" class="tracker-sensor-row${state.selectedTrackerSensor === sensor ? " is-active" : ""}" data-tracker-sensor="${escapeHtml(sensor)}"><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(altitude)}</span><b>${formatCount(stats.records || 0)} бүртгэл${geometryCount ? ` · ${geometryCount} line` : ""}</b></button>`;
     }).join("");
     const dailyRows = (project.daily || []).map((item) => {
       const sensors = Object.keys(item.sensors || {});
@@ -901,7 +931,7 @@
     // Tracker rows with a trajectory, versus rows whose coordinate source has
     // not arrived. A segment count is never presented as a flight count.
     const trackerGeometry = projectFlightFeatures(projectKey, null, "all");
-    const mappedTrackerIds = new Set(trackerGeometry.map((feature) => feature.properties?.trackerId));
+    const mappedTrackerIds = new Set(trackerGeometry.map((feature) => feature.properties?.trackerId).filter(Boolean));
     const missingSource = (state.trackerData?.records || [])
       .filter((record) => record.projectKey === projectKey && !mappedTrackerIds.has(record.id)).length;
     const campaigns = projectCampaigns(projectKey);
@@ -921,7 +951,7 @@
       <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge survey">ACTUAL RECORDS</span></div>
       <div class="tracker-kpis">
         <div><span>Нислэгийн бүртгэл</span><strong>${formatCount(project.records)}</strong></div>
-        <div><span>GPS замтай нислэг</span><strong>${formatCount(mappedTrackerIds.size)}</strong></div>
+        <div><span>Баталгаажсан trajectory</span><strong>${formatCount(trackerGeometry.length)}</strong></div>
         <div><span>Эх сурвалж дутуу</span><strong>${formatCount(missingSource)}</strong></div>
       </div>
       <div class="tracker-kpis">
@@ -963,7 +993,7 @@
   const activateTrackerProject = (projectKey) => {
     state.selectedTrackerProject = projectKey;
     const project = state.trackerData?.projects?.[projectKey];
-    state.selectedTrackerSensor = Object.keys(project?.sensors || {})[0] || null;
+    state.selectedTrackerSensor = projectSensorIds(projectKey)[0] || null;
     state.selectedTrackerDate = "all";
     state.selectedCampaignId = null;
     state.selectedCampaignDate = "all";
@@ -1443,12 +1473,14 @@
 
   const renderTrackerSensorPanel = (sensor) => {
     const project = state.trackerData?.projects?.[state.selectedTrackerProject];
-    if (!project?.sensors?.[sensor]) return;
+    const allGeometry = projectFlightFeatures(state.selectedTrackerProject, sensor, "all");
+    if (!project || (!project.sensors?.[sensor] && !allGeometry.length)) return;
     const records = (state.trackerData.records || []).filter((record) => (
       record.projectKey === state.selectedTrackerProject && record.sensor === sensor
     ));
-    const allGeometry = projectFlightFeatures(state.selectedTrackerProject, sensor, "all");
-    const geometryByTrackerId = new Map(allGeometry.map((feature) => [feature.properties?.trackerId, feature]));
+    const geometryByTrackerId = new Map(allGeometry
+      .filter((feature) => feature.properties?.trackerId)
+      .map((feature) => [feature.properties.trackerId, feature]));
     const trajectoryDates = [...new Set(allGeometry
       .map((feature) => feature.properties?.date).filter(Boolean))].sort().reverse();
     const selectedRecords = state.selectedTrackerDate === "all"
@@ -1467,7 +1499,7 @@
         label: date,
         count: projectFlightFeatures(state.selectedTrackerProject, sensor, date).length,
       }))) : [];
-    const missionRows = selectedRecords.map((record) => {
+    const registerRows = selectedRecords.map((record) => {
       const geometry = geometryByTrackerId.get(record.id);
       const hasGeometry = Boolean(geometry);
       const displayDate = geometry?.properties?.date || record.date;
@@ -1480,7 +1512,19 @@
           ? `${Math.round(geometryProps.sourceAltitudeMeanM)} м GNSS/absolute`
           : record.altitudeM ? `${record.altitudeM} м (tracker-ийн төлөвлөсөн өндөр)` : "өндөргүй";
       return `<div class="tracker-flight-record${hasGeometry ? " has-geometry" : ""}"><strong>${escapeHtml(record.mission || record.id)}</strong><span>${escapeHtml(displayDate)} · ${escapeHtml(altitude)}</span><b>${hasGeometry ? "TRAJECTORY" : "REGISTER"}</b></div>`;
-    }).join("");
+    });
+    const standaloneRows = allGeometry
+      .filter((feature) => !feature.properties?.trackerId)
+      .filter((feature) => state.selectedTrackerDate === "all" || feature.properties?.date === state.selectedTrackerDate)
+      .map((feature) => {
+        const props = feature.properties || {};
+        const altitude = Number.isFinite(props.flightHeightMeanM)
+          ? `${Math.round(props.flightHeightMeanM)} м AGL`
+          : "өндөргүй";
+        return `<div class="tracker-flight-record has-geometry"><strong>${escapeHtml(props.mission || props.lineId || feature.id)}</strong><span>${escapeHtml(props.date || "огноогүй")} · ${escapeHtml(altitude)}</span><b>TRAJECTORY</b></div>`;
+      });
+    const missionRows = registerRows.concat(standaloneRows).join("");
+    const mappedRecordCount = geometryByTrackerId.size;
     ui.sensorPanel.innerHTML = `
       <div class="sensor-heading"><div><strong>${escapeHtml(sensor)}</strong><span>${escapeHtml(project.label)} · ${escapeHtml(project.licence)}</span></div><span class="status-badge ${geometryCount ? "available" : "survey"}">${geometryCount ? `${geometryCount} TRAJECTORY` : "ACTUAL REGISTER"}</span></div>
       <h3>Ниссэн trajectory өдөр</h3>
@@ -1492,7 +1536,7 @@
       ${state.selectedTrackerDate !== "all" && !visibleGeometryCount && cadReferenceLabels.length
         ? `<p class="truth-note">Trajectory координат хараахан ирээгүй. Mission нэртэй таарсан CAD хэсэг рүү төвлөрөв: ${escapeHtml(cadReferenceLabels.join(", "))}.</p>`
         : ""}
-      <p class="panel-note">${formatCount(selectedRecords.length)} бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory · ${formatCount(records.length - geometryByTrackerId.size)} бүртгэлд эх сурвалж дутуу. MRK/KMZ/flight-log байхгүй mission-ийг шугам болгон таамаглаагүй.</p>`;
+      <p class="panel-note">${formatCount(selectedRecords.length)} tracker бүртгэл · ${formatCount(visibleGeometryCount)} баталгаажсан trajectory · ${formatCount(records.length - mappedRecordCount)} tracker бүртгэлд эх сурвалж дутуу. Tracker-оос тусдаа боловсруулсан sensor acquisition-ийг өөрийн session/line ID-гаар харуулав.</p>`;
     const dateList = ui.sensorPanel.querySelector("#tracker-flight-date-list");
     for (const option of dateOptions) {
       const button = document.createElement("button");
@@ -1630,12 +1674,13 @@
       }))
       : [];
     const sensors = project
-      ? Object.entries(project.sensors || {}).map(([id, stats]) => {
+      ? projectSensorIds(state.selectedTrackerProject).map((id) => {
+        const stats = project.sensors?.[id] || {};
         const base = sensorConfig.find((item) => item.id === id) || { id, label: id };
         const geometryCount = projectFlightFeatures(state.selectedTrackerProject, id, "all").length;
         return {
           ...base,
-          status: geometryCount ? `${geometryCount} TRAJECTORY` : `${formatCount(stats.records)} ACTUAL RECORDS`,
+          status: geometryCount ? `${geometryCount} TRAJECTORY` : `${formatCount(stats.records || 0)} ACTUAL RECORDS`,
           tone: geometryCount ? "available" : "survey",
         };
       }).concat(campaignOptions)

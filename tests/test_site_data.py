@@ -59,8 +59,8 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-28.1', index)
-        self.assertIn('styles.css?v=2026-09-28.1', index)
+        self.assertIn('app.js?v=2026-09-28.2', index)
+        self.assertIn('styles.css?v=2026-09-28.2', index)
 
     def test_flown_track_renderers_use_sensor_colors(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -79,7 +79,7 @@ class Registry(unittest.TestCase):
     def test_every_published_project_track_sensor_has_a_color(self):
         tracks = load("context/project-flight-tracks.geojson")
         sensors = {feature["properties"]["sensor"] for feature in tracks["features"]}
-        self.assertEqual(sensors, {"L2", "L3", "P1"})
+        self.assertEqual(sensors, {"Medusa", "L2", "L3", "P1"})
 
     def test_fit_map_includes_filtered_campaign_tracks(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -90,6 +90,11 @@ class Registry(unittest.TestCase):
         fit_map = app[fit_start:fit_end]
         self.assertIn("state.selectedCampaignId", fit_map)
         self.assertIn("focused.length ? focused : visibleLayers()", fit_map)
+
+    def test_uncalculated_medusa_tracks_are_not_described_as_missing(self):
+        app = (DIST / "app.js").read_text(encoding="utf-8")
+        self.assertIn('props.coverageStatus === "not_calculated"', app)
+        self.assertIn("баталгаажсан trajectory харагдаж байна. Footprint/swath өргөн баталгаажаагүй", app)
 
 
 class ExistingProjectsUnaffected(unittest.TestCase):
@@ -104,10 +109,20 @@ class ExistingProjectsUnaffected(unittest.TestCase):
         for feature in self.tracks["features"]:
             key = feature["properties"]["projectKey"]
             counts[key] = counts.get(key, 0) + 1
-        self.assertEqual(counts, {"buduunkhad": 120, "artsat": 1})
+        self.assertEqual(counts, {"buduunkhad": 120, "artsat": 25})
+
+    def test_artsat_medusa_traverses_are_verified_red_track_data(self):
+        medusa = [feature for feature in self.tracks["features"]
+                  if feature["properties"].get("sourceDatasetId") == "artsat-medusa-2026-09-12-13"]
+        self.assertEqual(len(medusa), 24)
+        self.assertEqual({feature["properties"]["sensor"] for feature in medusa}, {"Medusa"})
+        self.assertEqual({feature["properties"]["date"] for feature in medusa}, {"2026-09-12", "2026-09-13"})
+        self.assertEqual(sum(feature["properties"]["pointCount"] for feature in medusa), 1155)
+        self.assertTrue(all(feature["properties"]["coverageStatus"] == "not_calculated" for feature in medusa))
 
     def test_coverage_still_covers_the_projects_with_trajectories(self):
         self.assertEqual(set(self.coverage["projects"]), {"artsat", "buduunkhad"})
+        self.assertNotIn("Medusa", self.coverage["projects"]["artsat"]["sensors"])
 
     def test_hetsuu_has_no_fabricated_coverage(self):
         # Requirement 8.9: no trajectory means no coverage entry at all, which

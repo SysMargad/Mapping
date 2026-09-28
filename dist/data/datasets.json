@@ -141,19 +141,21 @@
         "DJI Timestamp.MRK image-position files (118 matched tracker missions)",
         "DJIFlightRecord_2026-06-20_[12-31-37].kmz",
         "DJIFlightRecord_2026-06-20_[13-05-55].kmz",
-        "DJIFlightRecord_2026-06-20_[13-54-39].kmz"
+        "DJIFlightRecord_2026-06-20_[13-54-39].kmz",
+        "final_traverse_points.csv (Medusa MS-700, 1,155 QC points / 24 lines)"
       ],
       "sourceUrls": [
         "https://drive.google.com/file/d/1zqFcmKbkY6yocNR-x5EHaDmb0OpUqYHT/view",
         "https://drive.google.com/file/d/15PfSq4iBqASovU-u5dRXnkG2-scYVg3C/view",
-        "https://drive.google.com/file/d/1Cj2DBsXVBpuA2bsRrCkEcPCPlnT3QPlo/view"
+        "https://drive.google.com/file/d/1Cj2DBsXVBpuA2bsRrCkEcPCPlnT3QPlo/view",
+        "https://drive.google.com/file/d/1UeLUScaJZt4P29nRX8d-RApjjfIsJCMG/view"
       ],
       "webAsset": "./data/context/project-flight-tracks.geojson",
       "sourceCrs": "EPSG:4326",
       "displayCrs": "EPSG:4326",
       "crsVerified": true,
       "defaultVisible": false,
-      "notes": "121 verified trajectories: 120 Buduunkhad flights and 1 Artsat flight. Timestamp.MRK routes use chronological image-position GNSS coordinates; three Buduunkhad flights use full DJI FlightRecord KMZ telemetry. Unmatched tracker rows remain register-only records."
+      "notes": "145 verified line trajectories: 120 Buduunkhad DJI flights, 1 Artsat L2 flight, and 24 Artsat Medusa MS-700 QC-cleaned traverse lines from 12–13 September 2026. Medusa lines retain their own session/line IDs because they are independent of the DJI tracker register."
     },
     {
       "id": "context-project-flight-coverage",
@@ -171,7 +173,7 @@
       "displayCrs": null,
       "crsVerified": true,
       "defaultVisible": false,
-      "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to each matching project licence. It is available only for verified trajectory records."
+      "notes": "Coverage uses a 50 m swath on a 10 m grid, clipped to each matching project licence. Medusa coverage is excluded because its footprint/swath width is not verified."
     },
     {
       "id": "context-project-campaign-tracks",
