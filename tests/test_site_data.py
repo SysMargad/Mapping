@@ -59,13 +59,27 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-27.2', index)
+        self.assertIn('app.js?v=2026-09-28.1', index)
+        self.assertIn('styles.css?v=2026-09-28.1', index)
 
-    def test_all_flown_track_renderers_use_the_same_blue(self):
+    def test_flown_track_renderers_use_sensor_colors(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
-        self.assertIn('const FLIGHT_TRACK_COLOR = "#2563eb";', app)
-        self.assertEqual(app.count("color: FLIGHT_TRACK_COLOR"), 2)
-        self.assertIn("const flightDateColor = () => FLIGHT_TRACK_COLOR;", app)
+        for sensor, color in {
+            "MagArrow": "#2563eb",
+            "Medusa": "#e11d48",
+            "L2": "#16a34a",
+            "L3": "#9333ea",
+            "P1": "#f59e0b",
+        }.items():
+            self.assertIn(f'{sensor}: "{color}"', app)
+        self.assertEqual(app.count("color: sensorTrackColor(feature.properties?.sensor)"), 2)
+        self.assertIn('const flightDateColor = () => sensorTrackColor("MagArrow");', app)
+        self.assertIn('if (/medusa/i.test(name)) return SENSOR_TRACK_COLORS.Medusa;', app)
+
+    def test_every_published_project_track_sensor_has_a_color(self):
+        tracks = load("context/project-flight-tracks.geojson")
+        sensors = {feature["properties"]["sensor"] for feature in tracks["features"]}
+        self.assertEqual(sensors, {"L2", "L3", "P1"})
 
     def test_fit_map_includes_filtered_campaign_tracks(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")

@@ -39,6 +39,8 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, шаардлагатай үед raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
+Map дээр баталгаажсан trajectory нь sensor-аар тогтмол өнгөтэй: **MagArrow цэнхэр** (`#2563eb`), **Medusa улаан** (`#e11d48`), **L2 ногоон** (`#16a34a`), **L3 нил ягаан** (`#9333ea`), **P1 улбар шар** (`#f59e0b`). Sensor нь баталгаажаагүй campaign саарал тасархай шугамаар харагдана. Өнгө нь track байгаа мэт таамаглахгүй; coordinate geometry баталгаажсан үед л шугам зурагдана.
+
 Project tracker өгөгдөл нь `project_operations` scope-д тусгаарлагдана. Nergui Undur sensor/trajectory өгөгдөлтэй нийлүүлэхгүй. Tracker-ийн mission бүртгэл дангаараа geometry биш: зөвхөн tracker холбоостой таарсан `DJIFlightRecord_*.kmz` эсвэл `Timestamp.MRK` coordinate эх үүсвэртэй үед trajectory болно. Үлдсэн бүртгэлийг map дээр шугам болгон таамаглахгүй.
 
 ## Local preview

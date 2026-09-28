@@ -115,11 +115,11 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .tracker-flight-record.has-geometry b { color: var(--cyan); }
 .tracker-source { display: inline-flex; margin-top: 10px; color: var(--cyan); font-size: 10px; text-decoration: none; }
 .sensor-button { --sensor-accent: #91a6bb; --sensor-fill: rgba(145, 166, 187, .08); min-height: 55px; padding: 8px 7px; border: 1px solid color-mix(in srgb, var(--sensor-accent) 48%, transparent); border-radius: 11px; background: var(--sensor-fill); text-align: left; cursor: pointer; }
-.sensor-button.sensor-magarrow { --sensor-accent: var(--cyan); --sensor-fill: rgba(57, 217, 255, .09); }
-.sensor-button.sensor-l3 { --sensor-accent: var(--green); --sensor-fill: rgba(113, 246, 193, .08); }
-.sensor-button.sensor-l2 { --sensor-accent: var(--amber); --sensor-fill: rgba(255, 184, 77, .08); }
-.sensor-button.sensor-p1 { --sensor-accent: var(--pink); --sensor-fill: rgba(255, 117, 181, .08); }
-.sensor-button.sensor-medusa { --sensor-accent: #b596ff; --sensor-fill: rgba(181, 150, 255, .08); }
+.sensor-button.sensor-magarrow { --sensor-accent: #2563eb; --sensor-fill: rgba(37, 99, 235, .10); }
+.sensor-button.sensor-medusa { --sensor-accent: #e11d48; --sensor-fill: rgba(225, 29, 72, .09); }
+.sensor-button.sensor-l2 { --sensor-accent: #16a34a; --sensor-fill: rgba(22, 163, 74, .09); }
+.sensor-button.sensor-l3 { --sensor-accent: #9333ea; --sensor-fill: rgba(147, 51, 234, .09); }
+.sensor-button.sensor-p1 { --sensor-accent: #f59e0b; --sensor-fill: rgba(245, 158, 11, .09); }
 .sensor-button strong, .sensor-button span { display: block; }
 .sensor-button strong { font-size: 12px; }
 .sensor-button span { margin-top: 4px; color: var(--muted); font-size: 8px; line-height: 1.25; letter-spacing: .05em; }
@@ -181,11 +181,16 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
 .legend-symbol.base-point, .legend-symbol.gcp-point { width: 10px; height: 10px; margin-left: 2px; border-radius: 50%; }
 .legend-symbol.base-point { border-color: #ffca5c; background: rgba(255, 202, 92, .35); }
 .legend-symbol.gcp-point { border-color: #56d7ff; background: rgba(86, 215, 255, .35); }
-.legend-symbol.main-line, .legend-symbol.tie-line, .legend-symbol.mission-line, .legend-symbol.actual-line { height: 0; border-width: 2px 0 0; border-radius: 0; }
+.legend-symbol.main-line, .legend-symbol.tie-line, .legend-symbol.mission-line, .legend-symbol.sensor-track { height: 0; border-width: 2px 0 0; border-radius: 0; }
 .legend-symbol.main-line { border-color: var(--green); }
 .legend-symbol.tie-line { border-color: #39a8ff; border-style: dashed; }
 .legend-symbol.mission-line { border-color: #ff9f43; border-style: dashed; }
-.legend-symbol.actual-line { border-color: #2563eb; }
+.legend-symbol.sensor-magarrow { border-color: #2563eb; }
+.legend-symbol.sensor-medusa { border-color: #e11d48; }
+.legend-symbol.sensor-l2 { border-color: #16a34a; }
+.legend-symbol.sensor-l3 { border-color: #9333ea; }
+.legend-symbol.sensor-p1 { border-color: #f59e0b; }
+.legend-symbol.sensor-unverified { border-color: #94a3b8; border-style: dashed; }
 .legend-symbol.pending { border-color: #6c7e90; border-style: dotted; }
 .action-row { display: grid; grid-template-columns: 1fr 46px; gap: 8px; margin-top: 17px; }
 .primary-action, .secondary-action { min-height: 44px; border: 0; border-radius: 12px; font-weight: 800; cursor: pointer; }

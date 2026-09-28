@@ -3,7 +3,19 @@
 
   const PROJECT = "Nergui Undur";
   const FORBIDDEN_PROJECTS = ["artsat", "будуун хад", "buduunkhad", "buduun khad"];
-  const FLIGHT_TRACK_COLOR = "#2563eb";
+  const SENSOR_TRACK_COLORS = Object.freeze({
+    MagArrow: "#2563eb",
+    Medusa: "#e11d48",
+    L2: "#16a34a",
+    L3: "#9333ea",
+    P1: "#f59e0b",
+  });
+  const UNVERIFIED_TRACK_COLOR = "#94a3b8";
+  const sensorTrackColor = (sensor) => {
+    const name = String(sensor || "");
+    if (/medusa/i.test(name)) return SENSOR_TRACK_COLORS.Medusa;
+    return SENSOR_TRACK_COLORS[name] || UNVERIFIED_TRACK_COLOR;
+  };
   const $ = (selector) => document.querySelector(selector);
   const ui = {
     loading: $("#loading"),
@@ -78,11 +90,11 @@
   };
 
   const sensorConfig = [
-    { id: "MagArrow", label: "MagArrow", status: "DATA AVAILABLE", tone: "available" },
-    { id: "L3", label: "L3", status: "SURVEY DATA AVAILABLE", tone: "survey" },
-    { id: "L2", label: "L2", status: "SOURCE PENDING", tone: "pending" },
-    { id: "P1", label: "P1", status: "SOURCE PENDING", tone: "pending" },
-    { id: "Medusa", label: "Medusa MS-700", status: "NO FLIGHT DATA", tone: "unavailable" },
+    { id: "MagArrow", label: "MagArrow", status: "TRACKS AVAILABLE", tone: "available" },
+    { id: "Medusa", label: "Medusa MS-700", status: "NO VERIFIED TRACK", tone: "unavailable" },
+    { id: "L2", label: "L2", status: "NO VERIFIED TRACK", tone: "pending" },
+    { id: "L3", label: "L3", status: "METADATA ONLY", tone: "survey" },
+    { id: "P1", label: "P1", status: "NO VERIFIED TRACK", tone: "pending" },
   ];
 
   const escapeHtml = (value) => String(value ?? "")
@@ -1002,7 +1014,7 @@
     for (const feature of data.features || []) {
       const layer = L.geoJSON(feature, {
         pane: "actualPane",
-        style: { color: FLIGHT_TRACK_COLOR, weight: 3.2, opacity: 0.98 },
+        style: { color: sensorTrackColor(feature.properties?.sensor), weight: 3.2, opacity: 0.98 },
         onEachFeature(itemFeature, item) { item.bindPopup(projectFlightPopup(itemFeature)); },
       });
       state.projectFlightLayers.set(feature.id, layer);
@@ -1109,7 +1121,7 @@
     for (const feature of data.features || []) {
       const layer = L.geoJSON(feature, {
         pane: "actualPane",
-        style: { color: FLIGHT_TRACK_COLOR, weight: 3, opacity: 0.95, dashArray: "6 3" },
+        style: { color: sensorTrackColor(feature.properties?.sensor), weight: 3, opacity: 0.95, dashArray: "6 3" },
         onEachFeature(itemFeature, item) { item.bindPopup(campaignPopup(itemFeature)); },
       });
       state.campaignLayers.set(feature.id, layer);
@@ -1190,7 +1202,7 @@
     );
   };
 
-  const flightDateColor = () => FLIGHT_TRACK_COLOR;
+  const flightDateColor = () => sensorTrackColor("MagArrow");
 
   const pointInRing = ([x, y], ring) => {
     let inside = false;
