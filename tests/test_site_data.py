@@ -62,6 +62,11 @@ class Registry(unittest.TestCase):
         self.assertIn('app.js?v=2026-09-29.2', index)
         self.assertIn('styles.css?v=2026-09-29.2', index)
 
+    def test_site_brand_is_drone_track(self):
+        index = (DIST / "index.html").read_text(encoding="utf-8")
+        self.assertIn("<title>Drone Track</title>", index)
+        self.assertIn("<h1>Drone Track</h1>", index)
+
     def test_flown_track_renderers_use_sensor_colors(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
         for sensor, color in {

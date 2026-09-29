@@ -1,4 +1,4 @@
-# Mapping
+# Drone Track
 
 Nergui Undur төслийн суурь хил, sensor бүрийн баталгаажсан төлөв болон Арцат, Хэцүү хөтөл, Бүдүүн хад төслийн нислэгийн бүртгэл, баталгаажсан trajectory-г харуулдаг static Leaflet map.
 
