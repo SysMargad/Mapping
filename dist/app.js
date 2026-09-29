@@ -358,7 +358,7 @@
       : 0;
     const dailyAreas = Object.values(coverage?.dailyAreaM2 || {}).filter(Number.isFinite);
     const allDaysArea = coverage ? dailyAreas.reduce((sum, area) => sum + area, 0) : NaN;
-    const selectedArea = selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : coverage?.totalAreaM2;
+    const selectedDayArea = selectedDate ? coverage?.dailyAreaM2?.[selectedDate] : undefined;
     // A campaign whose swath is unverified has no coverage figure at all. That
     // is not the same as a measured zero, so it is never rendered as 0 м².
     const campaign = state.selectedCampaignId
@@ -372,9 +372,9 @@
     ui.primaryLabel.textContent = "Нийт талбай";
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
-    ui.secondaryValue.textContent = coverageText(selectedArea);
-    ui.tertiaryLabel.textContent = "Бүх өдрийн нийлбэр";
-    ui.tertiaryValue.textContent = coverageText(coverage ? allDaysArea : undefined);
+    ui.secondaryValue.textContent = coverageText(coverage?.totalAreaM2);
+    ui.tertiaryLabel.textContent = selectedDate ? "Сонгосон өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр";
+    ui.tertiaryValue.textContent = coverageText(selectedDate ? selectedDayArea : coverage ? allDaysArea : undefined);
     ui.summaryNote.textContent = campaign
       ? `${state.areaScope?.label || ""} · ${campaign.label} · Зурвасын өргөн баталгаажаагүй тул ниссэн талбайг тооцоогүй. ${campaign.coverageNote || ""}`.trim()
       : uncalculatedTrackCount
