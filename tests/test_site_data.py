@@ -59,8 +59,8 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-29.1', index)
-        self.assertIn('styles.css?v=2026-09-29.1', index)
+        self.assertIn('app.js?v=2026-09-29.2', index)
+        self.assertIn('styles.css?v=2026-09-29.2', index)
 
     def test_flown_track_renderers_use_sensor_colors(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -99,7 +99,7 @@ class Registry(unittest.TestCase):
     def test_summary_switches_to_the_selected_day_area(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
         self.assertIn('ui.secondaryValue.textContent = coverageText(coverage?.totalAreaM2);', app)
-        self.assertIn('selectedDate ? "Сонгосон өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр"', app)
+        self.assertIn('selectedDate ? "Өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр"', app)
         self.assertIn('coverageText(selectedDate ? selectedDayArea : coverage ? allDaysArea : undefined)', app)
 
 

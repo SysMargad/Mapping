@@ -373,7 +373,7 @@
     ui.primaryValue.textContent = formatArea(totalArea);
     ui.secondaryLabel.textContent = "Ниссэн нийт талбай";
     ui.secondaryValue.textContent = coverageText(coverage?.totalAreaM2);
-    ui.tertiaryLabel.textContent = selectedDate ? "Сонгосон өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр";
+    ui.tertiaryLabel.textContent = selectedDate ? "Өдрийн ниссэн талбай" : "Бүх өдрийн нийлбэр";
     ui.tertiaryValue.textContent = coverageText(selectedDate ? selectedDayArea : coverage ? allDaysArea : undefined);
     ui.summaryNote.textContent = campaign
       ? `${state.areaScope?.label || ""} · ${campaign.label} · Зурвасын өргөн баталгаажаагүй тул ниссэн талбайг тооцоогүй. ${campaign.coverageNote || ""}`.trim()
