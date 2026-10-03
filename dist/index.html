@@ -10,15 +10,15 @@
     <link rel="preconnect" href="https://unpkg.com" />
     <link rel="preconnect" href="https://tile.openstreetmap.org" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <link rel="stylesheet" href="./styles.css?v=2026-10-03.1" />
+    <link rel="stylesheet" href="./styles.css?v=2026-10-03.2" />
   </head>
   <body>
     <main class="app-shell">
       <section class="map-stage" aria-label="Survey project map">
         <div id="map"></div>
         <div class="map-view-switch" role="group" aria-label="Газрын зургийн харагдац">
-          <button type="button" data-map-view-option="current" aria-pressed="true">Одоогийн</button>
-          <button type="button" data-map-view-option="road" aria-pressed="false">Google маягийн</button>
+          <button type="button" data-map-view-option="osm" aria-pressed="true">OpenStreetMap</button>
+          <button type="button" data-map-view-option="topo" aria-pressed="false">OpenTopoMap</button>
         </div>
         <div id="loading" class="loading" role="status">
           <span class="spinner" aria-hidden="true"></span>
@@ -115,10 +115,10 @@
         <p class="hint">Талбай, участик, sensor болон огноо сонгоход trajectory хамт шүүгдэнэ. Pending sensor дээр дарж эх сурвалж, статусыг харна уу.</p>
       </aside>
 
-      <div class="map-credit">© OpenStreetMap contributors</div>
+      <div id="map-credit" class="map-credit">© OpenStreetMap contributors</div>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <script src="./app.js?v=2026-10-03.1"></script>
+    <script src="./app.js?v=2026-10-03.2"></script>
   </body>
 </html>

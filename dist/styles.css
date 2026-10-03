@@ -14,10 +14,7 @@ button { color: inherit; }
 .map-stage { position: absolute; inset: 0; background: #142130; transition: background .2s ease; }
 #map { z-index: 0; }
 .leaflet-container { background: #142130; font: inherit; }
-.leaflet-tile-pane { transition: filter .2s ease; }
-body:not([data-map-view]) .leaflet-tile-pane, body[data-map-view="current"] .leaflet-tile-pane { filter: saturate(.72) brightness(.68) contrast(1.1) hue-rotate(168deg); }
-body[data-map-view="road"] .leaflet-tile-pane { filter: none; }
-body[data-map-view="road"] .map-stage { background: #e7e9e6; }
+body[data-map-view="osm"] .map-stage, body[data-map-view="topo"] .map-stage { background: #e7e9e6; }
 .map-view-switch { position: absolute; z-index: 500; top: 18px; right: 74px; display: flex; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
 .map-view-switch button { min-height: 34px; padding: 7px 11px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; transition: background .18s ease, color .18s ease; }
 .map-view-switch button:hover { color: var(--ink); }

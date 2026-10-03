@@ -44,6 +44,7 @@
     fit: $("#fit-map"),
     refresh: $("#refresh-data"),
     mapViewButtons: [...document.querySelectorAll("[data-map-view-option]")],
+    mapCredit: $("#map-credit"),
   };
 
   const state = {
@@ -88,17 +89,29 @@
     actualTrackLayers: new Map(),
     selectedFlightDate: "all",
     warnings: new Set(),
-    mapView: "current",
+    mapView: "osm",
+    tileLayers: {},
   };
 
   const MAP_VIEW_STORAGE_KEY = "drone-track-map-view";
+  const mapViewCredits = {
+    osm: "© OpenStreetMap contributors",
+    topo: "© OpenStreetMap contributors · SRTM · © OpenTopoMap (CC-BY-SA)",
+  };
 
   const setMapView = (view, persist = true) => {
-    const selected = view === "road" ? "road" : "current";
+    const selected = view === "topo" ? "topo" : "osm";
     state.mapView = selected;
     document.body.dataset.mapView = selected;
+    if (ui.mapCredit) ui.mapCredit.textContent = mapViewCredits[selected];
     for (const button of ui.mapViewButtons) {
       button.setAttribute("aria-pressed", String(button.dataset.mapViewOption === selected));
+    }
+    if (state.map && state.tileLayers[selected]) {
+      for (const layer of Object.values(state.tileLayers)) {
+        if (state.map.hasLayer(layer)) state.map.removeLayer(layer);
+      }
+      state.tileLayers[selected].addTo(state.map);
     }
     if (persist) {
       try { localStorage.setItem(MAP_VIEW_STORAGE_KEY, selected); } catch (_) { /* preference is optional */ }
@@ -106,8 +119,8 @@
   };
 
   const restoreMapView = () => {
-    let saved = "current";
-    try { saved = localStorage.getItem(MAP_VIEW_STORAGE_KEY) || "current"; } catch (_) { /* use default */ }
+    let saved = "osm";
+    try { saved = localStorage.getItem(MAP_VIEW_STORAGE_KEY) || "osm"; } catch (_) { /* use default */ }
     setMapView(saved, false);
   };
 
@@ -247,10 +260,17 @@
     if (state.map) return state.map;
     const map = L.map("map", { zoomControl: false, preferCanvas: true });
     state.map = map;
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
+    state.tileLayers = {
+      osm: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors",
+      }),
+      topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+        maxZoom: 17,
+        attribution: "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)",
+      }),
+    };
+    state.tileLayers[state.mapView].addTo(map);
     L.control.zoom({ position: "topright" }).addTo(map);
     const panes = {
       licencePane: 430,
