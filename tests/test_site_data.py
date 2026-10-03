@@ -59,8 +59,18 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-09-29.2', index)
-        self.assertIn('styles.css?v=2026-09-29.2', index)
+        self.assertIn('app.js?v=2026-10-03.1', index)
+        self.assertIn('styles.css?v=2026-10-03.1', index)
+
+    def test_map_view_switch_has_current_and_road_modes(self):
+        index = (DIST / "index.html").read_text(encoding="utf-8")
+        app = (DIST / "app.js").read_text(encoding="utf-8")
+        styles = (DIST / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('data-map-view-option="current"', index)
+        self.assertIn('data-map-view-option="road"', index)
+        self.assertIn('MAP_VIEW_STORAGE_KEY', app)
+        self.assertIn('body[data-map-view="current"]', styles)
+        self.assertIn('body[data-map-view="road"]', styles)
 
     def test_site_brand_is_drone_track(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")

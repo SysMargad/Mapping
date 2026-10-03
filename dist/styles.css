@@ -11,10 +11,18 @@ body { overflow: hidden; background: #07111f; color: var(--ink); }
 button, input { font: inherit; }
 button { color: inherit; }
 .app-shell { position: relative; min-height: 100dvh; }
-.map-stage { position: absolute; inset: 0; background: #142130; }
+.map-stage { position: absolute; inset: 0; background: #142130; transition: background .2s ease; }
 #map { z-index: 0; }
 .leaflet-container { background: #142130; font: inherit; }
-.leaflet-tile-pane { filter: saturate(.72) brightness(.68) contrast(1.1) hue-rotate(168deg); }
+.leaflet-tile-pane { transition: filter .2s ease; }
+body:not([data-map-view]) .leaflet-tile-pane, body[data-map-view="current"] .leaflet-tile-pane { filter: saturate(.72) brightness(.68) contrast(1.1) hue-rotate(168deg); }
+body[data-map-view="road"] .leaflet-tile-pane { filter: none; }
+body[data-map-view="road"] .map-stage { background: #e7e9e6; }
+.map-view-switch { position: absolute; z-index: 500; top: 18px; right: 74px; display: flex; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+.map-view-switch button { min-height: 34px; padding: 7px 11px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; transition: background .18s ease, color .18s ease; }
+.map-view-switch button:hover { color: var(--ink); }
+.map-view-switch button[aria-pressed="true"] { background: var(--cyan); color: #041720; }
+.map-view-switch button:focus-visible { outline: 3px solid rgba(57, 217, 255, .38); outline-offset: 2px; }
 .leaflet-control-zoom { border: 1px solid var(--line) !important; box-shadow: var(--shadow) !important; }
 .leaflet-top.leaflet-right .leaflet-control-zoom { margin: 18px 18px 0 0 !important; }
 .leaflet-control-zoom a { width: 42px !important; height: 42px !important; line-height: 40px !important; border-color: var(--line) !important; background: var(--panel) !important; color: var(--ink) !important; }
@@ -220,6 +228,8 @@ h1 { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
   .sensor-list { grid-template-columns: repeat(2, 1fr); }
   .warning-stack { top: 66px; right: 8px; width: calc(100vw - 16px); }
   .leaflet-top.leaflet-right .leaflet-control-zoom { margin: 10px 10px 0 0 !important; }
+  .map-view-switch { top: 10px; right: 62px; max-width: calc(100vw - 124px); }
+  .map-view-switch button { min-height: 32px; padding: 6px 8px; font-size: 10px; }
   .map-credit { top: 8px; right: 64px; bottom: auto; }
 }
 @media (prefers-reduced-motion: reduce) {

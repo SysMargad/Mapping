@@ -43,6 +43,7 @@
     sourceLinks: $("#source-links"),
     fit: $("#fit-map"),
     refresh: $("#refresh-data"),
+    mapViewButtons: [...document.querySelectorAll("[data-map-view-option]")],
   };
 
   const state = {
@@ -87,6 +88,27 @@
     actualTrackLayers: new Map(),
     selectedFlightDate: "all",
     warnings: new Set(),
+    mapView: "current",
+  };
+
+  const MAP_VIEW_STORAGE_KEY = "drone-track-map-view";
+
+  const setMapView = (view, persist = true) => {
+    const selected = view === "road" ? "road" : "current";
+    state.mapView = selected;
+    document.body.dataset.mapView = selected;
+    for (const button of ui.mapViewButtons) {
+      button.setAttribute("aria-pressed", String(button.dataset.mapViewOption === selected));
+    }
+    if (persist) {
+      try { localStorage.setItem(MAP_VIEW_STORAGE_KEY, selected); } catch (_) { /* preference is optional */ }
+    }
+  };
+
+  const restoreMapView = () => {
+    let saved = "current";
+    try { saved = localStorage.getItem(MAP_VIEW_STORAGE_KEY) || "current"; } catch (_) { /* use default */ }
+    setMapView(saved, false);
   };
 
   const sensorConfig = [
@@ -1902,5 +1924,9 @@
   ui.clearLicenseContext.addEventListener("click", returnToLicenceBrowser);
   ui.refresh.addEventListener("click", load);
   ui.retry.addEventListener("click", load);
+  for (const button of ui.mapViewButtons) {
+    button.addEventListener("click", () => setMapView(button.dataset.mapViewOption));
+  }
+  restoreMapView();
   load();
 })();
