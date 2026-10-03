@@ -59,22 +59,22 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-10-03.2', index)
-        self.assertIn('styles.css?v=2026-10-03.2', index)
+        self.assertIn('app.js?v=2026-10-03.3', index)
+        self.assertIn('styles.css?v=2026-10-03.3', index)
 
-    def test_map_view_switch_has_osm_and_topographic_modes(self):
+    def test_map_view_switch_has_osm_and_satellite_modes(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
         app = (DIST / "app.js").read_text(encoding="utf-8")
         styles = (DIST / "styles.css").read_text(encoding="utf-8")
         self.assertIn('data-map-view-option="osm"', index)
-        self.assertIn('data-map-view-option="topo"', index)
+        self.assertIn('data-map-view-option="imagery"', index)
         self.assertIn('OpenStreetMap', index)
-        self.assertIn('OpenTopoMap', index)
+        self.assertIn('Esri World Imagery', index)
         self.assertIn('MAP_VIEW_STORAGE_KEY', app)
         self.assertIn('tile.openstreetmap.org', app)
-        self.assertIn('tile.opentopomap.org', app)
+        self.assertIn('World_Imagery/MapServer/tile', app)
         self.assertIn('body[data-map-view="osm"]', styles)
-        self.assertIn('body[data-map-view="topo"]', styles)
+        self.assertIn('body[data-map-view="imagery"]', styles)
 
     def test_site_brand_is_drone_track(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")

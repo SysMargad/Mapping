@@ -96,11 +96,11 @@
   const MAP_VIEW_STORAGE_KEY = "drone-track-map-view";
   const mapViewCredits = {
     osm: "© OpenStreetMap contributors",
-    topo: "© OpenStreetMap contributors · SRTM · © OpenTopoMap (CC-BY-SA)",
+    imagery: "Tiles © Esri · World Imagery",
   };
 
   const setMapView = (view, persist = true) => {
-    const selected = view === "topo" ? "topo" : "osm";
+    const selected = view === "imagery" ? "imagery" : "osm";
     state.mapView = selected;
     document.body.dataset.mapView = selected;
     if (ui.mapCredit) ui.mapCredit.textContent = mapViewCredits[selected];
@@ -121,6 +121,7 @@
   const restoreMapView = () => {
     let saved = "osm";
     try { saved = localStorage.getItem(MAP_VIEW_STORAGE_KEY) || "osm"; } catch (_) { /* use default */ }
+    if (saved === "topo") saved = "imagery";
     setMapView(saved, false);
   };
 
@@ -265,9 +266,9 @@
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
       }),
-      topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-        maxZoom: 17,
-        attribution: "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)",
+      imagery: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19,
+        attribution: "Tiles &copy; Esri &mdash; Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
       }),
     };
     state.tileLayers[state.mapView].addTo(map);
