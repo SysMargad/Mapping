@@ -59,7 +59,7 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-10-03.3', index)
+        self.assertIn('app.js?v=2026-10-12.1', index)
         self.assertIn('styles.css?v=2026-10-03.3', index)
 
     def test_map_view_switch_has_osm_and_satellite_modes(self):
@@ -75,6 +75,12 @@ class Registry(unittest.TestCase):
         self.assertIn('World_Imagery/MapServer/tile', app)
         self.assertIn('body[data-map-view="osm"]', styles)
         self.assertIn('body[data-map-view="imagery"]', styles)
+
+    def test_external_project_selection_prefers_available_track_geometry(self):
+        app = (DIST / "app.js").read_text(encoding="utf-8")
+        self.assertIn("const geometrySensor = projectSensors.find(", app)
+        self.assertIn("const defaultCampaign = projectCampaigns(projectKey)[0] || null;", app)
+        self.assertIn('state.selectedCampaignId = geometrySensor ? null : defaultCampaign?.id || null;', app)
 
     def test_site_brand_is_drone_track(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
