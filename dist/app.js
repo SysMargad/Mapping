@@ -646,9 +646,11 @@
             fitLayers.push(state.hetsuuCadLayer);
           }
           fitSingleLayer(L.featureGroup(fitLayers));
-          activeContextDataset = projectFlightFeatures(projectKey, null, "all").length
-            ? "context-project-flight-tracks"
-            : "context-project-trackers";
+          activeContextDataset = state.selectedCampaignId
+            ? "context-project-campaign-tracks"
+            : projectFlightFeatures(projectKey, null, "all").length
+              ? "context-project-flight-tracks"
+              : "context-project-trackers";
         } else {
           fitSingleLayer(layer);
         }
@@ -1036,12 +1038,18 @@
   const activateTrackerProject = (projectKey) => {
     state.selectedTrackerProject = projectKey;
     const project = state.trackerData?.projects?.[projectKey];
-    state.selectedTrackerSensor = projectSensorIds(projectKey)[0] || null;
+    const projectSensors = projectSensorIds(projectKey);
+    const geometrySensor = projectSensors.find(
+      (sensor) => projectFlightFeatures(projectKey, sensor, "all").length,
+    );
+    const defaultCampaign = projectCampaigns(projectKey)[0] || null;
+    state.selectedTrackerSensor = geometrySensor || (defaultCampaign ? null : projectSensors[0] || null);
     state.selectedTrackerDate = "all";
-    state.selectedCampaignId = null;
+    state.selectedCampaignId = geometrySensor ? null : defaultCampaign?.id || null;
     state.selectedCampaignDate = "all";
-    syncCampaignVisibility();
-    state.activeSensor = state.selectedTrackerSensor || "MagArrow";
+    state.activeSensor = state.selectedCampaignId
+      ? `${CAMPAIGN_PREFIX}${state.selectedCampaignId}`
+      : state.selectedTrackerSensor || "MagArrow";
     const control = state.baseLayers.get("trackerControl");
     if (control) {
       control.visible = false;
@@ -1049,11 +1057,15 @@
     }
     syncProjectControlVisibility();
     syncProjectFlightVisibility();
+    syncCampaignVisibility();
     renderTrackerProject(projectKey);
     renderSensorButtons();
-    if (state.selectedTrackerSensor) renderTrackerSensorPanel(state.selectedTrackerSensor);
-    const flightLayers = selectedProjectFlightLayers();
-    return flightLayers.length ? L.featureGroup(flightLayers) : null;
+    if (state.selectedCampaignId) renderCampaignPanel(state.selectedCampaignId);
+    else if (state.selectedTrackerSensor) renderTrackerSensorPanel(state.selectedTrackerSensor);
+    const trackLayers = state.selectedCampaignId
+      ? selectedCampaignLayers()
+      : selectedProjectFlightLayers();
+    return trackLayers.length ? L.featureGroup(trackLayers) : null;
   };
 
   const loadProjectTrackers = async () => {
