@@ -1,6 +1,6 @@
 {
-  "version": "2026-10-15.38",
-  "updated": "2026-10-15",
+  "version": "2026-10-16.39",
+  "updated": "2026-10-16",
   "datasets": {
     "registry": "./data/datasets.json",
     "base-licence": "./data/base/licenses.geojson",
@@ -20,13 +20,13 @@
     "l3-survey-family": "./data/l3/metadata.json"
   },
   "hashes": {
-    "registry": "b24e0ff69b6fdde0",
+    "registry": "daef190bbb8f28e2",
     "base-licence": "f68bab4661abfe72",
     "base-uchastik": "d6672e0a0ea44496",
     "base-licence-context": "a66a54138766d058",
     "base-survey-boundaries": "d09a3752dd958ebd",
     "context-hetsuu-hutul-dwg": "368535dce5450557",
-    "context-project-trackers": "367554df5fcf910f",
+    "context-project-trackers": "6bd91536a9723186",
     "context-project-control-points": "2314685b78c6a8c8",
     "context-project-flight-tracks": "0cce8de4dbcdfab4",
     "context-project-flight-coverage": "b32bf6463734d8c2",
