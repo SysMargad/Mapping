@@ -23,6 +23,31 @@
   "maxSourceSizeBytes": 104857600,
   "campaigns": [
     {
+      "id": "artsat-2026-medusa-ms700",
+      "projectKey": "artsat",
+      "label": "2026 Medusa MS-700 нислэгийн GPS зам",
+      "campaignYear": 2026,
+      "sensor": "Medusa MS-700",
+      "sensorVerified": true,
+      "gnssSource": "Medusa GPS_0050",
+      "timeZone": "UTC",
+      "format": "medusa-ms700-zip",
+      "sourceKind": "Medusa MS-700 raw GPS archive",
+      "coverageStatus": "not_calculated",
+      "coverageNote": "Medusa footprint/swath width is not verified, so coverage is not calculated.",
+      "timeGapSeconds": 30,
+      "distanceGapM": 250,
+      "minSegmentPoints": 20,
+      "simplifyToleranceM": 1.0,
+      "licenceMarginDegrees": 0.02,
+      "maxOutsideFraction": 0.5,
+      "acquisitionFilePatterns": ["MS-700.*\\.zip$"],
+      "match": {
+        "pathContains": ["Medusa"],
+        "fileNamePatterns": ["^MS-700.*\\.zip$"]
+      }
+    },
+    {
       "id": "hetsuu-hutul-2025-magnetic",
       "projectKey": "hetsuu-hutul",
       "label": "2025 Соронзон хэмжилтийн GPS зам",

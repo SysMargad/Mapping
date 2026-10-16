@@ -151,7 +151,6 @@ def parse_file(path: Path, output_dir: Path) -> Path:
             "startTime": started,
             "endTime": ended,
             "sourceFile": source_name,
-            "sourceUrl": "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
             "sourceCrs": "EPSG:4326",
             "displayCrs": "EPSG:4326",
             "crsVerified": True,
@@ -242,13 +241,14 @@ def parse_10hz_csv(
         "startTime": started.isoformat().replace("+00:00", "Z"),
         "endTime": ended.isoformat().replace("+00:00", "Z"),
         "sourceFile": original_name,
-        "sourceUrl": source_url or "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
         "sourceCrs": "EPSG:4326",
         "displayCrs": "EPSG:4326",
         "crsVerified": True,
         "pointCount": len(sampled),
         "nmeaSource": "verified 10 Hz CSV",
     }
+    if source_url:
+        properties["sourceUrl"] = source_url
     if source_fingerprint:
         properties["sourceFingerprint"] = source_fingerprint
     return {

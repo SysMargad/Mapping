@@ -31,6 +31,7 @@ SHORTCUT_MIME = "application/vnd.google-apps.shortcut"
 SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SUPPORTED_SUFFIXES = {".mrk", ".kmz", ".kml", ".csv", ".txt"}
+ROOT_ARCHIVE_SUFFIXES = {".zip"}
 SOURCE_PRIORITY = {".kmz": 0, ".mrk": 1, ".kml": 2, ".csv": 3, ".txt": 4}
 FOLDER_ID_RE = re.compile(r"/folders/([A-Za-z0-9_-]+)")
 DATE_COMPACT_RE = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
@@ -43,13 +44,14 @@ DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
 RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
 DJI_FILE_COUNT_SENSORS = {4: "P1", 11: "L3"}
 DRONE_FOLDER_RE = re.compile(
-    r"(?:^|[^a-z0-9])(drone|uav|magnetic[ _-]*survey|magarrow|flight[ _-]*(?:log|record))(?:$|[^a-z0-9])",
+    r"(?:^|[^a-z0-9])(drone|uav|magnetic[ _-]*survey|magarrow|medusa|flight[ _-]*(?:log|record))(?:$|[^a-z0-9])",
     re.IGNORECASE,
 )
 DRONE_SOURCE_RE = re.compile(
     r"(?:DJIFlightRecord|Timestamp|(?:^|[_-])DJI(?:[_-]|$)|SRVY\d*[-_]ACQU\d*|flight[ _-]*(?:log|record|track)|trajectory)",
     re.IGNORECASE,
 )
+MEDUSA_ARCHIVE_RE = re.compile(r"^MS-700.*\.zip$", re.IGNORECASE)
 # Name patterns alone cannot decide whether a CSV/TXT holds coordinates, so
 # unrecognised tables inside a configured survey branch are probed by header.
 PROBE_SUFFIXES = {".csv", ".txt"}
@@ -305,6 +307,8 @@ def classify_candidate(service, item: dict, probe_budget: list[int]) -> tuple[bo
     """Decide whether a Drive item is a coordinate source. Returns (keep, how)."""
     name = item.get("name", "")
     suffix = Path(name).suffix.lower()
+    if suffix in ROOT_ARCHIVE_SUFFIXES and MEDUSA_ARCHIVE_RE.search(Path(name).name):
+        return True, "medusa-archive-name"
     if suffix not in SUPPORTED_SUFFIXES:
         return False, "unsupported-suffix"
     if is_named_drone_source(name):
@@ -681,7 +685,6 @@ def sync_nergui_magarrow(
                 feature = magarrow.parse_10hz_csv(
                     local_path,
                     source_name=source_name,
-                    source_url="https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
                     source_fingerprint=fingerprint,
                 )
             else:
@@ -698,7 +701,6 @@ def sync_nergui_magarrow(
                 feature = json.loads(parsed_path.read_text(encoding="utf-8"))
                 feature["properties"].update({
                     "sourceFile": source_name,
-                    "sourceUrl": "https://drive.google.com/drive/folders/1ctZs3rBgYtqIL9fa7J_C_L_y3LLSwXfX",
                     "sourceFingerprint": fingerprint,
                 })
             features_by_acquisition[acquisition] = feature
@@ -718,6 +720,7 @@ def sync_nergui_magarrow(
         )
 
     for feature in features_by_acquisition.values():
+        feature.get("properties", {}).pop("sourceUrl", None)
         magarrow.write_feature(feature, parsed_dir)
     # The published base layers use plural filenames. Keep these paths aligned
     # with the repository rather than the singular names used by early fixtures.
@@ -760,7 +763,6 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     reports_dir.mkdir(parents=True)
     service = build_drive_service()
     raw_root_folder_id = os.environ.get("NERGUI_UNDUR_RAW_ROOT_FOLDER_ID", "").strip()
-    hetsuu_root_folder_id = os.environ.get("HETSUU_HUTUL_ROOT_FOLDER_ID", "").strip()
     raw_sensor_summary = None
     if raw_root_folder_id:
         try:
@@ -771,22 +773,28 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             print(f"::warning::Nergui Undur Raw Data sensor classification skipped: {error}")
     else:
         print("::notice::NERGUI_UNDUR_RAW_ROOT_FOLDER_ID is not configured; Raw Data sensor classification skipped.")
-    hetsuu_root_sources = []
-    hetsuu_drone_summary = None
-    if hetsuu_root_folder_id:
+    project_root_sources: dict[str, list[dict]] = {}
+    project_root_summaries: dict[str, dict] = {}
+    for project in projects:
+        project_key = project["key"]
+        env_name = f"{project_key.upper().replace('-', '_')}_ROOT_FOLDER_ID"
+        root_folder_id = os.environ.get(env_name, "").strip() or clean(project.get("rootFolderId"))
+        if not root_folder_id:
+            print(f"::notice::{project_key} has no project root configured; root discovery skipped.")
+            continue
         try:
-            hetsuu_root_sources, hetsuu_drone_summary = find_drone_sources(
+            sources, discovery = find_drone_sources(
                 service,
-                hetsuu_root_folder_id,
+                root_folder_id,
                 int(config.get("projectRootDiscoveryDepth", 5)),
                 int(config.get("projectRootScanDepth", 8)),
             )
-            print("Hetsuu Hutul project-root drone source discovery:")
-            print(json.dumps(hetsuu_drone_summary, ensure_ascii=False, indent=2))
+            project_root_sources[project_key] = sources
+            project_root_summaries[project_key] = discovery
+            print(f"{project_key} project-root coordinate source discovery:")
+            print(json.dumps(discovery, ensure_ascii=False, indent=2))
         except Exception as error:
-            print(f"::warning::Hetsuu Hutul project-root drone source discovery skipped: {error}")
-    else:
-        print("::notice::HETSUU_HUTUL_ROOT_FOLDER_ID is not configured; project-root drone discovery skipped.")
+            print(f"::warning::{project_key} project-root discovery skipped: {error}")
     max_depth = int(config.get("folderScanDepth", 2))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
     nergui_magarrow_summary = None
@@ -857,7 +865,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 continue
             stage["sourcesChosen"] += 1
             used_source_ids.add(chosen["id"])
-            local_name = f"{row['trackerId'].split(':')[-1].zfill(4)}__{chosen['id']}__{safe_filename(chosen['name'])}"
+            local_name = f"{row['trackerId'].split(':')[-1].zfill(4)}__{safe_filename(chosen['name'])}"
             local_path = project_source_dir / local_name
             try:
                 download_file(service, chosen, local_path)
@@ -871,10 +879,10 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 "file": local_name,
                 "trackerId": row["trackerId"],
                 "mission": row["mission"],
-                "sourceUrl": f"https://drive.google.com/file/d/{chosen['id']}/view",
             })
         campaign_entries: list[dict] = []
-        if project["key"] == "hetsuu-hutul" and hetsuu_root_sources:
+        root_sources = project_root_sources.get(project["key"], [])
+        if root_sources:
             tracker_missions = {
                 comparable_name(row["mission"]): row
                 for row in rows
@@ -882,7 +890,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             }
             campaign_source_dir = sources_dir / f"{project['key']}-campaign"
             campaign_source_dir.mkdir(parents=True, exist_ok=True)
-            for candidate in hetsuu_root_sources:
+            for candidate in root_sources:
                 if candidate.get("id") in used_source_ids:
                     continue
                 candidate_key = comparable_name(candidate.get("relativePath", candidate.get("name", "")))
@@ -905,10 +913,14 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                     continue
                 used_source_ids.add(candidate["id"])
                 if exact_rows:
-                    local_name = f"root__{candidate['id']}__{safe_filename(candidate['name'])}"
+                    local_name = (
+                        f"root__{exact_rows[0]['trackerId'].split(':')[-1].zfill(4)}__"
+                        f"{safe_filename(candidate['name'])}"
+                    )
                     local_path = project_source_dir / local_name
                 else:
-                    local_name = f"{campaign['id']}__{candidate['id']}__{safe_filename(candidate['name'])}"
+                    source_day = candidate.get("sourceDate") or "undated"
+                    local_name = f"{campaign['id']}__{source_day}__{safe_filename(candidate['name'])}"
                     local_path = campaign_source_dir / local_name
                 try:
                     download_file(service, candidate, local_path)
@@ -920,8 +932,6 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 stage["sourcesDownloaded"] += 1
                 entry = {
                     "file": local_name,
-                    "sourceUrl": f"https://drive.google.com/file/d/{candidate['id']}/view",
-                    "driveFileId": candidate["id"],
                     "md5Checksum": candidate.get("md5Checksum"),
                     "sizeBytes": size,
                     "modifiedTime": candidate.get("modifiedTime"),
@@ -956,8 +966,8 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 json.dumps({"sources": campaign_entries}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             project_results[project["key"]]["campaignSourceDir"] = sources_dir / f"{project['key']}-campaign"
             project_results[project["key"]]["campaignMapping"] = campaign_mapping_path
-        if project["key"] == "hetsuu-hutul" and hetsuu_drone_summary is not None:
-            project_results[project["key"]]["projectRootDroneDiscovery"] = hetsuu_drone_summary
+        if project["key"] in project_root_summaries:
+            project_results[project["key"]]["projectRootDroneDiscovery"] = project_root_summaries[project["key"]]
 
     context_dir = repo / "dist" / "data" / "context"
     python = sys.executable
@@ -1027,9 +1037,10 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "projects": project_results,
         "nerguiUndurRawSensorCounts": raw_sensor_summary,
         "nerguiUndurMagArrow": nergui_magarrow_summary,
-        "hetsuuHutulDroneSources": hetsuu_drone_summary,
+        "projectRootDroneSources": project_root_summaries,
         "secretsConfigured": {
-            "HETSUU_HUTUL_ROOT_FOLDER_ID": bool(hetsuu_root_folder_id),
+            "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
+            "HETSUU_HUTUL_ROOT_FOLDER_ID": bool(os.environ.get("HETSUU_HUTUL_ROOT_FOLDER_ID", "").strip()),
             "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": bool(raw_root_folder_id),
         },
     }
@@ -1061,17 +1072,19 @@ def step_summary(summary: dict) -> str:
             lines.append(f"- {key}: `{nergui.get(key)}`")
     else:
         lines.append("- not run (secret missing or discovery failed)")
-    discovery = summary.get("hetsuuHutulDroneSources")
-    lines += ["", "### Hetsuu project-root discovery", ""]
-    if discovery:
-        for key in ("matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
-                    "headerProbesUsed", "coordinateSourceCount", "dateFrom", "dateTo"):
-            lines.append(f"- {key}: `{discovery.get(key)}`")
-        for label in ("sourceCountByType", "discoveryDecisions"):
-            if discovery.get(label):
-                lines.append(f"- {label}: `{json.dumps(discovery[label], ensure_ascii=False)}`")
+    lines += ["", "### Project-root discovery", ""]
+    discoveries = summary.get("projectRootDroneSources", {})
+    if discoveries:
+        for project_key, discovery in sorted(discoveries.items()):
+            lines.append(f"#### {project_key}")
+            for key in ("matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
+                        "headerProbesUsed", "coordinateSourceCount", "dateFrom", "dateTo"):
+                lines.append(f"- {key}: `{discovery.get(key)}`")
+            for label in ("sourceCountByType", "discoveryDecisions"):
+                if discovery.get(label):
+                    lines.append(f"- {label}: `{json.dumps(discovery[label], ensure_ascii=False)}`")
     else:
-        lines.append("- not run (secret missing or discovery failed)")
+        lines.append("- not run (no configured root was readable)")
     lines += ["", "### Per project", "",
               "| Project | Tracker rows | Folders scanned | Unreadable | Candidates | Downloaded | Tracker tracks | Campaign segments |",
               "| --- | --- | --- | --- | --- | --- | --- | --- |"]

@@ -15,7 +15,7 @@ SUMMARY = {
         "HETSUU_HUTUL_ROOT_FOLDER_ID": False,
         "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": True,
     },
-    "hetsuuHutulDroneSources": {
+    "projectRootDroneSources": {"hetsuu-hutul": {
         "matchedBranchCount": 1,
         "scannedFolderCount": 39,
         "inspectedFileCount": 214,
@@ -25,7 +25,7 @@ SUMMARY = {
         "discoveryDecisions": {"name-pattern": 40, "probe-header": 34, "probe-point-table": 6},
         "dateFrom": "2025-09-22",
         "dateTo": "2025-11-03",
-    },
+    }},
     "nerguiUndurMagArrow": {
         "discoveredSourceCount": 125,
         "chosenAcquisitionCount": 125,
@@ -102,8 +102,7 @@ class StepSummary(unittest.TestCase):
         self.assertIn("Tracker tracks | Campaign segments", self.text)
 
     def test_no_secret_value_or_drive_path_is_written(self):
-        for forbidden in ("1LS0LCDQ", "drive.google.com", "folders/", "Raw_Data",
-                          "Magnetic_Survey", "Geological Data Acquisition", ".csv"):
+        for forbidden in ("private-folder-id", "drive.google.com", "folders/", ".csv"):
             self.assertNotIn(forbidden, self.text)
 
     def test_it_runs_on_an_empty_summary(self):

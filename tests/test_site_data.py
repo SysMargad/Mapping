@@ -213,9 +213,19 @@ class CampaignDataset(unittest.TestCase):
 
     def test_campaign_dates_stay_in_2025(self):
         for feature in self.data["features"]:
+            if feature["properties"]["projectKey"] != "hetsuu-hutul":
+                continue
             start = feature["properties"].get("startTime")
             if start:
                 self.assertTrue(start.startswith("2025-"), start)
+
+    def test_artsat_medusa_2026_campaign_is_present(self):
+        artsat = [f for f in self.data["features"]
+                  if f["properties"].get("campaignId") == "artsat-2026-medusa-ms700"]
+        self.assertGreater(len(artsat), 0)
+        self.assertEqual({f["properties"]["sensor"] for f in artsat}, {"Medusa MS-700"})
+        self.assertEqual({f["properties"]["campaignYear"] for f in artsat}, {2026})
+        self.assertTrue(all(f["properties"]["date"].startswith("2026-09-") for f in artsat))
 
     def test_no_campaign_feature_borrows_a_tracker_mission(self):
         for feature in self.data["features"]:

@@ -7,6 +7,8 @@ import json
 import sys
 import tempfile
 import unittest
+import zipfile
+from datetime import timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
@@ -92,6 +94,25 @@ class CampaignImportCase(unittest.TestCase):
 
 
 class ImportsCampaignGeometry(CampaignImportCase):
+    def test_medusa_archive_parser_reads_gps_events_and_ignores_zero_fix(self):
+        archive_path = self.sources / "MS-700_2026_09_25.zip"
+        lines = []
+        for index in range(30):
+            values = {
+                "Lat": 0 if index == 0 else LAT0 + index * 0.00005,
+                "Lon": 0 if index == 0 else LON0 + index * 0.00005,
+                "HeightMSL": 1180 + index,
+            }
+            event = [{"eID": "GPS_0050", "vT": 1790323200000 + index * 1000, "v": values}]
+            lines.append(json.dumps(event))
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("session.json", "\n".join(lines) + "\n")
+        table = ict.parse_medusa_archive(archive_path)
+        self.assertEqual(len(table.points), 29)
+        self.assertEqual(table.invalid_coordinate_rows, 1)
+        self.assertEqual(table.timestamp_provenance, "medusa-vT-epoch-ms")
+        self.assertEqual(table.points[0].timestamp.tzinfo, timezone.utc)
+
     def test_magnetic_csv_becomes_a_campaign_track(self):
         self.write("1103_latlong.csv", line_csv())
         report, data = self.run_import([self.entry("1103_latlong.csv")])

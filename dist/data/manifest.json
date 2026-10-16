@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-16.39",
+  "version": "2026-10-16.40",
   "updated": "2026-10-16",
   "datasets": {
     "registry": "./data/datasets.json",
@@ -20,7 +20,7 @@
     "l3-survey-family": "./data/l3/metadata.json"
   },
   "hashes": {
-    "registry": "daef190bbb8f28e2",
+    "registry": "ff9ecbc682cdfd0f",
     "base-licence": "f68bab4661abfe72",
     "base-uchastik": "d6672e0a0ea44496",
     "base-licence-context": "a66a54138766d058",
@@ -29,11 +29,11 @@
     "context-project-trackers": "6bd91536a9723186",
     "context-project-control-points": "2314685b78c6a8c8",
     "context-project-flight-tracks": "0cce8de4dbcdfab4",
-    "context-project-flight-coverage": "b32bf6463734d8c2",
-    "context-project-campaign-tracks": "33a9aa3bc7ea5295",
+    "context-project-flight-coverage": "5a82eb5f1ddedfb3",
+    "context-project-campaign-tracks": "4588337f6457cf43",
     "magarrow-mission-plans": "c048af9d5e81c37d",
     "magarrow-actual-tracks": "bab170236f1669de",
-    "magarrow-coverage-stats": "ab067f8c132445ef",
+    "magarrow-coverage-stats": "e84216b6078a2a4f",
     "magarrow-measurements": "637fb6ffeb4bca01",
     "l3-survey-family": "b86cfed364def34d"
   }

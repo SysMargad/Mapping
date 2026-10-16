@@ -71,6 +71,11 @@ class HeaderProbeDiscovery(unittest.TestCase):
         self.assertTrue(keep)
         self.assertEqual(how, "name-pattern")
 
+    def test_medusa_zip_is_kept_without_header_probe(self):
+        keep, how = self.classify("MS-700.0050_2026_09_25_Artsat.zip", None)
+        self.assertTrue(keep)
+        self.assertEqual(how, "medusa-archive-name")
+
     def test_gcp_table_is_rejected_by_the_probe(self):
         keep, how = self.classify("points.csv", "PointName,Latitude,Longitude\nGCP-1,46.05,92.35\n")
         self.assertFalse(keep)
@@ -131,6 +136,17 @@ class CampaignClaiming(unittest.TestCase):
         self.assertEqual(campaign["coverageStatus"], "not_calculated")
         self.assertFalse(campaign["sensorVerified"])
         self.assertEqual(campaign["gnssSource"], "unverified")
+
+    def test_artsat_medusa_archive_is_claimed_only_inside_medusa_branch(self):
+        candidate = {
+            "name": "MS-700.0050_2026_09_25_Artsat.zip",
+            "relativePath": "2. Geophysics/1. Raw_Data/Medusa/September.2026/25/MS-700.0050_2026_09_25_Artsat.zip",
+        }
+        campaign = sync.match_campaign(CAMPAIGNS, "artsat", candidate)
+        self.assertIsNotNone(campaign)
+        self.assertEqual(campaign["id"], "artsat-2026-medusa-ms700")
+        candidate["relativePath"] = "Random/MS-700.0050_2026_09_25_Artsat.zip"
+        self.assertIsNone(sync.match_campaign(CAMPAIGNS, "artsat", candidate))
 
 
 class ConfigShape(unittest.TestCase):

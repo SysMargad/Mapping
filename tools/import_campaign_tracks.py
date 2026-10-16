@@ -16,8 +16,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import sys
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -37,6 +40,82 @@ DEFAULT_SIMPLIFY_TOLERANCE_M = 2.5
 # other already covers. Cells are ~11 m, so this compares real geometry.
 DUPLICATE_CELL_DEGREES = 1e-4
 DUPLICATE_CONTAINMENT = 0.9
+
+
+def parse_medusa_archive(path: Path) -> cs.ParsedTable:
+    """Extract time-ordered GPS_0050 positions from a Medusa MS-700 archive.
+
+    Medusa JSON exports are newline-delimited JSON arrays. Sensor events use
+    `vT` epoch milliseconds; the embedded `v.Date` value is not used because
+    field units can carry a stale receiver date before GNSS lock.
+    """
+    columns = cs.ColumnMap(
+        lat_index=0, lon_index=1,
+        lat_name="GPS_0050.v.Lat", lon_name="GPS_0050.v.Lon",
+        time_index=2, time_name="vT epoch milliseconds",
+        absolute_alt_index=3, absolute_alt_name="GPS_0050.v.HeightMSL",
+    )
+    table = cs.ParsedTable(
+        columns=columns,
+        header=[columns.lat_name, columns.lon_name, columns.time_name, columns.absolute_alt_name],
+        timestamp_provenance="medusa-vT-epoch-ms",
+    )
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as error:
+        raise ValueError("invalid Medusa ZIP archive") from error
+    with archive:
+        names = sorted(name for name in archive.namelist() if name.lower().endswith(".json"))
+        if not names:
+            raise ValueError("Medusa archive has no JSON sensor records")
+        for name in names:
+            with archive.open(name) as raw:
+                for row_index, raw_line in enumerate(raw, start=1):
+                    if b"GPS_" not in raw_line:
+                        continue
+                    try:
+                        payload = json.loads(raw_line.decode("utf-8-sig"))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        table.invalid_coordinate_rows += 1
+                        continue
+                    events = payload if isinstance(payload, list) else [payload]
+                    for event in events:
+                        if not isinstance(event, dict) or not str(event.get("eID", "")).startswith("GPS_"):
+                            continue
+                        table.row_count += 1
+                        values = event.get("v") if isinstance(event.get("v"), dict) else {}
+                        try:
+                            lon = float(values.get("Lon"))
+                            lat = float(values.get("Lat"))
+                        except (TypeError, ValueError):
+                            table.invalid_coordinate_rows += 1
+                            continue
+                        if not (math.isfinite(lon) and math.isfinite(lat)) or (lon == 0 and lat == 0):
+                            table.invalid_coordinate_rows += 1
+                            continue
+                        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                            table.invalid_coordinate_rows += 1
+                            continue
+                        timestamp = None
+                        try:
+                            timestamp = datetime.fromtimestamp(float(event["vT"]) / 1000.0, tz=timezone.utc)
+                        except (KeyError, TypeError, ValueError, OSError):
+                            table.ambiguous_time_rows += 1
+                        altitude = None
+                        try:
+                            candidate = float(values.get("HeightMSL"))
+                            if math.isfinite(candidate):
+                                altitude = candidate
+                        except (TypeError, ValueError):
+                            pass
+                        table.points.append(cs.TrackPoint(
+                            lon=lon, lat=lat, timestamp=timestamp,
+                            absolute_alt=altitude, row_index=row_index,
+                        ))
+    if not table.points:
+        raise ValueError("Medusa archive has no usable GPS_0050 positions")
+    table.points.sort(key=lambda point: point.timestamp or datetime.min.replace(tzinfo=timezone.utc))
+    return table
 
 
 def iter_coordinate_pairs(value):
@@ -155,12 +234,15 @@ def build(args) -> dict:
                    {"canonicalFile": seen_checksums[checksum], "basis": "checksum"})
             continue
 
-        if path.suffix.lower() not in {".csv", ".txt"}:
-            record(entry, cs.UNSUPPORTED_FLIGHT_LOG, f"{path.suffix} is not a delimited coordinate table")
-            continue
-        text = payload.decode("utf-8-sig", errors="replace")
+        suffix = path.suffix.lower()
         try:
-            table = cs.parse_table(text)
+            if suffix == ".zip" and campaign.get("format") == "medusa-ms700-zip":
+                table = parse_medusa_archive(path)
+            elif suffix in {".csv", ".txt"}:
+                table = cs.parse_table(payload.decode("utf-8-sig", errors="replace"))
+            else:
+                record(entry, cs.UNSUPPORTED_FLIGHT_LOG, f"{path.suffix} is not a supported campaign source")
+                continue
         except ValueError as error:
             record(entry, cs.NOT_A_TRAJECTORY, str(error))
             continue
@@ -263,10 +345,12 @@ def build(args) -> dict:
                 "pointsOutsideLicence": outside if index == 1 else 0,
                 "startTime": start.isoformat() if start else None,
                 "endTime": end.isoformat() if end else None,
+                "date": start.date().isoformat() if start else entry.get("folderDate"),
                 # An NMEA RMC timestamp is UTC by definition; anything read
                 # from a plain date/time column keeps the declared (or
                 # unverified) zone rather than being shifted.
-                "timeZone": "UTC (NMEA RMC)" if table.timestamp_provenance == "embedded-nmea-rmc"
+                "timeZone": "UTC" if table.timestamp_provenance == "medusa-vT-epoch-ms"
+                else "UTC (NMEA RMC)" if table.timestamp_provenance == "embedded-nmea-rmc"
                 else campaign.get("timeZone", "unverified"),
                 "samplingIntervalSeconds": round(interval, 4) if interval else None,
                 "timestampProvenance": table.timestamp_provenance,
