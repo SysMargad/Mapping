@@ -114,29 +114,26 @@ class RawDataDiscovery(unittest.TestCase):
         self.assertRegex("DJI_202608221541_018_DEMO", sync.DJI_MISSION_FOLDER_RE)
         self.assertNotRegex("Processed_Data", sync.DJI_MISSION_FOLDER_RE)
 
-    def test_linked_mission_reads_metadata_without_listing_images(self):
-        original_named = sync.list_named_children
+    def test_linked_mission_prefers_existing_metadata_csv(self):
         original_children = sync.list_children
         original_resolve = sync.resolve_shortcut
-        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
-        sync.list_named_children = lambda service, parent, name: [{
+        sync.list_children = lambda *_: [{
             "id": "metadata-id", "name": "metadata.csv", "mimeType": "text/csv"
+        }, {
+            "id": "image-id", "name": "DJI_20260823100001_0001.JPG", "mimeType": "image/jpeg",
+            "imageMediaMetadata": {"location": {"latitude": 46.1, "longitude": 92.3}},
         }]
-        sync.list_children = lambda *_: self.fail("image directory should not be enumerated")
         sync.resolve_shortcut = lambda _service, item: item
         sources = sync.find_sources(None, "mission-folder-id", 2)
         self.assertEqual([item["id"] for item in sources], ["metadata-id"])
 
     def test_linked_mission_builds_csv_from_drive_image_gps_metadata(self):
-        original_named = sync.list_named_children
         original_children = sync.list_children
         original_resolve = sync.resolve_shortcut
-        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
-        sync.list_named_children = lambda *_: []
         sync.list_children = lambda _service, parent: [
             {
                 "id": "image-2", "name": "DJI_20260823100002_0002.JPG", "mimeType": "image/jpeg",
@@ -169,13 +166,10 @@ class RawDataDiscovery(unittest.TestCase):
         self.assertEqual((parsed.points[0].lat, parsed.points[0].lon), (46.1, 92.3))
 
     def test_image_metadata_without_two_gps_points_is_not_a_track(self):
-        original_named = sync.list_named_children
         original_children = sync.list_children
         original_resolve = sync.resolve_shortcut
-        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
-        sync.list_named_children = lambda *_: []
         sync.list_children = lambda *_: [{
             "id": "image-1", "name": "DJI_20260823100001_0001.JPG", "mimeType": "image/jpeg",
             "imageMediaMetadata": {"location": {"latitude": 46.1, "longitude": 92.3}},
