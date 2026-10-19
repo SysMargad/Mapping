@@ -41,7 +41,9 @@ MAGARROW_SOURCE_RE = re.compile(
     re.IGNORECASE,
 )
 DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
+DJI_MISSION_FOLDER_RE = re.compile(r"^DJI[_-]20\d{6}", re.IGNORECASE)
 RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
+DJI_METADATA_FILE = "metadata.csv"
 DJI_FILE_COUNT_SENSORS = {4: "P1", 11: "L3"}
 DRONE_FOLDER_RE = re.compile(
     r"(?:^|[^a-z0-9])(drone|uav|magnetic[ _-]*survey|magarrow|medusa|flight[ _-]*(?:log|record))(?:$|[^a-z0-9])",
@@ -193,6 +195,20 @@ def list_children(service, parent_id: str) -> list[dict]:
             return result
 
 
+def list_named_children(service, parent_id: str, name: str) -> list[dict]:
+    """List one exact filename without enumerating a mission's imagery."""
+    escaped = name.replace("'", "\\'")
+    request = service.files().list(
+        q=f"'{parent_id}' in parents and name = '{escaped}' and trashed = false",
+        fields="files(id,name,mimeType,size,modifiedTime,md5Checksum,shortcutDetails,webViewLink)",
+        pageSize=100,
+        spaces="drive",
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True,
+    )
+    return execute_with_retry(request).get("files", [])
+
+
 def resolve_shortcut(service, item: dict) -> dict:
     if item.get("mimeType") != SHORTCUT_MIME:
         return item
@@ -333,7 +349,7 @@ def classify_candidate(service, item: dict, probe_budget: list[int]) -> tuple[bo
 
 
 def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) -> list[dict]:
-    """Locate explicitly named drone/UAV/magnetic-survey branches under a project root."""
+    """Locate explicit survey branches and numbered ``Raw data`` branches."""
     found = []
     queue = [(root_folder_id, "", 0)]
     visited = set()
@@ -347,7 +363,9 @@ def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) ->
             if item.get("mimeType") != FOLDER_MIME:
                 continue
             path = f"{parent_path}/{item.get('name', '')}".strip("/")
-            if DRONE_FOLDER_RE.search(item.get("name", "")):
+            key = folder_name_key(item.get("name", ""))
+            is_raw_data = bool(re.fullmatch(r"\d*rawdata", key))
+            if DRONE_FOLDER_RE.search(item.get("name", "")) or is_raw_data:
                 found.append({**item, "relativePath": path})
                 # The matching branch is scanned separately below, so do not
                 # rediscover every nested raw/processed folder as another root.
@@ -366,6 +384,30 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
     inspected_files = 0
     probe_budget = [MAX_HEADER_PROBES]
     discovery_reasons: dict[str, int] = {}
+
+    def consider(item: dict, path: str) -> None:
+        nonlocal inspected_files
+        if item.get("id") in seen_files:
+            return
+        inspected_files += 1
+        if Path(item.get("name", "")).name.lower() == DJI_METADATA_FILE:
+            # DJI mission exports place one coordinate-bearing metadata table
+            # beside the images. The full parser still validates its header and
+            # coordinates before anything is published.
+            keep, how = True, "dji-metadata"
+        else:
+            keep, how = classify_candidate(service, item, probe_budget)
+        discovery_reasons[how] = discovery_reasons.get(how, 0) + 1
+        if not keep:
+            return
+        seen_files.add(item["id"])
+        found.append({
+            **item,
+            "relativePath": path,
+            "sourceDate": source_date_from_path(path),
+            "discoveredBy": how,
+        })
+
     for root in roots:
         queue = [(root["id"], root.get("relativePath", root.get("name", "")), 0)]
         visited = set()
@@ -379,23 +421,19 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
                 item = resolve_shortcut(service, raw_item)
                 path = f"{parent_path}/{item.get('name', '')}".strip("/")
                 if item.get("mimeType") == FOLDER_MIME:
+                    if DJI_MISSION_FOLDER_RE.search(item.get("name", "")):
+                        # Mission directories often hold thousands of images.
+                        # Query only metadata.csv instead of listing every JPG.
+                        scanned_folders += 1
+                        for raw_metadata in list_named_children(service, item["id"], DJI_METADATA_FILE):
+                            metadata_item = resolve_shortcut(service, raw_metadata)
+                            metadata_path = f"{path}/{metadata_item.get('name', '')}".strip("/")
+                            consider(metadata_item, metadata_path)
+                        continue
                     if depth < scan_depth:
                         queue.append((item["id"], path, depth + 1))
                     continue
-                if item.get("id") in seen_files:
-                    continue
-                inspected_files += 1
-                keep, how = classify_candidate(service, item, probe_budget)
-                discovery_reasons[how] = discovery_reasons.get(how, 0) + 1
-                if not keep:
-                    continue
-                seen_files.add(item["id"])
-                found.append({
-                    **item,
-                    "relativePath": path,
-                    "sourceDate": source_date_from_path(path),
-                    "discoveredBy": how,
-                })
+                consider(item, path)
     dated = sorted(item["sourceDate"] for item in found if item.get("sourceDate"))
     suffix_counts = {}
     for item in found:

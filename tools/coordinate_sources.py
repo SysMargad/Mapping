@@ -40,6 +40,7 @@ LAT_NAMES = ("latitude", "lat", "gpslatitude", "gpslat", "latdeg", "latitudedeg"
 LON_NAMES = ("longitude", "lon", "lng", "long", "gpslongitude", "gpslon", "londeg", "longitudedeg", "xcoord", "wgs84lon")
 DATE_NAMES = ("date", "gpsdate", "utcdate", "surveydate", "acquisitiondate")
 TIME_NAMES = ("time", "gpstime", "utctime", "timestamp", "datetime", "gpsdatetime", "utc")
+FILENAME_NAMES = ("filename", "sourcefile", "imagefile", "imagename")
 NMEA_NAMES = ("ggasentence", "rmcsentence", "nmea")
 ABSOLUTE_ALT_NAMES = ("altitude", "gpsaltitude", "ellipsoidalheight", "heightoverellipsoid", "elevation", "altm", "ellh")
 RELATIVE_ALT_NAMES = ("relativealtitude", "heightagl", "altitudeagl", "aglheight", "flightheight", "relativeheight", "heightabovetakeoff")
@@ -72,6 +73,8 @@ class ColumnMap:
     date_name: str = ""
     time_index: int | None = None
     time_name: str = ""
+    filename_index: int | None = None
+    filename_name: str = ""
     absolute_alt_index: int | None = None
     absolute_alt_name: str = ""
     relative_alt_index: int | None = None
@@ -108,6 +111,9 @@ def detect_columns(headers: list[str]) -> ColumnMap | None:
     time_index, time_name = _match_index(headers, TIME_NAMES, used)
     if time_index is not None:
         used.add(time_index)
+    filename_index, filename_name = _match_index(headers, FILENAME_NAMES, used)
+    if filename_index is not None:
+        used.add(filename_index)
     absolute_index, absolute_name = _match_index(headers, ABSOLUTE_ALT_NAMES, used)
     if absolute_index is not None:
         used.add(absolute_index)
@@ -116,6 +122,7 @@ def detect_columns(headers: list[str]) -> ColumnMap | None:
         lat_index=lat_index, lon_index=lon_index, lat_name=lat_name, lon_name=lon_name,
         date_index=date_index, date_name=date_name,
         time_index=time_index, time_name=time_name,
+        filename_index=filename_index, filename_name=filename_name,
         absolute_alt_index=absolute_index, absolute_alt_name=absolute_name,
         relative_alt_index=relative_index, relative_alt_name=relative_name,
     )
@@ -168,6 +175,7 @@ _DATETIME_FORMATS = (
 # "59:01.0" style values carry no hour and no date. They are a truncated clock
 # reading, never a usable timestamp.
 _TRUNCATED_CLOCK = re.compile(r"^\d{1,2}:\d{2}(?:\.\d+)?$")
+_DJI_FILENAME_TIMESTAMP = re.compile(r"(?:^|[^0-9])DJI[_-]?(20\d{12})(?:[^0-9]|$)", re.IGNORECASE)
 
 
 class AmbiguousDateTime(ValueError):
@@ -214,6 +222,17 @@ def parse_datetime_cell(value: str) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def parse_filename_timestamp(value: str) -> datetime | None:
+    """Read DJI's YYYYMMDDhhmmss capture time embedded in an image name."""
+    match = _DJI_FILENAME_TIMESTAMP.search(str(value).strip())
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
 
 
 # Some merged exports have been round-tripped through Excel, which rewrites the
@@ -350,6 +369,11 @@ def parse_table(text: str) -> ParsedTable:
                 row_ambiguous = True
                 timestamp, provenance = None, "ambiguous"
             provenances.add(provenance)
+        if timestamp is None and columns.filename_index is not None and len(row) > columns.filename_index:
+            timestamp = parse_filename_timestamp(row[columns.filename_index])
+            if timestamp is not None:
+                row_ambiguous = False
+                provenances.add("dji-image-filename")
         if timestamp is None and result.has_nmea:
             recovered, consistent = nmea_timestamp(",".join(row))
             if recovered is not None and consistent:

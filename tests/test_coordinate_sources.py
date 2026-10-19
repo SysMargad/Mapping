@@ -109,6 +109,20 @@ class Timestamps(unittest.TestCase):
         table = cs.parse_table(text)
         self.assertEqual(table.points[0].timestamp, datetime(2025, 11, 3, 9, 0, 0))
 
+    def test_dji_metadata_uses_capture_time_from_filename(self):
+        text = "\n".join([
+            "SourceFile,FileName,Model,GPSLatitude,GPSLongitude,GPSAltitude,RelativeAltitude",
+            "a/DJI_20260822154101_0001_D.JPG,DJI_20260822154101_0001_D.JPG,Zenmuse L2,46.1259,92.4334,1240.5,80.2",
+            "a/DJI_20260822154102_0002_D.JPG,DJI_20260822154102_0002_D.JPG,Zenmuse L2,46.1260,92.4335,1240.7,80.4",
+        ])
+        table = cs.parse_table(text)
+        self.assertEqual(table.points[0].timestamp, datetime(2026, 8, 22, 15, 41, 1))
+        self.assertEqual(table.timestamp_provenance, "dji-image-filename")
+        self.assertEqual(table.columns.filename_name, "FileName")
+
+    def test_non_dji_filename_is_not_guessed(self):
+        self.assertIsNone(cs.parse_filename_timestamp("IMG_20260822154101.JPG"))
+
 
 class CoordinateValidation(unittest.TestCase):
     def test_utm_coordinates_are_rejected_not_reinterpreted(self):

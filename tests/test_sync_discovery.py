@@ -105,6 +105,21 @@ class HeaderProbeDiscovery(unittest.TestCase):
         self.assertEqual(budget[0], 4)
 
 
+class RawDataDiscovery(unittest.TestCase):
+    def test_numbered_raw_data_names_are_recognised(self):
+        for name in ("Raw Data", "0.Raw Data", "1.Raw data", "2_Raw-Data"):
+            with self.subTest(name=name):
+                key = sync.folder_name_key(name)
+                self.assertRegex(key, r"^\d*rawdata$")
+
+    def test_dji_metadata_name_is_case_insensitive(self):
+        self.assertEqual(Path("MetaData.CSV").name.lower(), sync.DJI_METADATA_FILE)
+
+    def test_dji_mission_folder_is_recognised(self):
+        self.assertRegex("DJI_202608221541_018_DEMO", sync.DJI_MISSION_FOLDER_RE)
+        self.assertNotRegex("Processed_Data", sync.DJI_MISSION_FOLDER_RE)
+
+
 class CampaignClaiming(unittest.TestCase):
     def claim(self, name, path=None):
         candidate = {"name": name, "relativePath": path or f"Magnetic survey/2025/{name}"}
