@@ -28,7 +28,9 @@ concurrency:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # Pin the runner while ubuntu-latest migrates to a new image; the floating
+    # pool can otherwise leave the Drive sync queued during migration windows.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
