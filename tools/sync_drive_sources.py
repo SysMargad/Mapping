@@ -358,7 +358,12 @@ def classify_candidate(service, item: dict, probe_budget: list[int]) -> tuple[bo
 
 
 def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) -> list[dict]:
-    """Locate explicit survey branches and numbered ``Raw data`` branches."""
+    """Locate explicitly named survey branches under a project root.
+
+    Generic Raw Data trees are intentionally excluded here: tracker-linked DJI
+    missions are imported directly by ``find_sources``. Scanning the same raw
+    tree again is redundant, expensive, and more likely to hit Drive quotas.
+    """
     found = []
     queue = [(root_folder_id, "", 0)]
     visited = set()
@@ -372,9 +377,7 @@ def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) ->
             if item.get("mimeType") != FOLDER_MIME:
                 continue
             path = f"{parent_path}/{item.get('name', '')}".strip("/")
-            key = folder_name_key(item.get("name", ""))
-            is_raw_data = bool(re.fullmatch(r"\d*rawdata", key))
-            if DRONE_FOLDER_RE.search(item.get("name", "")) or is_raw_data:
+            if DRONE_FOLDER_RE.search(item.get("name", "")):
                 found.append({**item, "relativePath": path})
                 # The matching branch is scanned separately below, so do not
                 # rediscover every nested raw/processed folder as another root.

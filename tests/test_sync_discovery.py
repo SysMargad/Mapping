@@ -106,12 +106,6 @@ class HeaderProbeDiscovery(unittest.TestCase):
 
 
 class RawDataDiscovery(unittest.TestCase):
-    def test_numbered_raw_data_names_are_recognised(self):
-        for name in ("Raw Data", "0.Raw Data", "1.Raw data", "2_Raw-Data"):
-            with self.subTest(name=name):
-                key = sync.folder_name_key(name)
-                self.assertRegex(key, r"^\d*rawdata$")
-
     def test_dji_metadata_name_is_case_insensitive(self):
         self.assertEqual(Path("MetaData.CSV").name.lower(), sync.DJI_METADATA_FILE)
 
