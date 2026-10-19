@@ -119,6 +119,21 @@ class RawDataDiscovery(unittest.TestCase):
         self.assertRegex("DJI_202608221541_018_DEMO", sync.DJI_MISSION_FOLDER_RE)
         self.assertNotRegex("Processed_Data", sync.DJI_MISSION_FOLDER_RE)
 
+    def test_linked_mission_reads_metadata_without_listing_images(self):
+        original_named = sync.list_named_children
+        original_children = sync.list_children
+        original_resolve = sync.resolve_shortcut
+        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
+        self.addCleanup(lambda: setattr(sync, "list_children", original_children))
+        self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
+        sync.list_named_children = lambda service, parent, name: [{
+            "id": "metadata-id", "name": "metadata.csv", "mimeType": "text/csv"
+        }]
+        sync.list_children = lambda *_: self.fail("image directory should not be enumerated")
+        sync.resolve_shortcut = lambda _service, item: item
+        sources = sync.find_sources(None, "mission-folder-id", 2)
+        self.assertEqual([item["id"] for item in sources], ["metadata-id"])
+
 
 class CampaignClaiming(unittest.TestCase):
     def claim(self, name, path=None):

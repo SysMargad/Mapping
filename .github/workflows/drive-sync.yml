@@ -20,7 +20,9 @@ permissions:
 
 concurrency:
   group: mapping-drive-sync
-  cancel-in-progress: false
+  # A newer code/data sync supersedes an older scan. This prevents an old
+  # checkout from committing stale generated data after a parser fix lands.
+  cancel-in-progress: true
 
 jobs:
   sync:

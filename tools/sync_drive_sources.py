@@ -217,6 +217,15 @@ def resolve_shortcut(service, item: dict) -> dict:
 
 
 def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
+    # Tracker hyperlinks commonly point at the DJI mission directory itself.
+    # Avoid enumerating thousands of photographs when its one trajectory table
+    # can be selected directly by name.
+    direct_metadata = [
+        resolve_shortcut(service, item)
+        for item in list_named_children(service, root_folder_id, DJI_METADATA_FILE)
+    ]
+    if direct_metadata:
+        return direct_metadata
     found = []
     queue = [(root_folder_id, 0)]
     visited = set()
