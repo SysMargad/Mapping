@@ -11,6 +11,7 @@ on:
       - "tools/import_campaign_tracks.py"
       - "tools/import_project_flight_tracks.py"
       - "tools/sync_drive_sources.py"
+      - "tests/**"
   schedule:
     # GitHub cron is UTC. 00:00 UTC = 08:00 Asia/Shanghai.
     - cron: "0 0 * * *"
