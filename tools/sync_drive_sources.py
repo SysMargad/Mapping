@@ -9,6 +9,7 @@ files, rebuilds coverage, and leaves git commit/push to the workflow.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import io
 import json
@@ -44,6 +45,7 @@ DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
 DJI_MISSION_FOLDER_RE = re.compile(r"^DJI[_-]20\d{6}", re.IGNORECASE)
 RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
 DJI_METADATA_FILE = "metadata.csv"
+DJI_IMAGE_METADATA_FILE = "dji-image-metadata.csv"
 DJI_FILE_COUNT_SENSORS = {4: "P1", 11: "L3"}
 DRONE_FOLDER_RE = re.compile(
     r"(?:^|[^a-z0-9])(drone|uav|magnetic[ _-]*survey|magarrow|medusa|flight[ _-]*(?:log|record))(?:$|[^a-z0-9])",
@@ -181,7 +183,10 @@ def list_children(service, parent_id: str) -> list[dict]:
     while True:
         request = service.files().list(
             q=f"'{parent_id}' in parents and trashed = false",
-            fields="nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum,shortcutDetails,webViewLink)",
+            fields=(
+                "nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum,"
+                "shortcutDetails,webViewLink,imageMediaMetadata(location,time))"
+            ),
             pageSize=1000,
             pageToken=token,
             spaces="drive",
@@ -227,6 +232,7 @@ def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
     if direct_metadata:
         return direct_metadata
     found = []
+    image_points = []
     queue = [(root_folder_id, 0)]
     visited = set()
     while queue:
@@ -240,9 +246,45 @@ def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
                 if depth < max_depth:
                     queue.append((item["id"], depth + 1))
                 continue
+            image_metadata = item.get("imageMediaMetadata") or {}
+            location = image_metadata.get("location") or {}
+            if str(item.get("mimeType", "")).startswith("image/") and location:
+                try:
+                    latitude = float(location["latitude"])
+                    longitude = float(location["longitude"])
+                    altitude = float(location["altitude"]) if location.get("altitude") is not None else ""
+                except (KeyError, TypeError, ValueError):
+                    pass
+                else:
+                    if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                        image_points.append({
+                            "name": item.get("name", ""),
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "altitude": altitude,
+                            "time": image_metadata.get("time", ""),
+                        })
             if Path(item.get("name", "")).suffix.lower() in SUPPORTED_SUFFIXES:
                 found.append(item)
-    return found
+    if found or len(image_points) < 2:
+        return found
+    image_points.sort(key=lambda point: (point["time"], point["name"]))
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["FileName", "GPSLatitude", "GPSLongitude", "GPSAltitude", "DateTime"])
+    for point in image_points:
+        writer.writerow([
+            point["name"], point["latitude"], point["longitude"],
+            point["altitude"], point["time"],
+        ])
+    synthetic_id = hashlib.sha256(root_folder_id.encode("utf-8")).hexdigest()[:24]
+    return [{
+        "id": f"dji-image-metadata-{synthetic_id}",
+        "name": DJI_IMAGE_METADATA_FILE,
+        "mimeType": "text/csv",
+        "size": len(output.getvalue().encode("utf-8")),
+        "syntheticCsv": output.getvalue(),
+    }]
 
 
 def magarrow_acquisition_key(value: str) -> str | None:
@@ -620,9 +662,12 @@ def choose_source(
 
 
 def download_file(service, item: dict, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if "syntheticCsv" in item:
+        target.write_text(item["syntheticCsv"], encoding="utf-8", newline="")
+        return
     from googleapiclient.http import MediaIoBaseDownload
 
-    target.parent.mkdir(parents=True, exist_ok=True)
     if item.get("mimeType") == SHEET_MIME:
         request = service.files().export_media(fileId=item["id"], mimeType=XLSX_MIME)
     else:
