@@ -6,26 +6,6 @@
   "cellSizeM": 10.0,
   "swathWidthM": 50.0,
   "projects": {
-    "artsat": {
-      "licence": "XV-021395",
-      "sensors": {
-        "L2": {
-          "dates": [
-            "2026-08-10"
-          ],
-          "acquisitionCount": 1,
-          "scopes": {
-            "licence": {
-              "label": "Арцат",
-              "totalAreaM2": 437900.0,
-              "dailyAreaM2": {
-                "2026-08-10": 437900.0
-              }
-            }
-          }
-        }
-      }
-    },
     "buduunkhad": {
       "licence": "XV-023222",
       "sensors": {
