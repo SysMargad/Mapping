@@ -6,8 +6,10 @@ on:
     paths:
       - ".github/workflows/drive-sync.yml"
       - "drive-sync-sources.json"
+      - "tools/coordinate_sources.py"
       - "tools/export_magdata_trajectories.py"
       - "tools/import_campaign_tracks.py"
+      - "tools/import_project_flight_tracks.py"
       - "tools/sync_drive_sources.py"
   schedule:
     # GitHub cron is UTC. 00:00 UTC = 08:00 Asia/Shanghai.

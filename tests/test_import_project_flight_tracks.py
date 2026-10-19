@@ -109,6 +109,8 @@ class Matching(ImporterCase):
         report, data = self.run_import([record(3, mission, "2026-08-22")])
         self.assertEqual(report["imported"], 1)
         self.assertEqual(data["features"][0]["properties"]["trackerId"], "hetsuu-hutul:3")
+        self.assertEqual(data["features"][0]["properties"]["coverageStatus"], "not_calculated")
+        self.assertNotIn("coverageSwathWidthM", data["features"][0]["properties"])
 
     def test_two_close_flights_on_one_day_are_ambiguous(self):
         # Requirement 8.4: a same-day time match must not pick a winner when two

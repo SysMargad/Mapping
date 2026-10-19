@@ -140,7 +140,12 @@ class ExistingProjectsUnaffected(unittest.TestCase):
         for feature in self.tracks["features"]:
             key = feature["properties"]["projectKey"]
             counts[key] = counts.get(key, 0) + 1
-        self.assertEqual(counts, {"buduunkhad": 120, "artsat": 25})
+        # Scheduled Drive syncs may add tracker-bound trajectories over time,
+        # but must never remove the previously verified project layers.
+        self.assertGreaterEqual(counts.get("buduunkhad", 0), 120)
+        self.assertGreaterEqual(counts.get("artsat", 0), 25)
+        if "hetsuu-hutul" in counts:
+            self.assertGreater(counts["hetsuu-hutul"], 0)
 
     def test_artsat_medusa_traverses_are_verified_red_track_data(self):
         medusa = [feature for feature in self.tracks["features"]
@@ -156,8 +161,8 @@ class ExistingProjectsUnaffected(unittest.TestCase):
         self.assertNotIn("Medusa", self.coverage["projects"]["artsat"]["sensors"])
 
     def test_hetsuu_has_no_fabricated_coverage(self):
-        # Requirement 8.9: no trajectory means no coverage entry at all, which
-        # the UI renders as "Тооцоогүй" rather than 0 м².
+        # A verified trajectory is not enough to infer a flown footprint. Raw
+        # DJI metadata has no verified swath width, so it remains "Тооцоогүй".
         self.assertNotIn("hetsuu-hutul", self.coverage["projects"])
 
     def test_current_cad_and_mission_layers_are_intact(self):
