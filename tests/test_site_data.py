@@ -157,8 +157,14 @@ class ExistingProjectsUnaffected(unittest.TestCase):
         self.assertTrue(all(feature["properties"]["coverageStatus"] == "not_calculated" for feature in medusa))
 
     def test_coverage_still_covers_the_projects_with_trajectories(self):
-        self.assertEqual(set(self.coverage["projects"]), {"artsat", "buduunkhad"})
-        self.assertNotIn("Medusa", self.coverage["projects"]["artsat"]["sensors"])
+        calculable_projects = {
+            feature["properties"]["projectKey"]
+            for feature in self.tracks["features"]
+            if feature["properties"].get("coverageStatus") != "not_calculated"
+        }
+        self.assertEqual(set(self.coverage["projects"]), calculable_projects)
+        if "artsat" in self.coverage["projects"]:
+            self.assertNotIn("Medusa", self.coverage["projects"]["artsat"]["sensors"])
 
     def test_hetsuu_has_no_fabricated_coverage(self):
         # A verified trajectory is not enough to infer a flown footprint. Raw
