@@ -43,6 +43,11 @@ MAGARROW_SOURCE_RE = re.compile(
 )
 DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
 DJI_MISSION_FOLDER_RE = re.compile(r"^DJI[_-]20\d{6}", re.IGNORECASE)
+DJI_MISSION_TIME_RE = re.compile(r"DJI[_-]?(20\d{10})", re.IGNORECASE)
+DJI_FLIGHT_RECORD_TIME_RE = re.compile(
+    r"DJIFlightRecord[_-](20\d{2})-(\d{2})-(\d{2})[_-]\[(\d{2})-(\d{2})-(\d{2})\]",
+    re.IGNORECASE,
+)
 RAW_DATA_FOLDER_KEYS = {"0rawdata", "rawdata"}
 DJI_METADATA_FILE = "metadata.csv"
 DJI_IMAGE_METADATA_FILE = "dji-image-metadata.csv"
@@ -122,6 +127,7 @@ def tracker_rows(path: Path, project_key: str) -> list[dict]:
             "trackerId": f"{project_key}:{row_number}",
             "mission": mission,
             "date": current_date,
+            "sensor": clean(sheet.cell(row_number, 4).value).upper(),
             "folderId": linked_folder,
         })
     return rows
@@ -414,7 +420,7 @@ def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) ->
             if item.get("mimeType") != FOLDER_MIME:
                 continue
             path = f"{parent_path}/{item.get('name', '')}".strip("/")
-            if DRONE_FOLDER_RE.search(item.get("name", "")):
+            if DRONE_FOLDER_RE.search(item.get("name", "")) or is_raw_data_folder(item.get("name", "")):
                 found.append({**item, "relativePath": path})
                 # The matching branch is scanned separately below, so do not
                 # rediscover every nested raw/processed folder as another root.
@@ -472,12 +478,9 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
                 if item.get("mimeType") == FOLDER_MIME:
                     if DJI_MISSION_FOLDER_RE.search(item.get("name", "")):
                         # Mission directories often hold thousands of images.
-                        # Query only metadata.csv instead of listing every JPG.
+                        # Tracker-linked discovery handles their direct files;
+                        # root discovery only needs sibling Metadata folders.
                         scanned_folders += 1
-                        for raw_metadata in list_named_children(service, item["id"], DJI_METADATA_FILE):
-                            metadata_item = resolve_shortcut(service, raw_metadata)
-                            metadata_path = f"{path}/{metadata_item.get('name', '')}".strip("/")
-                            consider(metadata_item, metadata_path)
                         continue
                     if depth < scan_depth:
                         queue.append((item["id"], path, depth + 1))
@@ -557,6 +560,11 @@ def folder_name_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
+def is_raw_data_folder(value: str) -> bool:
+    key = folder_name_key(value)
+    return key in RAW_DATA_FOLDER_KEYS or re.sub(r"^\d+", "", key) == "rawdata"
+
+
 def find_raw_data_folder(service, root_folder_id: str, max_depth: int = 2) -> dict | None:
     queue = [(root_folder_id, 0)]
     visited = set()
@@ -569,7 +577,7 @@ def find_raw_data_folder(service, root_folder_id: str, max_depth: int = 2) -> di
             item = resolve_shortcut(service, raw_item)
             if item.get("mimeType") != FOLDER_MIME:
                 continue
-            if folder_name_key(item.get("name", "")) in RAW_DATA_FOLDER_KEYS:
+            if is_raw_data_folder(item.get("name", "")):
                 return item
             if depth < max_depth:
                 queue.append((item["id"], depth + 1))
@@ -654,6 +662,99 @@ def choose_source(
     eligible.sort(key=lambda item: item.get("modifiedTime", ""), reverse=True)
     eligible.sort(key=lambda item: SOURCE_PRIORITY.get(Path(item.get("name", "")).suffix.lower(), 99))
     return eligible[0]
+
+
+def mission_timestamp(value: str) -> datetime | None:
+    match = DJI_MISSION_TIME_RE.search(value or "")
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d%H%M")
+    except ValueError:
+        return None
+
+
+def flight_record_timestamp(value: str) -> datetime | None:
+    match = DJI_FLIGHT_RECORD_TIME_RE.search(value or "")
+    if not match:
+        return None
+    try:
+        return datetime.strptime("".join(match.groups()), "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
+def source_sensor(value: str) -> str | None:
+    match = re.search(r"(?:^|[^A-Za-z0-9])(L2|L3|P1)(?:$|[^A-Za-z0-9])", value or "", re.IGNORECASE)
+    return match.group(1).upper() if match else None
+
+
+def match_tracker_by_flight_time(candidate: dict, rows: list[dict], used_tracker_ids: set[str]) -> dict | None:
+    """Match a central DJIFlightRecord log to the nearest unused tracker mission."""
+    started = flight_record_timestamp(candidate.get("name", ""))
+    if not started:
+        return None
+    sensor = source_sensor(candidate.get("relativePath", ""))
+    eligible = []
+    for row in rows:
+        if row["trackerId"] in used_tracker_ids:
+            continue
+        if sensor and row.get("sensor") and sensor not in row["sensor"]:
+            continue
+        planned = mission_timestamp(row.get("mission", ""))
+        if not planned or planned.date() != started.date():
+            continue
+        seconds = abs((planned - started).total_seconds())
+        if seconds <= 20 * 60:
+            eligible.append((seconds, row["trackerId"], row))
+    eligible.sort(key=lambda item: (item[0], item[1]))
+    return eligible[0][2] if eligible else None
+
+
+def write_dji_frames_csv(frames, source_name: str, target: Path, stride: int = 10) -> int:
+    """Write a compact 1-ish Hz coordinate table from decoded DJI OSD frames."""
+    points = []
+    for frame in frames:
+        osd = getattr(frame, "osd", None)
+        if osd is None:
+            continue
+        try:
+            latitude = float(osd.latitude)
+            longitude = float(osd.longitude)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180) or (latitude == 0 and longitude == 0):
+            continue
+        try:
+            altitude = float(osd.altitude)
+        except (AttributeError, TypeError, ValueError):
+            altitude = ""
+        point = (latitude, longitude, altitude)
+        if not points or point[:2] != points[-1][:2]:
+            points.append(point)
+    sampled = points[::max(1, stride)]
+    if points and (not sampled or sampled[-1] != points[-1]):
+        sampled.append(points[-1])
+    if len(sampled) < 2:
+        raise ValueError("decoded DJI log has fewer than two valid GPS positions")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["FileName", "GPSLatitude", "GPSLongitude", "RelativeAltitude"])
+        writer.writerows((source_name, lat, lon, altitude) for lat, lon, altitude in sampled)
+    return len(sampled)
+
+
+def convert_dji_flight_record(source: Path, target: Path) -> int:
+    """Decode a DJI v1-v14 FlightRecord locally; v13+ requires DJI_API_KEY."""
+    from pydjirecord import DJILog
+
+    log = DJILog.from_bytes(source.read_bytes())
+    api_key = os.environ.get("DJI_API_KEY", "").strip()
+    if log.version >= 13 and not api_key:
+        raise RuntimeError("DJI_API_KEY is required for encrypted DJI FlightRecord v13+")
+    keychains = log.fetch_keychains(api_key) if log.version >= 13 else None
+    return write_dji_frames_csv(log.frames(keychains), source.name, target)
 
 
 def download_file(service, item: dict, target: Path) -> None:
@@ -912,16 +1013,19 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         project_source_dir = sources_dir / project["key"]
         project_source_dir.mkdir(parents=True)
         mapping_entries = []
+        mapped_tracker_ids: set[str] = set()
         seen_folders = {}
         used_source_ids: set[str] = set()
         mismatched = []
         stage = {
             "missionFoldersScanned": 0,
+            "missionFoldersSkippedForRootIndex": 0,
             "missionFoldersUnreadable": 0,
             "candidateFilesFound": 0,
             "sourcesChosen": 0,
             "sourcesDownloaded": 0,
             "downloadFailures": 0,
+            "flightRecordsAwaitingApiKey": 0,
         }
         reasons: dict[str, int] = {}
 
@@ -929,6 +1033,9 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             reasons[code] = reasons.get(code, 0) + 1
 
         for row in rows:
+            if project["key"] in project_root_sources:
+                stage["missionFoldersSkippedForRootIndex"] += 1
+                continue
             candidates = seen_folders.get(row["folderId"])
             if candidates is None:
                 try:
@@ -970,6 +1077,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 "trackerId": row["trackerId"],
                 "mission": row["mission"],
             })
+            mapped_tracker_ids.add(row["trackerId"])
         campaign_entries: list[dict] = []
         root_sources = project_root_sources.get(project["key"], [])
         if root_sources:
@@ -980,11 +1088,14 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             }
             campaign_source_dir = sources_dir / f"{project['key']}-campaign"
             campaign_source_dir.mkdir(parents=True, exist_ok=True)
-            for candidate in root_sources:
+            for candidate in sorted(root_sources, key=lambda item: item.get("relativePath", item.get("name", ""))):
                 if candidate.get("id") in used_source_ids:
                     continue
                 candidate_key = comparable_name(candidate.get("relativePath", candidate.get("name", "")))
                 exact_rows = [row for key, row in tracker_missions.items() if key in candidate_key]
+                if not exact_rows:
+                    timed_row = match_tracker_by_flight_time(candidate, rows, mapped_tracker_ids)
+                    exact_rows = [timed_row] if timed_row else []
                 try:
                     size = int(candidate.get("size") or 0)
                 except (TypeError, ValueError):
@@ -1000,6 +1111,17 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                     # campaign, so it stays an inventory entry only. A source is
                     # never imported on the strength of its location alone.
                     note(cs.MISSION_UNMATCHED)
+                    continue
+                if (
+                    exact_rows
+                    and DJI_FLIGHT_RECORD_TIME_RE.search(candidate.get("name", ""))
+                    and not os.environ.get("DJI_API_KEY", "").strip()
+                ):
+                    if stage["flightRecordsAwaitingApiKey"] == 0:
+                        print(f"::notice::{project['key']} encrypted DJI FlightRecord logs await DJI_API_KEY")
+                    stage["flightRecordsAwaitingApiKey"] += 1
+                    mapped_tracker_ids.add(exact_rows[0]["trackerId"])
+                    note(cs.UNSUPPORTED_FLIGHT_LOG)
                     continue
                 used_source_ids.add(candidate["id"])
                 if exact_rows:
@@ -1020,6 +1142,20 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                     print(f"::warning::{project['key']} root source download failed ({type(error).__name__})")
                     continue
                 stage["sourcesDownloaded"] += 1
+                if exact_rows and DJI_FLIGHT_RECORD_TIME_RE.search(candidate.get("name", "")):
+                    decoded_name = str(Path(local_name).with_suffix(".csv"))
+                    decoded_path = project_source_dir / decoded_name
+                    try:
+                        convert_dji_flight_record(local_path, decoded_path)
+                    except Exception as error:
+                        note(cs.UNSUPPORTED_FLIGHT_LOG)
+                        print(
+                            f"::warning::{project['key']} DJI FlightRecord decode skipped "
+                            f"({type(error).__name__})"
+                        )
+                        continue
+                    local_name = decoded_name
+                    local_path = decoded_path
                 entry = {
                     "file": local_name,
                     "md5Checksum": candidate.get("md5Checksum"),
@@ -1028,6 +1164,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                     "discoveredBy": candidate.get("discoveredBy"),
                 }
                 if exact_rows:
+                    mapped_tracker_ids.add(exact_rows[0]["trackerId"])
                     entry.update({
                         "trackerId": exact_rows[0]["trackerId"],
                         "mission": exact_rows[0]["mission"],
@@ -1132,6 +1269,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
             "HETSUU_HUTUL_ROOT_FOLDER_ID": bool(os.environ.get("HETSUU_HUTUL_ROOT_FOLDER_ID", "").strip()),
             "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": bool(raw_root_folder_id),
+            "DJI_API_KEY": bool(os.environ.get("DJI_API_KEY", "").strip()),
         },
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))

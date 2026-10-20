@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "tools"))
@@ -114,6 +115,11 @@ class RawDataDiscovery(unittest.TestCase):
         self.assertRegex("DJI_202608221541_018_DEMO", sync.DJI_MISSION_FOLDER_RE)
         self.assertNotRegex("Processed_Data", sync.DJI_MISSION_FOLDER_RE)
 
+    def test_numbered_raw_data_folder_is_recognised(self):
+        self.assertTrue(sync.is_raw_data_folder("1.Raw data"))
+        self.assertTrue(sync.is_raw_data_folder("0 Raw_Data"))
+        self.assertFalse(sync.is_raw_data_folder("2. Processed"))
+
     def test_linked_mission_prefers_existing_metadata_csv(self):
         original_children = sync.list_children
         original_resolve = sync.resolve_shortcut
@@ -176,6 +182,42 @@ class RawDataDiscovery(unittest.TestCase):
         }]
         sync.resolve_shortcut = lambda _service, item: item
         self.assertEqual(sync.find_sources(None, "mission-folder-id", 2), [])
+
+
+class FlightRecordDecoding(unittest.TestCase):
+    def test_flight_record_matches_nearest_same_sensor_tracker_mission(self):
+        candidate = {
+            "name": "DJIFlightRecord_2026-10-14_[14-38-05].txt",
+            "relativePath": "1.Raw data/October.2026/14/DJI_Zenmuse_L2_LiDAR_Survey_Flight/Metadata/log.txt",
+        }
+        rows = [
+            {"trackerId": "hetsuu-hutul:1", "mission": "DJI_202610141400_005_XT-B139", "sensor": "L2"},
+            {"trackerId": "hetsuu-hutul:2", "mission": "DJI_202610141437_006_XT-B139", "sensor": "L2"},
+            {"trackerId": "hetsuu-hutul:3", "mission": "DJI_202610141438_007_XT-B139", "sensor": "P1"},
+        ]
+        matched = sync.match_tracker_by_flight_time(candidate, rows, set())
+        self.assertEqual(matched["trackerId"], "hetsuu-hutul:2")
+
+    def test_used_tracker_is_not_reused_for_another_log(self):
+        candidate = {"name": "DJIFlightRecord_2026-10-14_[14-38-05].txt", "relativePath": "L2/Metadata"}
+        rows = [{"trackerId": "hetsuu-hutul:2", "mission": "DJI_202610141437_006", "sensor": "L2"}]
+        self.assertIsNone(sync.match_tracker_by_flight_time(candidate, rows, {"hetsuu-hutul:2"}))
+
+    def test_decoded_frames_are_filtered_sampled_and_written(self):
+        frames = [
+            SimpleNamespace(osd=SimpleNamespace(latitude=0, longitude=0, altitude=0)),
+            *[
+                SimpleNamespace(osd=SimpleNamespace(latitude=46.0 + index / 1000, longitude=92.0, altitude=80))
+                for index in range(12)
+            ],
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "decoded.csv"
+            count = sync.write_dji_frames_csv(frames, "flight.txt", target, stride=5)
+            parsed = sync.cs.parse_table(target.read_text(encoding="utf-8"))
+        self.assertEqual(count, 4)
+        self.assertEqual(len(parsed.points), 4)
+        self.assertEqual(parsed.columns.relative_alt_name, "RelativeAltitude")
 
 
 class CampaignClaiming(unittest.TestCase):
