@@ -36,6 +36,11 @@ PROJECTS = {
         "licence": "XV-023222", "url": "https://docs.google.com/spreadsheets/d/1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz/edit?gid=991918308",
         "sourceModified": "2026-09-17T02:22:04.459Z",
     },
+    "Nergui_undur_Drone_Project_Tracker.xlsx": {
+        "key": "nergui-undur", "project": "Nergui Undur", "label": "Нэргүй өндөр",
+        "licence": "XV-023099", "url": "https://docs.google.com/spreadsheets/d/18zky2dhmLpBwOXWBLPFmHdT5QoqndiWk/edit",
+        "sourceModified": "2026-10-21T02:05:30.489Z",
+    },
 }
 
 

@@ -941,9 +941,9 @@ def run(command: list[str], cwd: Path) -> None:
 def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     projects = config.get("projects", [])
-    required_keys = {"hetsuu-hutul", "artsat", "buduunkhad"}
+    required_keys = {"hetsuu-hutul", "artsat", "buduunkhad", "nergui-undur"}
     if {item.get("key") for item in projects} != required_keys:
-        raise ValueError("drive-sync-sources.json must configure exactly the three project trackers")
+        raise ValueError("drive-sync-sources.json must configure exactly the four project trackers")
     if workspace.exists():
         shutil.rmtree(workspace)
     workbooks_dir = workspace / "workbooks"
@@ -968,7 +968,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     project_root_summaries: dict[str, dict] = {}
     for project in projects:
         project_key = project["key"]
-        env_name = f"{project_key.upper().replace('-', '_')}_ROOT_FOLDER_ID"
+        env_name = project.get("rootEnvVar") or f"{project_key.upper().replace('-', '_')}_ROOT_FOLDER_ID"
         root_folder_id = os.environ.get(env_name, "").strip() or clean(project.get("rootFolderId"))
         if not root_folder_id:
             print(f"::notice::{project_key} has no project root configured; root discovery skipped.")

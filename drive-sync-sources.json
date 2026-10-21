@@ -14,6 +14,12 @@
       "key": "buduunkhad",
       "trackerFileId": "1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz",
       "workbookName": "Buduunkhad_Drone_Project_Tracker.xlsx"
+    },
+    {
+      "key": "nergui-undur",
+      "trackerFileId": "18zky2dhmLpBwOXWBLPFmHdT5QoqndiWk",
+      "workbookName": "Nergui_undur_Drone_Project_Tracker.xlsx",
+      "rootEnvVar": "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID"
     }
   ],
   "folderScanDepth": 2,

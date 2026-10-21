@@ -6,7 +6,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 
 ## Өдөр тутмын Google Drive sync
 
-`.github/workflows/drive-sync.yml` нь өдөр бүр **08:00 Asia/Shanghai** (`00:00 UTC`)-д GitHub Actions дээр ажиллана. OpenAI/Codex runtime ашиглахгүй. Workflow нь гурван project tracker-ийг Drive API-аар read-only татаж, Checklist-ийн mission folder холбоосууд дотроос coordinate агуулсан `KMZ`, `MRK`, `KML`, `CSV`, `TXT` эх үүсвэрийг mission/огноотой нь шалгаад trajectory болон coverage asset-ийг шинэчилнэ. Өөрчлөлт гарсан үед л `main` руу commit хийж, Pages deployment-ийг өдөөдөг.
+`.github/workflows/drive-sync.yml` нь өдөр бүр **08:00 Asia/Shanghai** (`00:00 UTC`)-д GitHub Actions дээр ажиллана. OpenAI/Codex runtime ашиглахгүй. Workflow нь дөрвөн project tracker-ийг Drive API-аар read-only татаж, Checklist-ийн mission folder холбоосууд дотроос coordinate агуулсан `KMZ`, `MRK`, `KML`, `CSV`, `TXT` эх үүсвэрийг mission/огноотой нь шалгаад trajectory болон coverage asset-ийг шинэчилнэ. Өөрчлөлт гарсан үед л `main` руу commit хийж, Pages deployment-ийг өдөөдөг.
 
 Нэг удаагийн тохиргоо:
 
@@ -19,7 +19,7 @@ Sync ажилласны дараа `Actions → Sync Google Drive survey data �
 
 Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
 
-Нэргүй өндөр төслийн root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь бүх дэд хавтсаас `SRVY*-ACQU*-10Hz.csv` болон fallback `.magdata` файлыг acquisition-аар нь олж, CSV-г түрүүлж сонгон 1 Hz trajectory болгон задлана. Өмнө нийтлэгдсэн acquisition-ийг дахин татахгүй; шинэ эсвэл өөрчлөгдсөн эх үүсвэрийг импортлоод trajectory, 50 м coverage болон dataset registry-г шинэчилнэ. Мөн `Raw Data` доторх `DJI...` файлын тоогоор яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset болон Actions summary-д нийтлэхгүй.
+Нэргүй өндөр төслийн root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дөрөв дэх project tracker-ийг татаж, root-ийн `KMZ & Flight record` салбаруудаас L3 mission-ийг tracker-ийн огноо/нэртэй баталгаажуулан импортлоно. Мөн бүх дэд хавтсаас `SRVY*-ACQU*-10Hz.csv` болон fallback `.magdata` файлыг acquisition-аар нь олж, CSV-г түрүүлж сонгон 1 Hz trajectory болгон задлана. Өмнө нийтлэгдсэн acquisition-ийг дахин татахгүй; шинэ эсвэл өөрчлөгдсөн эх үүсвэрийг импортлоод trajectory, 50 м coverage болон dataset registry-г шинэчилнэ. `Raw Data` доторх `DJI...` файлын тоогоор яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset болон Actions summary-д нийтлэхгүй.
 
 Хэцүү хөтлийн үндсэн project folder ID-г `HETSUU_HUTUL_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь `Drone`, `UAV`, `Magnetic_Survey`, `MagArrow`, `Flight log/record` нэртэй салбаруудыг олж, `DJIFlightRecord`, `Timestamp.MRK`, `SRVY*-ACQU*`, KML/KMZ зэрэг coordinate эх үүсвэрийг бүртгэнэ. Project root дахь 2025 UAV magnetic survey болон 2026 tracker бүртгэлийг огноо/mission баталгаагүйгээр хооронд нь холихгүй; tracker-ийн огноо эсвэл бүтэн mission нэр таарсан үед л trajectory importer-т дамжуулна. Coordinate source-д altitude/relative-height багана байвал trajectory asset-д min/max/mean өндөр хадгалагдаж, map popup болон нислэгийн бүртгэлд харагдана.
 

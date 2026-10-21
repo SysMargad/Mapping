@@ -29,6 +29,7 @@ PROJECTS = {
     "hetsuu-hutul": {"project": "Hetsuu hutul", "area": "Хэцүү хөтөл", "licence": "XV-022905"},
     "artsat": {"project": "Artsat", "area": "Арцат", "licence": "XV-021395"},
     "buduunkhad": {"project": "Buduunkhad", "area": "Бүдүүн хад", "licence": "XV-023222"},
+    "nergui-undur": {"project": "Nergui Undur", "area": "Нэргүй өндөр", "licence": "XV-023099"},
 }
 MISSION_TIME_RE = re.compile(r"DJI_(\d{8})(\d{4,6})", re.IGNORECASE)
 FLIGHT_RECORD_RE = re.compile(
