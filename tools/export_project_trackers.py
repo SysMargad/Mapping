@@ -306,7 +306,10 @@ def coordinate_observations(paths: list[Path], extents: dict) -> tuple[list[dict
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("workbooks", nargs=3, type=Path)
+    # Keep the exporter extensible as project trackers are added. The PROJECTS
+    # completeness check below still guarantees that every configured workbook
+    # is supplied exactly by name.
+    parser.add_argument("workbooks", nargs="+", type=Path)
     parser.add_argument("--licences", required=True, type=Path)
     parser.add_argument("--summary-output", required=True, type=Path)
     parser.add_argument("--points-output", required=True, type=Path)
