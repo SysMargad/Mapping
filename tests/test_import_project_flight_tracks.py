@@ -155,6 +155,14 @@ class Matching(ImporterCase):
 
 
 class Rejections(ImporterCase):
+    def test_mission_plan_kmz_is_not_published_as_an_actual_track(self):
+        mission = "DJI_202610201337_004_TR2L3AONEBLOCKYAWDRAFTHOLD"
+        name = f"{mission}.kmz"
+        (self.sources / name).write_bytes(b"PK\x03\x04mission-plan")
+        report, data = self.run_import([record(3, mission, "2026-10-20", sensor="L3")])
+        self.assertEqual(data["features"], [])
+        self.assertEqual(self.reasons(report, name), [cs.UNSUPPORTED_FLIGHT_LOG])
+
     def test_binary_dji_txt_reports_unsupported_flight_log(self):
         mission = "DJI_202608221222_001_DEMO-AWarehouse-XT-B007"
         name = f"{mission}.txt"

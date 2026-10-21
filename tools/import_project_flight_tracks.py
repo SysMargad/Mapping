@@ -463,6 +463,19 @@ def build(args) -> dict:
             rejected.append({"file": path.name, "reason": f"duplicate tracker match {record['id']}"})
             note(path, cs.DUPLICATE_SOURCE, f"tracker mission {record['id']} already has a source", record["id"])
             continue
+        if path.suffix.lower() in {".kml", ".kmz"} and not path.name.lower().startswith("djiflightrecord_"):
+            rejected.append({
+                "file": path.name,
+                "trackerId": record["id"],
+                "reason": "mission-plan KML/KMZ is not a flown trajectory",
+            })
+            note(
+                path,
+                cs.UNSUPPORTED_FLIGHT_LOG,
+                "mission-plan KML/KMZ is not a flown trajectory",
+                record["id"],
+            )
+            continue
         try:
             raw_points = parse_source(path)
             points = clean_points(raw_points, extent)

@@ -11,7 +11,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1] / "dist"
 DATA = ROOT / "data"
 FORBIDDEN = ("artsat", "buduunkhad", "buduun khad")
-PROJECT_OPERATION_NAMES = {"Hetsuu hutul", "Artsat", "Buduunkhad"}
+PROJECT_OPERATION_NAMES = {"Hetsuu hutul", "Artsat", "Buduunkhad", "Nergui Undur"}
+CORE_TRACKER_PROJECTS = {"hetsuu-hutul", "artsat", "buduunkhad"}
+OPTIONAL_TRACKER_PROJECTS = {"nergui-undur"}
 VALID_GEOMETRY = {"Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon"}
 
 
@@ -115,8 +117,11 @@ def main() -> int:
                 payload = load(path)
                 if payload.get("project") != "Multi-project operations" or payload.get("scope") != "project_operations":
                     errors.append(f"{path}: invalid project operations root metadata")
-                if set(payload.get("projects", {})) != {"hetsuu-hutul", "artsat", "buduunkhad"}:
-                    errors.append(f"{path}: expected exactly three tracker projects")
+                tracker_projects = set(payload.get("projects", {}))
+                if not CORE_TRACKER_PROJECTS.issubset(tracker_projects):
+                    errors.append(f"{path}: missing core tracker projects")
+                if tracker_projects - CORE_TRACKER_PROJECTS - OPTIONAL_TRACKER_PROJECTS:
+                    errors.append(f"{path}: unsupported tracker projects")
                 if any(record.get("trajectoryAvailable") is not False for record in payload.get("records", [])):
                     errors.append(f"{path}: tracker records must not be classified as trajectories")
     if errors:
