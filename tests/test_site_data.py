@@ -190,6 +190,33 @@ class NerguiUndurActualTracks(unittest.TestCase):
         ))
 
 
+class L3PlannedLines(unittest.TestCase):
+    def setUp(self):
+        self.data = load("l3/planned-lines.geojson")
+
+    def test_drive_kmz_lines_are_published_as_plans_only(self):
+        self.assertEqual(self.data["featureCount"], 32)
+        self.assertEqual(len(self.data["features"]), 32)
+        self.assertEqual(
+            {feature["properties"]["date"] for feature in self.data["features"]},
+            {"2026-10-21", "2026-10-24", "2026-10-25"},
+        )
+        self.assertTrue(all(
+            feature["properties"]["project"] == "Nergui Undur"
+            and feature["properties"]["sensor"] == "L3"
+            and feature["properties"]["plannedActual"] == "planned"
+            and feature["properties"]["dataType"] == "mission_plan_line"
+            and feature["geometry"]["type"] == "LineString"
+            and len(feature["geometry"]["coordinates"]) >= 2
+            for feature in self.data["features"]
+        ))
+
+    def test_plans_are_not_claimed_as_actual_flight_records(self):
+        serialised = json.dumps(self.data, ensure_ascii=False)
+        self.assertNotIn('"flightRecordVerified": true', serialised)
+        self.assertNotIn('"plannedActual": "actual"', serialised)
+
+
 class CampaignDataset(unittest.TestCase):
     def setUp(self):
         self.data = load("context/project-campaign-tracks.geojson")

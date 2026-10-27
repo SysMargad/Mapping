@@ -1,0 +1,1570 @@
+{
+  "type": "FeatureCollection",
+  "name": "Nergui Undur L3 planned survey lines",
+  "project": "Nergui Undur",
+  "dataType": "mission_plan_line",
+  "featureCount": 32,
+  "sourceFolder": "Google Drive planned-line archive",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-1-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-1",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-1.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 8,
+        "lengthM": 4367.8,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.391618996,
+            49.135090735
+          ],
+          [
+            113.4001785,
+            49.134096
+          ],
+          [
+            113.400179834,
+            49.133206637
+          ],
+          [
+            113.384680194,
+            49.134965169
+          ],
+          [
+            113.384681651,
+            49.134052471
+          ],
+          [
+            113.400180913,
+            49.132293954
+          ],
+          [
+            113.400182189,
+            49.131381249
+          ],
+          [
+            113.38468311,
+            49.133139773
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-11-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-11",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-11.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 12,
+        "lengthM": 4204.36,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.401149043,
+            49.133096601
+          ],
+          [
+            113.408685862,
+            49.13224064
+          ],
+          [
+            113.408686777,
+            49.131327961
+          ],
+          [
+            113.4001811,
+            49.132293933
+          ],
+          [
+            113.400182352,
+            49.13138123
+          ],
+          [
+            113.408687692,
+            49.130415281
+          ],
+          [
+            113.408688608,
+            49.129502601
+          ],
+          [
+            113.400183605,
+            49.130468528
+          ],
+          [
+            113.400184858,
+            49.129555825
+          ],
+          [
+            113.408689525,
+            49.12858992
+          ],
+          [
+            113.408690442,
+            49.12767724
+          ],
+          [
+            113.400186111,
+            49.128643122
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-12-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-12",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-12.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 6,
+        "lengthM": 1981.57,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.400187366,
+            49.127730418
+          ],
+          [
+            113.40869136,
+            49.12676456
+          ],
+          [
+            113.408692278,
+            49.125851879
+          ],
+          [
+            113.400188576,
+            49.12681772
+          ],
+          [
+            113.400189876,
+            49.125905012
+          ],
+          [
+            113.407265047,
+            49.125101455
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-13-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-13",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-13.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 8,
+        "lengthM": 5263.91,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.408684034,
+            49.134065999
+          ],
+          [
+            113.424918733,
+            49.132220508
+          ],
+          [
+            113.425373018,
+            49.131240502
+          ],
+          [
+            113.40914327,
+            49.133101252
+          ],
+          [
+            113.408685862,
+            49.13224064
+          ],
+          [
+            113.425811896,
+            49.130293694
+          ],
+          [
+            113.426030999,
+            49.129356161
+          ],
+          [
+            113.408686777,
+            49.131327961
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-14-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-14",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-14.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 6,
+        "lengthM": 4045.28,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.408687692,
+            49.130415281
+          ],
+          [
+            113.426030998,
+            49.128443554
+          ],
+          [
+            113.426030997,
+            49.127530946
+          ],
+          [
+            113.408688608,
+            49.129502601
+          ],
+          [
+            113.408689525,
+            49.12858992
+          ],
+          [
+            113.426030997,
+            49.126618339
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-15-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-15",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-15.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 6,
+        "lengthM": 3933.83,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.426030997,
+            49.125705732
+          ],
+          [
+            113.408690442,
+            49.12767724
+          ],
+          [
+            113.40869136,
+            49.12676456
+          ],
+          [
+            113.426030998,
+            49.124793124
+          ],
+          [
+            113.417180773,
+            49.124887106
+          ],
+          [
+            113.408692278,
+            49.125851879
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-2-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-2",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-2.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 8,
+        "lengthM": 4882.49,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.384684568,
+            49.132227075
+          ],
+          [
+            113.400183465,
+            49.130468543
+          ],
+          [
+            113.400184742,
+            49.129555838
+          ],
+          [
+            113.384686028,
+            49.131314377
+          ],
+          [
+            113.384687488,
+            49.130401679
+          ],
+          [
+            113.40018602,
+            49.128643132
+          ],
+          [
+            113.400187298,
+            49.127730426
+          ],
+          [
+            113.384688948,
+            49.129488981
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-sant2-3-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "SANT2-3",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-3.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 8,
+        "lengthM": 4636.35,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.384690409,
+            49.128576282
+          ],
+          [
+            113.400188576,
+            49.12681772
+          ],
+          [
+            113.400189855,
+            49.125905014
+          ],
+          [
+            113.384691871,
+            49.127663583
+          ],
+          [
+            113.384693333,
+            49.126750885
+          ],
+          [
+            113.399270468,
+            49.12509684
+          ],
+          [
+            113.391275871,
+            49.12509167
+          ],
+          [
+            113.384694796,
+            49.125838186
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-1-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-1",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-1.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 585.18,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.387054749,
+            49.14708408
+          ],
+          [
+            113.385688492,
+            49.141897863
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-10-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-10",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-10.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 1128.4,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.397803931,
+            49.135094604
+          ],
+          [
+            113.39516822,
+            49.125094256
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-11-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-11",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-11.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 902.7,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.404231196,
+            49.13309846
+          ],
+          [
+            113.402121663,
+            49.125098549
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-12-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-12",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-12.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 904.2,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.411189257,
+            49.133115516
+          ],
+          [
+            113.409075092,
+            49.125102423
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-13-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-13",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-13.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 917.69,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.418140356,
+            49.133105824
+          ],
+          [
+            113.415993521,
+            49.124973325
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21-tieline-9-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "TIELINE-9",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-9.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 1126.54,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.390844718,
+            49.135073514
+          ],
+          [
+            113.388214763,
+            49.125089544
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-21--2-12-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "Харгант2-12",
+        "lineType": "planned_line",
+        "sourceFile": "Харгант2-12.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 697.59,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.411179997,
+            49.106728498
+          ],
+          [
+            113.409549841,
+            49.100546361
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-sant2-10-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "SANT2-10",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-10.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 10,
+        "lengthM": 5735.62,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.408679473,
+            49.138629395
+          ],
+          [
+            113.421389019,
+            49.137184948
+          ],
+          [
+            113.421389041,
+            49.136272348
+          ],
+          [
+            113.408680384,
+            49.137716716
+          ],
+          [
+            113.408681657,
+            49.136803996
+          ],
+          [
+            113.42393445,
+            49.135070275
+          ],
+          [
+            113.424241301,
+            49.134122771
+          ],
+          [
+            113.408682823,
+            49.135891288
+          ],
+          [
+            113.408683989,
+            49.13497858
+          ],
+          [
+            113.424548141,
+            49.133175267
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-sant2-6-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "SANT2-6",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-6.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 12,
+        "lengthM": 4304.5,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.407071839,
+            49.147025147
+          ],
+          [
+            113.408671301,
+            49.146843499
+          ],
+          [
+            113.408672207,
+            49.145930821
+          ],
+          [
+            113.398815537,
+            49.147049876
+          ],
+          [
+            113.398692329,
+            49.146151301
+          ],
+          [
+            113.408673113,
+            49.145018143
+          ],
+          [
+            113.40867402,
+            49.144105465
+          ],
+          [
+            113.398681322,
+            49.145239994
+          ],
+          [
+            113.398670317,
+            49.144328686
+          ],
+          [
+            113.408674927,
+            49.143192787
+          ],
+          [
+            113.408675835,
+            49.142280109
+          ],
+          [
+            113.398659312,
+            49.143417378
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-sant2-7-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "SANT2-7",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-7.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 10,
+        "lengthM": 3867.89,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.398648309,
+            49.14250607
+          ],
+          [
+            113.408676744,
+            49.141367431
+          ],
+          [
+            113.408677653,
+            49.140454752
+          ],
+          [
+            113.398637306,
+            49.141594761
+          ],
+          [
+            113.398626305,
+            49.140683453
+          ],
+          [
+            113.408678563,
+            49.139542074
+          ],
+          [
+            113.408679473,
+            49.138629395
+          ],
+          [
+            113.398615304,
+            49.139772144
+          ],
+          [
+            113.398604305,
+            49.138860836
+          ],
+          [
+            113.405312406,
+            49.138099247
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-sant2-8-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "SANT2-8",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-8.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 12,
+        "lengthM": 4770.03,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.408671301,
+            49.146843499
+          ],
+          [
+            113.415916999,
+            49.146020321
+          ],
+          [
+            113.415916999,
+            49.145107733
+          ],
+          [
+            113.408672207,
+            49.145930821
+          ],
+          [
+            113.408673113,
+            49.145018143
+          ],
+          [
+            113.419486,
+            49.143789484
+          ],
+          [
+            113.419485999,
+            49.14287689
+          ],
+          [
+            113.40867402,
+            49.144105465
+          ],
+          [
+            113.408674927,
+            49.143192787
+          ],
+          [
+            113.419485999,
+            49.141964295
+          ],
+          [
+            113.419486,
+            49.141051701
+          ],
+          [
+            113.408675835,
+            49.142280109
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-sant2-9-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "SANT2-9",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-9.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 6,
+        "lengthM": 3015.9,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.408676744,
+            49.141367431
+          ],
+          [
+            113.421388999,
+            49.139922745
+          ],
+          [
+            113.421388998,
+            49.139010147
+          ],
+          [
+            113.408677653,
+            49.140454752
+          ],
+          [
+            113.408678563,
+            49.139542074
+          ],
+          [
+            113.421352497,
+            49.1381017
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-14-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-14",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-14.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 882.79,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.42488147,
+            49.132300893
+          ],
+          [
+            113.422815232,
+            49.124477756
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-3-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-3",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-3.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 1009.68,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.400954729,
+            49.147043525
+          ],
+          [
+            113.398595067,
+            49.138095456
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-4-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-4",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-4.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 1005.84,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.407904688,
+            49.14702262
+          ],
+          [
+            113.40555275,
+            49.138108713
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-5-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-5",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-5.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 1004.51,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.414854626,
+            49.147001297
+          ],
+          [
+            113.412504556,
+            49.138099332
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-6-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-6",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-6.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 302.34,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.42016717,
+            49.140781004
+          ],
+          [
+            113.419459554,
+            49.138101684
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-7-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-7",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-7.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 562.61,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.412505091,
+            49.138101358
+          ],
+          [
+            113.411189257,
+            49.133115516
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-24-tieline-8-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-24",
+        "plan": "TIELINE-8",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-8.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 563.74,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.419459554,
+            49.138101684
+          ],
+          [
+            113.418140356,
+            49.133105824
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-25-sant2-4-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-25",
+        "plan": "SANT2-4",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-4.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 8,
+        "lengthM": 3781.06,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.390559205,
+            49.147074013
+          ],
+          [
+            113.398692329,
+            49.146151301
+          ],
+          [
+            113.398681322,
+            49.145239994
+          ],
+          [
+            113.385680611,
+            49.146714671
+          ],
+          [
+            113.385682103,
+            49.145801969
+          ],
+          [
+            113.398670317,
+            49.144328686
+          ],
+          [
+            113.398659312,
+            49.143417378
+          ],
+          [
+            113.385683596,
+            49.144889266
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-25-sant2-5-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-25",
+        "plan": "SANT2-5",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-5.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 10,
+        "lengthM": 3632.45,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.385685144,
+            49.143976557
+          ],
+          [
+            113.398648309,
+            49.14250607
+          ],
+          [
+            113.398637306,
+            49.141594761
+          ],
+          [
+            113.385686583,
+            49.14306386
+          ],
+          [
+            113.385688077,
+            49.142151157
+          ],
+          [
+            113.398626305,
+            49.140683453
+          ],
+          [
+            113.398615304,
+            49.139772144
+          ],
+          [
+            113.396181766,
+            49.140048324
+          ],
+          [
+            113.396182809,
+            49.139135653
+          ],
+          [
+            113.398604305,
+            49.138860836
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-25-sant2-6-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-25",
+        "plan": "SANT2-6",
+        "lineType": "survey_line",
+        "sourceFile": "SANT2-6.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 12,
+        "lengthM": 4304.5,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.407071839,
+            49.147025147
+          ],
+          [
+            113.408671301,
+            49.146843499
+          ],
+          [
+            113.408672207,
+            49.145930821
+          ],
+          [
+            113.398815537,
+            49.147049876
+          ],
+          [
+            113.398692329,
+            49.146151301
+          ],
+          [
+            113.408673113,
+            49.145018143
+          ],
+          [
+            113.40867402,
+            49.144105465
+          ],
+          [
+            113.398681322,
+            49.145239994
+          ],
+          [
+            113.398670317,
+            49.144328686
+          ],
+          [
+            113.408674927,
+            49.143192787
+          ],
+          [
+            113.408675835,
+            49.142280109
+          ],
+          [
+            113.398659312,
+            49.143417378
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-25-tieline-1-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-25",
+        "plan": "TIELINE-1",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-1.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 585.18,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.387054749,
+            49.14708408
+          ],
+          [
+            113.385688492,
+            49.141897863
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "l3-plan-2026-10-25-tieline-2-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-25",
+        "plan": "TIELINE-2",
+        "lineType": "tie_line",
+        "sourceFile": "TIELINE-2.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 617.36,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.394004749,
+            49.147064012
+          ],
+          [
+            113.392562607,
+            49.141592694
+          ]
+        ]
+      }
+    }
+  ]
+}

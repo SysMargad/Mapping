@@ -27,6 +27,10 @@
   "projectRootDiscoveryDepth": 5,
   "projectRootScanDepth": 8,
   "maxSourceSizeBytes": 104857600,
+  "l3PlannedLines": {
+    "folderId": "1s_-chplx5_9nkvh1Fs2Zj8AUiTKm3mOi",
+    "scanDepth": 2
+  },
   "campaigns": [
     {
       "id": "artsat-2026-medusa-ms700",

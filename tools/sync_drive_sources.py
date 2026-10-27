@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coordinate_sources as cs  # noqa: E402
 import export_magdata_trajectories as magarrow  # noqa: E402
+import export_l3_planned_lines as l3_plans  # noqa: E402
 
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -218,6 +219,52 @@ def list_named_children(service, parent_id: str, name: str) -> list[dict]:
         supportsAllDrives=True,
     )
     return execute_with_retry(request).get("files", [])
+
+
+def sync_l3_planned_lines(service, settings: dict, repo: Path, workspace: Path) -> dict | None:
+    """Download and publish the explicitly configured L3 planned-line archive."""
+    root_folder_id = clean(settings.get("folderId"))
+    if not root_folder_id:
+        return None
+    max_depth = int(settings.get("scanDepth", 2))
+    source_dir = workspace / "l3-planned-lines"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    queue = [(root_folder_id, 0, "")]
+    visited: set[str] = set()
+    downloaded = 0
+    while queue:
+        current, depth, relative = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        for raw_item in list_children(service, current):
+            item = resolve_shortcut(service, raw_item)
+            name = clean(item.get("name"))
+            if item.get("mimeType") == FOLDER_MIME:
+                if depth < max_depth:
+                    queue.append((item["id"], depth + 1, str(Path(relative) / safe_filename(name))))
+                continue
+            if Path(name).suffix.lower() != ".kmz":
+                continue
+            destination = source_dir / relative / safe_filename(name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            download_file(service, item, destination)
+            downloaded += 1
+    if not downloaded:
+        raise RuntimeError("configured L3 planned-line folder contains no readable KMZ files")
+    output = repo / "dist" / "data" / "l3" / "planned-lines.geojson"
+    payload = l3_plans.build(source_dir)
+    if not payload.get("features"):
+        raise RuntimeError("L3 KMZ files contained no valid planned LineString geometry")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    dates = sorted({feature["properties"].get("date") for feature in payload["features"] if feature["properties"].get("date")})
+    return {
+        "downloadedFileCount": downloaded,
+        "publishedLineCount": len(payload["features"]),
+        "dateFrom": dates[0] if dates else None,
+        "dateTo": dates[-1] if dates else None,
+    }
 
 
 def resolve_shortcut(service, item: dict) -> dict:
@@ -953,6 +1000,16 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     sources_dir.mkdir(parents=True)
     reports_dir.mkdir(parents=True)
     service = build_drive_service()
+    l3_planned_lines_summary = None
+    if config.get("l3PlannedLines"):
+        try:
+            l3_planned_lines_summary = sync_l3_planned_lines(
+                service, config["l3PlannedLines"], repo, workspace
+            )
+            print("Nergui Undur L3 planned-line sync:")
+            print(json.dumps(l3_planned_lines_summary, ensure_ascii=False, indent=2))
+        except Exception as error:
+            print(f"::warning::Nergui Undur L3 planned-line sync skipped ({type(error).__name__})")
     raw_root_folder_id = os.environ.get("NERGUI_UNDUR_RAW_ROOT_FOLDER_ID", "").strip()
     raw_sensor_summary = None
     if raw_root_folder_id:
@@ -1264,6 +1321,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "projects": project_results,
         "nerguiUndurRawSensorCounts": raw_sensor_summary,
         "nerguiUndurMagArrow": nergui_magarrow_summary,
+        "nerguiUndurL3PlannedLines": l3_planned_lines_summary,
         "projectRootDroneSources": project_root_summaries,
         "secretsConfigured": {
             "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
@@ -1300,6 +1358,13 @@ def step_summary(summary: dict) -> str:
             lines.append(f"- {key}: `{nergui.get(key)}`")
     else:
         lines.append("- not run (secret missing or discovery failed)")
+    l3_plans_summary = summary.get("nerguiUndurL3PlannedLines")
+    lines += ["", "### Nergui Undur L3 planned lines", ""]
+    if l3_plans_summary:
+        for key in ("downloadedFileCount", "publishedLineCount", "dateFrom", "dateTo"):
+            lines.append(f"- {key}: `{l3_plans_summary.get(key)}`")
+    else:
+        lines.append("- not updated; the previously published asset was preserved")
     lines += ["", "### Project-root discovery", ""]
     discoveries = summary.get("projectRootDroneSources", {})
     if discoveries:

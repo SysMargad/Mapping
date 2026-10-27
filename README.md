@@ -37,6 +37,7 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
 - `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, шаардлагатай үед raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
+- `dist/data/l3/planned-lines.geojson` — 2026-10-21, 2026-10-24, 2026-10-25 өдрийн Drive KMZ/WPMZ дотор хадгалсан 32 L3 survey/tie-line маршрут. Эдгээрийг веб дээр нил ягаан тасархай **planned** шугамаар харуулна; actual flown trajectory гэж тооцохгүй. `drive-sync-sources.json`-д тохируулсан хавтсыг өдөр тутмын sync дахин уншина.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
 Map дээр баталгаажсан trajectory нь sensor-аар тогтмол өнгөтэй: **MagArrow цэнхэр** (`#2563eb`), **Medusa улаан** (`#e11d48`), **L2 ногоон** (`#16a34a`), **L3 нил ягаан** (`#9333ea`), **P1 улбар шар** (`#f59e0b`). Sensor нь баталгаажаагүй campaign саарал тасархай шугамаар харагдана. Өнгө нь track байгаа мэт таамаглахгүй; coordinate geometry баталгаажсан үед л шугам зурагдана.
