@@ -8,6 +8,41 @@
   "features": [
     {
       "type": "Feature",
+      "id": "l3-plan-2026-10-21-2-12-01",
+      "properties": {
+        "project": "Nergui Undur",
+        "area": "Sant Uul",
+        "sensor": "L3",
+        "dataType": "mission_plan_line",
+        "plannedActual": "planned",
+        "status": "confirmed_source",
+        "date": "2026-10-21",
+        "plan": "2-12",
+        "lineType": "planned_line",
+        "sourceFile": "2-12.kmz",
+        "sourceKind": "DJI WPMZ/KMZ mission plan route",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": true,
+        "pointCount": 2,
+        "lengthM": 697.59,
+        "contextOnly": false
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.411179997,
+            49.106728498
+          ],
+          [
+            113.409549841,
+            49.100546361
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
       "id": "l3-plan-2026-10-21-sant2-1-01",
       "properties": {
         "project": "Nergui Undur",
@@ -676,41 +711,6 @@
           [
             113.388214763,
             49.125089544
-          ]
-        ]
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "l3-plan-2026-10-21--2-12-01",
-      "properties": {
-        "project": "Nergui Undur",
-        "area": "Sant Uul",
-        "sensor": "L3",
-        "dataType": "mission_plan_line",
-        "plannedActual": "planned",
-        "status": "confirmed_source",
-        "date": "2026-10-21",
-        "plan": "Харгант2-12",
-        "lineType": "planned_line",
-        "sourceFile": "Харгант2-12.kmz",
-        "sourceKind": "DJI WPMZ/KMZ mission plan route",
-        "displayCrs": "EPSG:4326",
-        "crsVerified": true,
-        "pointCount": 2,
-        "lengthM": 697.59,
-        "contextOnly": false
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            113.411179997,
-            49.106728498
-          ],
-          [
-            113.409549841,
-            49.100546361
           ]
         ]
       }
