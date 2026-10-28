@@ -8,7 +8,7 @@ on:
       - "drive-sync-sources.json"
       - "tools/coordinate_sources.py"
       - "tools/export_magdata_trajectories.py"
-      - "tools/export_l3_planned_lines.py"
+      - "tools/export_magarrow_planned_lines.py"
       - "tools/export_project_trackers.py"
       - "tools/import_campaign_tracks.py"
       - "tools/import_project_flight_tracks.py"

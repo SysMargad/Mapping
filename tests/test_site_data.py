@@ -59,7 +59,7 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-10-12.1', index)
+        self.assertIn('app.js?v=2026-10-28.1', index)
         self.assertIn('styles.css?v=2026-10-03.3', index)
 
     def test_map_view_switch_has_osm_and_satellite_modes(self):
@@ -190,9 +190,9 @@ class NerguiUndurActualTracks(unittest.TestCase):
         ))
 
 
-class L3PlannedLines(unittest.TestCase):
+class MagArrowArchivePlannedLines(unittest.TestCase):
     def setUp(self):
-        self.data = load("l3/planned-lines.geojson")
+        self.data = load("magarrow/archive-planned-lines.geojson")
 
     def test_drive_kmz_lines_are_published_as_plans_only(self):
         self.assertEqual(self.data["featureCount"], 32)
@@ -203,7 +203,7 @@ class L3PlannedLines(unittest.TestCase):
         )
         self.assertTrue(all(
             feature["properties"]["project"] == "Nergui Undur"
-            and feature["properties"]["sensor"] == "L3"
+            and feature["properties"]["sensor"] == "MagArrow"
             and feature["properties"]["plannedActual"] == "planned"
             and feature["properties"]["dataType"] == "mission_plan_line"
             and feature["geometry"]["type"] == "LineString"
@@ -215,6 +215,12 @@ class L3PlannedLines(unittest.TestCase):
         serialised = json.dumps(self.data, ensure_ascii=False)
         self.assertNotIn('"flightRecordVerified": true', serialised)
         self.assertNotIn('"plannedActual": "actual"', serialised)
+
+    def test_registry_does_not_assign_these_lines_to_l3(self):
+        registry = load("datasets.json")
+        by_id = {item["id"]: item for item in registry["datasets"]}
+        self.assertEqual(by_id["magarrow-archive-planned-lines"]["sensor"], "MagArrow")
+        self.assertIsNone(by_id["l3-survey-family"]["webAsset"])
 
 
 class CampaignDataset(unittest.TestCase):

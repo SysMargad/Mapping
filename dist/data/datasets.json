@@ -349,22 +349,22 @@
       "webAsset": null
     },
     {
-      "id": "l3-planned-lines",
+      "id": "magarrow-archive-planned-lines",
       "project": "Nergui Undur",
       "area": "Sant Uul",
-      "sensor": "L3",
+      "sensor": "MagArrow",
       "dataType": "mission_plan_line",
       "plannedActual": "planned",
       "status": "confirmed_source",
       "sourceUrl": "https://drive.google.com/drive/folders/1s_-chplx5_9nkvh1Fs2Zj8AUiTKm3mOi",
-      "sourceFile": "32 DJI KMZ/WPMZ stored line routes",
-      "webAsset": "./data/l3/planned-lines.geojson",
+      "sourceFile": "32 DJI KMZ/WPMZ stored MagArrow line routes",
+      "webAsset": "./data/magarrow/archive-planned-lines.geojson",
       "sourceCrs": "EPSG:4326",
       "displayCrs": "EPSG:4326",
       "crsVerified": true,
       "flightTrackAvailable": false,
       "defaultVisible": false,
-      "notes": "32 planned L3 survey/tie-line routes from 21, 24 and 25 October 2026. These are mission-plan geometries stored in wpmz/template.kml, not actual flown trajectories."
+      "notes": "32 planned MagArrow survey/tie-line routes from 21, 24 and 25 October 2026. These are mission-plan geometries stored in wpmz/template.kml, not actual flown trajectories."
     },
     {
       "id": "l3-survey-family",
@@ -380,7 +380,7 @@
       "webAsset": null,
       "flightTrackAvailable": false,
       "crsVerified": false,
-      "notes": "N1–N9 and sant laz survey family is confirmed. Planned line routes are published separately; actual L3 trajectory is not confirmed."
+      "notes": "N1–N9 and sant laz survey family is confirmed. No actual L3 trajectory is confirmed."
     },
     {
       "id": "l2-source",

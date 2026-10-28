@@ -19,7 +19,7 @@ Sync ажилласны дараа `Actions → Sync Google Drive survey data �
 
 Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-д байна. Source file нь tracker огноотой зөрвөл эсвэл тухайн лицензийн гадна координаттай бол importer түүнийг вебийн trajectory болгохгүй.
 
-Нэргүй өндөр төслийн root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дөрөв дэх project tracker-ийг татаж, root-ийн `KMZ & Flight record` салбаруудаас L3 mission-ийг tracker-ийн огноо/нэртэй баталгаажуулан импортлоно. Мөн бүх дэд хавтсаас `SRVY*-ACQU*-10Hz.csv` болон fallback `.magdata` файлыг acquisition-аар нь олж, CSV-г түрүүлж сонгон 1 Hz trajectory болгон задлана. Өмнө нийтлэгдсэн acquisition-ийг дахин татахгүй; шинэ эсвэл өөрчлөгдсөн эх үүсвэрийг импортлоод trajectory, 50 м coverage болон dataset registry-г шинэчилнэ. `Raw Data` доторх `DJI...` файлын тоогоор яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset болон Actions summary-д нийтлэхгүй.
+Нэргүй өндөр төслийн root folder ID-г `NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь дөрөв дэх project tracker-ийг татаж, root-ийн `KMZ & Flight record` салбаруудаас L3 mission-ийг tracker-ийн огноо/нэртэй баталгаажуулан импортлоно. MagArrow-ийн хувьд `SRVY*-ACQU*` нэртэй `.magdata`, стандарт 10 Hz CSV, мөн header дотроо latitude/longitude баганатай ердийн CSV/TXT хүснэгтийг уншина. CSV/TXT-ийн координатыг файлын агуулгаар баталгаажуулж, тасарсан хэсгийг шулуун шугамаар зохиомлоор холбохгүй. Acquisition нэр давтагдсан ч огноогоор нь тусдаа track болгон хадгална. Шинэ эсвэл өөрчлөгдсөн эх үүсвэрийг импортлоод trajectory, 50 м coverage болон dataset registry-г шинэчилнэ. `Raw Data` доторх `DJI...` файлын тоогоор яг **4 файлтай хавтсыг P1**, яг **11 файлтай хавтсыг L3** гэж нийлбэрээр ангилна. Private folder ID, нэр, замыг public Pages asset болон Actions summary-д нийтлэхгүй.
 
 Хэцүү хөтлийн үндсэн project folder ID-г `HETSUU_HUTUL_ROOT_FOLDER_ID` repository secret-д хадгална. Sync нь `Drone`, `UAV`, `Magnetic_Survey`, `MagArrow`, `Flight log/record` нэртэй салбаруудыг олж, `DJIFlightRecord`, `Timestamp.MRK`, `SRVY*-ACQU*`, KML/KMZ зэрэг coordinate эх үүсвэрийг бүртгэнэ. Project root дахь 2025 UAV magnetic survey болон 2026 tracker бүртгэлийг огноо/mission баталгаагүйгээр хооронд нь холихгүй; tracker-ийн огноо эсвэл бүтэн mission нэр таарсан үед л trajectory importer-т дамжуулна. Coordinate source-д altitude/relative-height багана байвал trajectory asset-д min/max/mean өндөр хадгалагдаж, map popup болон нислэгийн бүртгэлд харагдана.
 
@@ -36,8 +36,8 @@ Tracker file ID болон scan тохиргоо нь `drive-sync-sources.json`-
 - `dist/data/context/project-flight-coverage.json` — зурвасын өргөн баталгаажсан trajectory-г 50 м өргөн зурвасаар тооцож, лицензийн polygon-д тайрсан sensor/өдрийн coverage summary. Medusa-гийн footprint/swath баталгаажаагүй тул улаан track харагдах боловч coverage-д оруулахгүй.
 - `dist/data/context/project-campaign-tracks.geojson` — tracker бүртгэлд хамаарахгүй, бие даасан acquisition campaign-ийн GNSS зам. Tracker-ийн mission, огноо, sensor-ийг энэ dataset-руу хуулахыг `validate_data.py` хориглоно. Campaign-ийн зурвасын өргөн баталгаажаагүй тул `coverageStatus: not_calculated` буюу хамрах талбайг тооцохгүй.
 - `dist/data/magarrow/mission-plans.geojson` — L01–L11 DJI mission plan. Actual flown track биш.
-- `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, шаардлагатай үед raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
-- `dist/data/l3/planned-lines.geojson` — 2026-10-21, 2026-10-24, 2026-10-25 өдрийн Drive KMZ/WPMZ дотор хадгалсан 32 L3 survey/tie-line маршрут. Эдгээрийг веб дээр нил ягаан тасархай **planned** шугамаар харуулна; actual flown trajectory гэж тооцохгүй. `drive-sync-sources.json`-д тохируулсан хавтсыг өдөр тутмын sync дахин уншина.
+- `dist/data/magarrow/actual-tracks.geojson` — verified 10 Hz CSV, coordinate-bearing CSV/TXT болон raw `.magdata`-гийн embedded NMEA-аас үүссэн Нэргүй өндөрийн actual trajectory. Өдөр тутмын Drive sync шинэ acquisition-ийг автоматаар нэмнэ.
+- `dist/data/magarrow/archive-planned-lines.geojson` — 2026-10-21, 2026-10-24, 2026-10-25 өдрийн Drive KMZ/WPMZ дотор хадгалсан 32 MagArrow survey/tie-line маршрут. Эдгээрийг вебийн MagArrow хэсэгт цэнхэр/цэнхэр-ногоон тасархай **planned** шугамаар харуулна; actual flown trajectory гэж тооцохгүй. `drive-sync-sources.json`-д тохируулсан хавтсыг өдөр тутмын sync дахин уншина.
 - `dist/data/l3/metadata.json` — L3 survey family N1–N9 болон `sant laz` metadata. Actual trajectory баталгаажаагүй.
 
 Map дээр баталгаажсан trajectory нь sensor-аар тогтмол өнгөтэй: **MagArrow цэнхэр** (`#2563eb`), **Medusa улаан** (`#e11d48`), **L2 ногоон** (`#16a34a`), **L3 нил ягаан** (`#9333ea`), **P1 улбар шар** (`#f59e0b`). Sensor нь баталгаажаагүй campaign саарал тасархай шугамаар харагдана. Өнгө нь track байгаа мэт таамаглахгүй; coordinate geometry баталгаажсан үед л шугам зурагдана.
@@ -185,7 +185,7 @@ Uchastik:
   --utm-zone-49n --dataset-type uchastik
 ```
 
-Actual MagArrow tracks are accepted only from locally verified 10 Hz CSV headers:
+Actual MagArrow tracks may be built from verified 10 Hz CSV, coordinate-bearing CSV/TXT, or embedded NMEA in `.magdata`. The generic table parser rejects files without latitude/longitude headers and static GCP/sample tables:
 
 ```powershell
 & $python .\tools\export_magarrow_tracks.py <csv-folder> .\dist\data\magarrow\actual-tracks.geojson

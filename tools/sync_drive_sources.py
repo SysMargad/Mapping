@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coordinate_sources as cs  # noqa: E402
 import export_magdata_trajectories as magarrow  # noqa: E402
-import export_l3_planned_lines as l3_plans  # noqa: E402
+import export_magarrow_planned_lines as magarrow_plans  # noqa: E402
 
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -221,17 +221,16 @@ def list_named_children(service, parent_id: str, name: str) -> list[dict]:
     return execute_with_retry(request).get("files", [])
 
 
-def sync_l3_planned_lines(service, settings: dict, repo: Path, workspace: Path) -> dict | None:
-    """Download and publish the explicitly configured L3 planned-line archive."""
+def discover_magarrow_archive_sources(service, settings: dict) -> dict:
+    """Find MagArrow plans and actual coordinate sources in one Drive archive."""
     root_folder_id = clean(settings.get("folderId"))
     if not root_folder_id:
-        return None
+        return {"plans": [], "tracks": []}
     max_depth = int(settings.get("scanDepth", 2))
-    source_dir = workspace / "l3-planned-lines"
-    source_dir.mkdir(parents=True, exist_ok=True)
     queue = [(root_folder_id, 0, "")]
     visited: set[str] = set()
-    downloaded = 0
+    plans: list[dict] = []
+    tracks: list[dict] = []
     while queue:
         current, depth, relative = queue.pop(0)
         if current in visited:
@@ -244,18 +243,37 @@ def sync_l3_planned_lines(service, settings: dict, repo: Path, workspace: Path) 
                 if depth < max_depth:
                     queue.append((item["id"], depth + 1, str(Path(relative) / safe_filename(name))))
                 continue
-            if Path(name).suffix.lower() != ".kmz":
-                continue
-            destination = source_dir / relative / safe_filename(name)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            download_file(service, item, destination)
-            downloaded += 1
+            suffix = Path(name).suffix.lower()
+            candidate = {**item, "relativePath": str(Path(relative) / name)}
+            if suffix == ".kmz":
+                plans.append(candidate)
+            elif suffix == ".magdata" and magarrow_acquisition_key(name):
+                tracks.append(candidate)
+            elif suffix in {".csv", ".txt"}:
+                sample = probe_header_text(service, item)
+                if sample and cs.header_has_coordinates(sample):
+                    tracks.append(candidate)
+    return {"plans": plans, "tracks": tracks}
+
+
+def sync_magarrow_archive_plans(
+    service, plan_sources: list[dict], repo: Path, workspace: Path
+) -> dict:
+    """Download and publish the configured MagArrow planned-line archive."""
+    source_dir = workspace / "magarrow-planned-lines"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    for item in plan_sources:
+        destination = source_dir / Path(item.get("relativePath", safe_filename(item.get("name", "plan.kmz"))))
+        destination = destination.with_name(safe_filename(destination.name))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        download_file(service, item, destination)
+    downloaded = len(plan_sources)
     if not downloaded:
-        raise RuntimeError("configured L3 planned-line folder contains no readable KMZ files")
-    output = repo / "dist" / "data" / "l3" / "planned-lines.geojson"
-    payload = l3_plans.build(source_dir)
+        raise RuntimeError("configured MagArrow archive contains no readable KMZ files")
+    output = repo / "dist" / "data" / "magarrow" / "archive-planned-lines.geojson"
+    payload = magarrow_plans.build(source_dir)
     if not payload.get("features"):
-        raise RuntimeError("L3 KMZ files contained no valid planned LineString geometry")
+        raise RuntimeError("MagArrow KMZ files contained no valid planned LineString geometry")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     dates = sorted({feature["properties"].get("date") for feature in payload["features"] if feature["properties"].get("date")})
@@ -336,8 +354,15 @@ def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
 
 
 def magarrow_acquisition_key(value: str) -> str | None:
-    match = magarrow.ACQUISITION.search(value or "")
-    return match.group(0).upper().replace(" ", "") if match else None
+    text = clean(value)
+    if not text:
+        return None
+    return magarrow.acquisition_name(text)
+
+
+def magarrow_session_key(date_value: str | None, acquisition: str | None) -> tuple[str, str] | None:
+    acquisition_key = magarrow_acquisition_key(acquisition or "")
+    return (clean(date_value), acquisition_key) if acquisition_key else None
 
 
 def magarrow_source_fingerprint(item: dict) -> str:
@@ -848,37 +873,51 @@ def update_nergui_registry(registry_path: Path, acquisition_count: int, date_cou
 
 def sync_nergui_magarrow(
     service,
-    root_folder_id: str,
+    root_folder_id: str | None,
     repo: Path,
     workspace: Path,
     max_depth: int,
     max_size: int,
+    additional_sources: list[dict] | None = None,
 ) -> dict:
-    sources = find_nergui_magarrow_sources(service, root_folder_id, max_depth)
-    by_acquisition: dict[str, dict] = {}
+    sources = find_nergui_magarrow_sources(service, root_folder_id, max_depth) if root_folder_id else []
+    sources.extend(additional_sources or [])
+    sources = list({item["id"]: item for item in sources}.values())
+    by_session: dict[tuple[str, str], dict] = {}
     for item in sources:
         acquisition = magarrow_acquisition_key(item.get("name", ""))
         if not acquisition:
             continue
-        current = by_acquisition.get(acquisition)
-        candidate_priority = 0 if item.get("name", "").lower().endswith(".csv") else 1
+        source_day = source_date_from_path(item.get("relativePath", "")) or ""
+        session = (source_day, acquisition)
+        current = by_session.get(session)
+        suffix = Path(item.get("name", "")).suffix.lower()
+        candidate_priority = {".csv": 0, ".txt": 1, ".magdata": 2}.get(suffix, 9)
         current_priority = (
-            0 if current and current.get("name", "").lower().endswith(".csv") else 1
+            {".csv": 0, ".txt": 1, ".magdata": 2}.get(
+                Path(current.get("name", "")).suffix.lower(), 9
+            ) if current else 9
         )
         if current is None or candidate_priority < current_priority or (
             candidate_priority == current_priority
             and item.get("modifiedTime", "") > current.get("modifiedTime", "")
         ):
-            by_acquisition[acquisition] = item
+            by_session[session] = item
 
     tracks_path = repo / "dist" / "data" / "magarrow" / "actual-tracks.geojson"
     coverage_path = repo / "dist" / "data" / "magarrow" / "coverage-stats.json"
     registry_path = repo / "dist" / "data" / "datasets.json"
     current_payload = json.loads(tracks_path.read_text(encoding="utf-8"))
-    features_by_acquisition = {
-        magarrow_acquisition_key(feature.get("properties", {}).get("acquisition", "")): feature
+    features_by_session = {
+        magarrow_session_key(
+            feature.get("properties", {}).get("date"),
+            feature.get("properties", {}).get("acquisition", ""),
+        ): feature
         for feature in current_payload.get("features", [])
-        if magarrow_acquisition_key(feature.get("properties", {}).get("acquisition", ""))
+        if magarrow_session_key(
+            feature.get("properties", {}).get("date"),
+            feature.get("properties", {}).get("acquisition", ""),
+        )
     }
     source_dir = workspace / "nergui-magarrow-sources"
     parsed_dir = workspace / "nergui-magarrow-parsed"
@@ -888,9 +927,10 @@ def sync_nergui_magarrow(
     raw_parsed_dir.mkdir(parents=True, exist_ok=True)
     summary = {
         "discoveredSourceCount": len(sources),
-        "chosenAcquisitionCount": len(by_acquisition),
-        "csvSourceCount": sum(1 for item in by_acquisition.values() if item.get("name", "").lower().endswith(".csv")),
-        "magdataSourceCount": sum(1 for item in by_acquisition.values() if item.get("name", "").lower().endswith(".magdata")),
+        "chosenAcquisitionCount": len(by_session),
+        "csvSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".csv")),
+        "textSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".txt")),
+        "magdataSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".magdata")),
         "retainedCount": 0,
         "downloadedCount": 0,
         "importedCount": 0,
@@ -898,8 +938,9 @@ def sync_nergui_magarrow(
         "skippedOversizeCount": 0,
         "failedCount": 0,
     }
-    for acquisition, item in sorted(by_acquisition.items()):
-        existing = features_by_acquisition.get(acquisition)
+    for session, item in sorted(by_session.items()):
+        source_day, acquisition = session
+        existing = features_by_session.get(session)
         properties = existing.get("properties", {}) if existing else {}
         fingerprint = magarrow_source_fingerprint(item)
         same_source = properties.get("sourceFingerprint") == fingerprint
@@ -920,13 +961,28 @@ def sync_nergui_magarrow(
             download_file(service, item, local_path)
             summary["downloadedCount"] += 1
             if source_name.lower().endswith(".csv"):
-                feature = magarrow.parse_10hz_csv(
+                try:
+                    feature = magarrow.parse_10hz_csv(
+                        local_path,
+                        source_name=source_name,
+                        source_fingerprint=fingerprint,
+                    )
+                except ValueError:
+                    feature = magarrow.parse_coordinate_table(
+                        local_path,
+                        source_name=source_name,
+                        fallback_date=source_day or None,
+                        source_fingerprint=fingerprint,
+                    )
+            elif source_name.lower().endswith(".txt"):
+                feature = magarrow.parse_coordinate_table(
                     local_path,
                     source_name=source_name,
+                    fallback_date=source_day or None,
                     source_fingerprint=fingerprint,
                 )
             else:
-                source_date_value = source_date_from_path(item.get("relativePath", ""))
+                source_date_value = source_day or source_date_from_path(item.get("relativePath", ""))
                 if not source_date_value:
                     raise ValueError("raw MagArrow source has no verified date")
                 dated_path = source_dir / f"{source_date_value}__{safe_filename(source_name)}"
@@ -941,7 +997,12 @@ def sync_nergui_magarrow(
                     "sourceFile": source_name,
                     "sourceFingerprint": fingerprint,
                 })
-            features_by_acquisition[acquisition] = feature
+            actual_session = magarrow_session_key(
+                feature.get("properties", {}).get("date"), acquisition
+            )
+            if actual_session != session and source_day:
+                raise ValueError("source path date does not match trajectory date")
+            features_by_session[actual_session or session] = feature
             summary["updatedCount" if existing else "importedCount"] += 1
         except Exception as error:
             summary["failedCount"] += 1
@@ -957,7 +1018,7 @@ def sync_nergui_magarrow(
             f"(failed={summary['failedCount']}, oversize={summary['skippedOversizeCount']})"
         )
 
-    for feature in features_by_acquisition.values():
+    for feature in features_by_session.values():
         feature.get("properties", {}).pop("sourceUrl", None)
         magarrow.write_feature(feature, parsed_dir)
     # The published base layers use plural filenames. Keep these paths aligned
@@ -967,16 +1028,16 @@ def sync_nergui_magarrow(
     magarrow.build(parsed_dir, licence_path, uchastik_path, tracks_path, coverage_path)
     dates = sorted({
         feature.get("properties", {}).get("date")
-        for feature in features_by_acquisition.values()
+        for feature in features_by_session.values()
         if feature.get("properties", {}).get("date")
     })
     summary.update({
-        "publishedAcquisitionCount": len(features_by_acquisition),
+        "publishedAcquisitionCount": len(features_by_session),
         "publishedDateCount": len(dates),
         "dateFrom": dates[0] if dates else None,
         "dateTo": dates[-1] if dates else None,
     })
-    update_nergui_registry(registry_path, len(features_by_acquisition), len(dates))
+    update_nergui_registry(registry_path, len(features_by_session), len(dates))
     return summary
 
 
@@ -1000,16 +1061,22 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     sources_dir.mkdir(parents=True)
     reports_dir.mkdir(parents=True)
     service = build_drive_service()
-    l3_planned_lines_summary = None
-    if config.get("l3PlannedLines"):
+    magarrow_archive_summary = None
+    magarrow_archive_tracks: list[dict] = []
+    if config.get("magArrowLineArchive"):
         try:
-            l3_planned_lines_summary = sync_l3_planned_lines(
-                service, config["l3PlannedLines"], repo, workspace
+            archive_sources = discover_magarrow_archive_sources(
+                service, config["magArrowLineArchive"]
             )
-            print("Nergui Undur L3 planned-line sync:")
-            print(json.dumps(l3_planned_lines_summary, ensure_ascii=False, indent=2))
+            magarrow_archive_tracks = archive_sources["tracks"]
+            magarrow_archive_summary = sync_magarrow_archive_plans(
+                service, archive_sources["plans"], repo, workspace
+            )
+            magarrow_archive_summary["actualTrackSourceCount"] = len(magarrow_archive_tracks)
+            print("Nergui Undur MagArrow archive sync:")
+            print(json.dumps(magarrow_archive_summary, ensure_ascii=False, indent=2))
         except Exception as error:
-            print(f"::warning::Nergui Undur L3 planned-line sync skipped ({type(error).__name__})")
+            print(f"::warning::Nergui Undur MagArrow archive sync skipped ({type(error).__name__})")
     raw_root_folder_id = os.environ.get("NERGUI_UNDUR_RAW_ROOT_FOLDER_ID", "").strip()
     raw_sensor_summary = None
     if raw_root_folder_id:
@@ -1046,14 +1113,15 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     max_depth = int(config.get("folderScanDepth", 2))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
     nergui_magarrow_summary = None
-    if raw_root_folder_id:
+    if raw_root_folder_id or magarrow_archive_tracks:
         nergui_magarrow_summary = sync_nergui_magarrow(
             service,
-            raw_root_folder_id,
+            raw_root_folder_id or None,
             repo,
             workspace,
             int(config.get("nerguiMagArrowScanDepth", 8)),
             max_size,
+            magarrow_archive_tracks,
         )
         print("Nergui Undur MagArrow sync:")
         print(json.dumps(nergui_magarrow_summary, ensure_ascii=False, indent=2))
@@ -1321,7 +1389,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "projects": project_results,
         "nerguiUndurRawSensorCounts": raw_sensor_summary,
         "nerguiUndurMagArrow": nergui_magarrow_summary,
-        "nerguiUndurL3PlannedLines": l3_planned_lines_summary,
+        "nerguiUndurMagArrowArchive": magarrow_archive_summary,
         "projectRootDroneSources": project_root_summaries,
         "secretsConfigured": {
             "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
@@ -1350,7 +1418,7 @@ def step_summary(summary: dict) -> str:
     lines += ["", "### Nergui Undur MagArrow", ""]
     if nergui:
         for key in (
-            "discoveredSourceCount", "chosenAcquisitionCount", "csvSourceCount",
+            "discoveredSourceCount", "chosenAcquisitionCount", "csvSourceCount", "textSourceCount",
             "magdataSourceCount", "retainedCount", "downloadedCount", "importedCount",
             "updatedCount", "skippedOversizeCount", "failedCount",
             "publishedAcquisitionCount", "publishedDateCount", "dateFrom", "dateTo",
@@ -1358,11 +1426,11 @@ def step_summary(summary: dict) -> str:
             lines.append(f"- {key}: `{nergui.get(key)}`")
     else:
         lines.append("- not run (secret missing or discovery failed)")
-    l3_plans_summary = summary.get("nerguiUndurL3PlannedLines")
-    lines += ["", "### Nergui Undur L3 planned lines", ""]
-    if l3_plans_summary:
-        for key in ("downloadedFileCount", "publishedLineCount", "dateFrom", "dateTo"):
-            lines.append(f"- {key}: `{l3_plans_summary.get(key)}`")
+    archive_summary = summary.get("nerguiUndurMagArrowArchive")
+    lines += ["", "### Nergui Undur MagArrow archive", ""]
+    if archive_summary:
+        for key in ("downloadedFileCount", "publishedLineCount", "actualTrackSourceCount", "dateFrom", "dateTo"):
+            lines.append(f"- {key}: `{archive_summary.get(key)}`")
     else:
         lines.append("- not updated; the previously published asset was preserved")
     lines += ["", "### Project-root discovery", ""]

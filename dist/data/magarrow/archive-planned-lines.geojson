@@ -1,6 +1,6 @@
 {
   "type": "FeatureCollection",
-  "name": "Nergui Undur L3 planned survey lines",
+  "name": "Nergui Undur MagArrow planned survey lines",
   "project": "Nergui Undur",
   "dataType": "mission_plan_line",
   "featureCount": 32,
@@ -8,11 +8,11 @@
   "features": [
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-2-12-01",
+      "id": "magarrow-plan-2026-10-21-2-12-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -43,11 +43,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-1-01",
+      "id": "magarrow-plan-2026-10-21-sant2-1-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -102,11 +102,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-11-01",
+      "id": "magarrow-plan-2026-10-21-sant2-11-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -177,11 +177,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-12-01",
+      "id": "magarrow-plan-2026-10-21-sant2-12-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -228,11 +228,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-13-01",
+      "id": "magarrow-plan-2026-10-21-sant2-13-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -287,11 +287,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-14-01",
+      "id": "magarrow-plan-2026-10-21-sant2-14-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -338,11 +338,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-15-01",
+      "id": "magarrow-plan-2026-10-21-sant2-15-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -389,11 +389,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-2-01",
+      "id": "magarrow-plan-2026-10-21-sant2-2-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -448,11 +448,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-sant2-3-01",
+      "id": "magarrow-plan-2026-10-21-sant2-3-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -507,11 +507,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-1-01",
+      "id": "magarrow-plan-2026-10-21-tieline-1-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -542,11 +542,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-10-01",
+      "id": "magarrow-plan-2026-10-21-tieline-10-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -577,11 +577,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-11-01",
+      "id": "magarrow-plan-2026-10-21-tieline-11-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -612,11 +612,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-12-01",
+      "id": "magarrow-plan-2026-10-21-tieline-12-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -647,11 +647,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-13-01",
+      "id": "magarrow-plan-2026-10-21-tieline-13-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -682,11 +682,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-21-tieline-9-01",
+      "id": "magarrow-plan-2026-10-21-tieline-9-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -717,11 +717,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-sant2-10-01",
+      "id": "magarrow-plan-2026-10-24-sant2-10-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -784,11 +784,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-sant2-6-01",
+      "id": "magarrow-plan-2026-10-24-sant2-6-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -859,11 +859,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-sant2-7-01",
+      "id": "magarrow-plan-2026-10-24-sant2-7-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -926,11 +926,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-sant2-8-01",
+      "id": "magarrow-plan-2026-10-24-sant2-8-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1001,11 +1001,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-sant2-9-01",
+      "id": "magarrow-plan-2026-10-24-sant2-9-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1052,11 +1052,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-14-01",
+      "id": "magarrow-plan-2026-10-24-tieline-14-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1087,11 +1087,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-3-01",
+      "id": "magarrow-plan-2026-10-24-tieline-3-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1122,11 +1122,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-4-01",
+      "id": "magarrow-plan-2026-10-24-tieline-4-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1157,11 +1157,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-5-01",
+      "id": "magarrow-plan-2026-10-24-tieline-5-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1192,11 +1192,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-6-01",
+      "id": "magarrow-plan-2026-10-24-tieline-6-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1227,11 +1227,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-7-01",
+      "id": "magarrow-plan-2026-10-24-tieline-7-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1262,11 +1262,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-24-tieline-8-01",
+      "id": "magarrow-plan-2026-10-24-tieline-8-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1297,11 +1297,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-25-sant2-4-01",
+      "id": "magarrow-plan-2026-10-25-sant2-4-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1356,11 +1356,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-25-sant2-5-01",
+      "id": "magarrow-plan-2026-10-25-sant2-5-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1423,11 +1423,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-25-sant2-6-01",
+      "id": "magarrow-plan-2026-10-25-sant2-6-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1498,11 +1498,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-25-tieline-1-01",
+      "id": "magarrow-plan-2026-10-25-tieline-1-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",
@@ -1533,11 +1533,11 @@
     },
     {
       "type": "Feature",
-      "id": "l3-plan-2026-10-25-tieline-2-01",
+      "id": "magarrow-plan-2026-10-25-tieline-2-01",
       "properties": {
         "project": "Nergui Undur",
         "area": "Sant Uul",
-        "sensor": "L3",
+        "sensor": "MagArrow",
         "dataType": "mission_plan_line",
         "plannedActual": "planned",
         "status": "confirmed_source",

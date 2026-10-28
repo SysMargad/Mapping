@@ -84,9 +84,10 @@
     selectedMissions: new Set(),
     missionData: null,
     missionPromise: null,
-    l3PlanData: null,
-    l3PlanLayers: new Map(),
-    selectedL3PlanDate: "all",
+    archivePlanData: null,
+    archivePlanLayers: new Map(),
+    selectedArchivePlanDate: "all",
+    showArchivePlans: false,
     actualTrackData: null,
     actualCoverage: null,
     actualTrackLayers: new Map(),
@@ -132,7 +133,7 @@
     { id: "MagArrow", label: "MagArrow", status: "TRACKS AVAILABLE", tone: "available" },
     { id: "Medusa", label: "Medusa MS-700", status: "NO VERIFIED TRACK", tone: "unavailable" },
     { id: "L2", label: "L2", status: "NO VERIFIED TRACK", tone: "pending" },
-    { id: "L3", label: "L3", status: "32 PLANNED LINES", tone: "available" },
+    { id: "L3", label: "L3", status: "METADATA ONLY", tone: "pending" },
     { id: "P1", label: "P1", status: "NO VERIFIED TRACK", tone: "pending" },
   ];
 
@@ -225,10 +226,10 @@
     ]);
   };
 
-  const l3PlanPopup = (feature) => {
+  const archivePlanPopup = (feature) => {
     const props = feature.properties || {};
     return popup([
-      ["Sensor", "L3"],
+      ["Sensor", "MagArrow"],
       ["Шугам", props.plan],
       ["Төрөл", props.lineType === "tie_line" ? "Tie line" : props.lineType === "survey_line" ? "Survey line" : "Planned line"],
       ["Огноо", props.date],
@@ -1412,88 +1413,53 @@
       if (state.selectedMissions.has(id)) layer.addTo(state.map);
     }
     syncActualTrackVisibility();
+    syncArchivePlanVisibility();
   };
 
   const hideSensorLayers = () => {
     for (const layer of state.missionLayers.values()) state.map.removeLayer(layer);
-    for (const layer of state.l3PlanLayers.values()) state.map.removeLayer(layer);
+    for (const layer of state.archivePlanLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.actualTrackLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.projectFlightLayers.values()) state.map.removeLayer(layer);
     for (const layer of state.campaignLayers.values()) state.map.removeLayer(layer);
   };
 
-  const l3PlanFeatures = (date = state.selectedL3PlanDate) => (state.l3PlanData?.features || [])
+  const archivePlanFeatures = (date = state.selectedArchivePlanDate) => (state.archivePlanData?.features || [])
     .filter((feature) => date === "all" || feature.properties?.date === date);
 
-  const syncL3PlanVisibility = () => {
-    for (const layer of state.l3PlanLayers.values()) state.map.removeLayer(layer);
-    if (state.activeSensor !== "L3") return;
-    for (const feature of l3PlanFeatures()) state.l3PlanLayers.get(String(feature.id))?.addTo(state.map);
+  const syncArchivePlanVisibility = () => {
+    for (const layer of state.archivePlanLayers.values()) state.map.removeLayer(layer);
+    if (state.activeSensor !== "MagArrow" || !state.showArchivePlans) return;
+    for (const feature of archivePlanFeatures()) state.archivePlanLayers.get(String(feature.id))?.addTo(state.map);
   };
 
-  const loadL3Plans = async () => {
-    const config = dataset("l3-planned-lines");
+  const loadArchivePlans = async () => {
+    const config = dataset("magarrow-archive-planned-lines");
     if (!config?.webAsset) return null;
     const data = await fetchJson(config.webAsset);
-    assertProjectTruth(data, "L3 planned lines");
-    state.l3PlanData = data;
+    assertProjectTruth(data, "MagArrow archived planned lines");
+    state.archivePlanData = data;
     for (const feature of data.features || []) {
-      const color = feature.properties?.lineType === "tie_line" ? "#e879f9" : "#9333ea";
+      const color = feature.properties?.lineType === "tie_line" ? "#22d3ee" : "#3b82f6";
       const layer = L.geoJSON(feature, {
         pane: "missionPane",
         style: { color, weight: 3, opacity: 0.96, dashArray: "10 6" },
-        onEachFeature(item, rendered) { rendered.bindPopup(l3PlanPopup(item)); },
+        onEachFeature(item, rendered) { rendered.bindPopup(archivePlanPopup(item)); },
       });
-      state.l3PlanLayers.set(String(feature.id), layer);
+      state.archivePlanLayers.set(String(feature.id), layer);
     }
     return data;
   };
 
-  const selectL3PlanDate = (date, shouldFit = true) => {
-    state.selectedL3PlanDate = date;
-    syncL3PlanVisibility();
-    renderL3Panel();
+  const selectArchivePlanDate = (date, shouldFit = true) => {
+    state.selectedArchivePlanDate = date;
+    state.showArchivePlans = true;
+    syncArchivePlanVisibility();
+    renderMagArrowPanel();
     if (shouldFit) {
-      const layers = l3PlanFeatures().map((feature) => state.l3PlanLayers.get(String(feature.id))).filter(Boolean);
+      const layers = archivePlanFeatures().map((feature) => state.archivePlanLayers.get(String(feature.id))).filter(Boolean);
       if (layers.length) fitSingleLayer(L.featureGroup(layers));
     }
-  };
-
-  const renderL3Panel = () => {
-    const features = state.l3PlanData?.features || [];
-    const dates = [...new Set(features.map((feature) => feature.properties?.date).filter(Boolean))].sort();
-    const visible = l3PlanFeatures();
-    const tieCount = features.filter((feature) => feature.properties?.lineType === "tie_line").length;
-    const surveyCount = features.filter((feature) => feature.properties?.lineType === "survey_line").length;
-    const options = [{ value: "all", label: "Бүх огноо", count: features.length }]
-      .concat(dates.map((date) => ({
-        value: date,
-        label: date,
-        count: features.filter((feature) => feature.properties?.date === date).length,
-      })));
-    ui.sensorPanel.innerHTML = `
-      <div class="sensor-heading"><div><strong>Zenmuse L3</strong><span>Nergui Undur · Sant Uul</span></div><span class="status-badge available">PLANNED LINES</span></div>
-      <div class="tracker-kpis">
-        <div><span>Нийт шугам</span><strong>${formatCount(features.length)}</strong></div>
-        <div><span>Survey line</span><strong>${formatCount(surveyCount)}</strong></div>
-        <div><span>Tie line</span><strong>${formatCount(tieCount)}</strong></div>
-      </div>
-      <p class="truth-note">Эдгээр нь KMZ/WPMZ дотор хадгалсан төлөвлөсөн маршрут. Бодитоор ниссэн trajectory биш.</p>
-      <h3>Маршрутын огноо</h3>
-      <div id="l3-plan-date-list" class="flight-date-list"></div>
-      <p class="panel-note">${formatCount(visible.length)} шугам харагдаж байна. Нил ягаан тасархай шугам — survey; ягаан тасархай шугам — tie line.</p>`;
-    const list = ui.sensorPanel.querySelector("#l3-plan-date-list");
-    for (const option of options) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `flight-date-button${state.selectedL3PlanDate === option.value ? " is-active" : ""}`;
-      button.style.setProperty("--date-color", "#9333ea");
-      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} шугам</small>`;
-      button.addEventListener("click", () => selectL3PlanDate(option.value));
-      list?.appendChild(button);
-    }
-    state.activeDatasetId = "l3-planned-lines";
-    renderDatasetInfo();
   };
 
   const loadMissionPlans = async () => {
@@ -1521,7 +1487,9 @@
   };
 
   const updateMagArrowSummary = () => {
-    if (state.selectedMissions.size && state.missionData) {
+    if (state.showArchivePlans && state.archivePlanData) {
+      state.activeDatasetId = "magarrow-archive-planned-lines";
+    } else if (state.selectedMissions.size && state.missionData) {
       state.activeDatasetId = "magarrow-mission-plans";
     } else if (state.selectedFlightDate) {
       state.activeDatasetId = "magarrow-actual-tracks";
@@ -1554,6 +1522,8 @@
 
   const renderMagArrowPanel = () => {
     const missions = dataset("magarrow-mission-plans")?.missions || [];
+    const archiveFeatures = state.archivePlanData?.features || [];
+    const archiveDates = [...new Set(archiveFeatures.map((feature) => feature.properties?.date).filter(Boolean))].sort();
     const scopedFeatures = actualFeaturesInArea();
     const dates = [...new Set(scopedFeatures.map((feature) => feature.properties?.date).filter(Boolean))].sort();
     const acquisitionCount = scopedFeatures.length;
@@ -1563,6 +1533,12 @@
         <summary>DJI Mission Plans <span>${missions.length}</span></summary>
         <p class="panel-note">L01–L11 нь planned WPMZ/KMZ route. Actual flown track биш.</p>
         <div id="mission-list" class="mission-list"></div>
+      </details>
+      <details class="nested-panel">
+        <summary>Drive planned lines <span>${archiveFeatures.length}</span></summary>
+        <p class="panel-note">10-р сарын 21, 24, 25-ны MagArrow төлөвлөсөн шугамууд. Actual track биш.</p>
+        <div id="archive-plan-toggle" class="mission-list"></div>
+        <div id="archive-plan-date-list" class="flight-date-list"></div>
       </details>
       <h3>Ниссэн trajectory</h3>
       <div id="flight-date-list" class="flight-date-list"></div>
@@ -1609,6 +1585,34 @@
         input.disabled = false;
       }
     }));
+    const archiveToggle = ui.sensorPanel.querySelector("#archive-plan-toggle");
+    archiveToggle?.appendChild(makeToggle(
+      "32 planned lines",
+      "MagArrow · KMZ/WPMZ",
+      state.showArchivePlans,
+      (checked) => {
+        state.showArchivePlans = checked;
+        syncArchivePlanVisibility();
+        state.activeDatasetId = checked ? "magarrow-archive-planned-lines" : "magarrow-actual-tracks";
+        renderDatasetInfo();
+      },
+    ));
+    const archiveDateList = ui.sensorPanel.querySelector("#archive-plan-date-list");
+    const archiveOptions = [{ value: "all", label: "Бүх огноо", count: archiveFeatures.length }]
+      .concat(archiveDates.map((date) => ({
+        value: date,
+        label: date,
+        count: archiveFeatures.filter((feature) => feature.properties?.date === date).length,
+      })));
+    for (const option of archiveOptions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `flight-date-button${state.selectedArchivePlanDate === option.value ? " is-active" : ""}`;
+      button.style.setProperty("--date-color", "#3b82f6");
+      button.innerHTML = `<span>${escapeHtml(option.label)}</span><small>${formatCount(option.count)} шугам</small>`;
+      button.addEventListener("click", () => selectArchivePlanDate(option.value));
+      archiveDateList?.appendChild(button);
+    }
     for (const button of ui.sensorPanel.querySelectorAll("[data-dataset]")) {
       button.addEventListener("click", () => {
         state.activeDatasetId = button.dataset.dataset;
@@ -1878,9 +1882,6 @@
     if (sensor === "MagArrow") {
       restoreMagArrowLayers();
       renderMagArrowPanel();
-    } else if (sensor === "L3" && state.l3PlanData) {
-      syncL3PlanVisibility();
-      renderL3Panel();
     } else {
       renderStatusPanel(sensor);
     }
@@ -1932,9 +1933,7 @@
     if (state.activeSensor === "MagArrow") {
       for (const [id, layer] of state.missionLayers) if (state.selectedMissions.has(id)) layers.push(layer);
       for (const layer of selectedActualLayers()) if (state.map.hasLayer(layer)) layers.push(layer);
-    }
-    if (state.activeSensor === "L3") {
-      for (const layer of state.l3PlanLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
+      for (const layer of state.archivePlanLayers.values()) if (state.map.hasLayer(layer)) layers.push(layer);
     }
     return layers;
   };
@@ -1987,9 +1986,10 @@
     state.selectedMissions.clear();
     state.missionData = null;
     state.missionPromise = null;
-    state.l3PlanData = null;
-    state.l3PlanLayers.clear();
-    state.selectedL3PlanDate = "all";
+    state.archivePlanData = null;
+    state.archivePlanLayers.clear();
+    state.selectedArchivePlanDate = "all";
+    state.showArchivePlans = false;
     state.actualTrackData = null;
     state.actualCoverage = null;
     state.actualTrackLayers.clear();
@@ -2028,7 +2028,7 @@
         { label: "Project campaign tracks", task: loadProjectCampaigns, errorType: "warning" },
         { label: "Hetsuu hutul DWG", task: loadHetsuuCad, errorType: "warning" },
         { label: "MagArrow actual tracks", task: loadActualTracks, errorType: "warning" },
-        { label: "L3 planned lines", task: loadL3Plans, errorType: "warning" },
+        { label: "MagArrow planned lines", task: loadArchivePlans, errorType: "warning" },
         { label: "Licence context", task: loadLicenceContext, errorType: "warning" },
       ];
       const results = await Promise.allSettled(jobs.map(({ task }) => task()));

@@ -1,4 +1,4 @@
-"""Convert DJI KMZ/WPMZ mission-plan lines into a browser GeoJSON layer.
+"""Convert MagArrow DJI KMZ/WPMZ mission-plan lines into browser GeoJSON.
 
 The source geometry is a planned route stored in ``wpmz/template.kml``.  It is
 deliberately published as ``planned`` and must never be presented as an actual
@@ -75,7 +75,7 @@ def feature_id(day: str | None, path: Path, segment: int) -> str:
     stem = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
     if not stem:
         stem = hashlib.sha256(path.name.encode("utf-8")).hexdigest()[:10]
-    return f"l3-plan-{day or 'undated'}-{stem}-{segment:02d}"
+    return f"magarrow-plan-{day or 'undated'}-{stem}-{segment:02d}"
 
 
 def build(source: Path) -> dict:
@@ -93,7 +93,7 @@ def build(source: Path) -> dict:
                 "properties": {
                     "project": "Nergui Undur",
                     "area": "Sant Uul",
-                    "sensor": "L3",
+                    "sensor": "MagArrow",
                     "dataType": "mission_plan_line",
                     "plannedActual": "planned",
                     "status": "confirmed_source",
@@ -117,7 +117,7 @@ def build(source: Path) -> dict:
     ))
     return {
         "type": "FeatureCollection",
-        "name": "Nergui Undur L3 planned survey lines",
+        "name": "Nergui Undur MagArrow planned survey lines",
         "project": "Nergui Undur",
         "dataType": "mission_plan_line",
         "featureCount": len(features),

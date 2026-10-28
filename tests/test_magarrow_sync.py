@@ -38,7 +38,7 @@ class TenHertzCsv(unittest.TestCase):
             source_fingerprint="abc123",
         )
         props = feature["properties"]
-        self.assertEqual(feature["id"], "magarrow-actual-srvy0-acqu122")
+        self.assertEqual(feature["id"], "magarrow-actual-2026-09-21-srvy0-acqu122")
         self.assertEqual(props["acquisition"], "SRVY0-ACQU122")
         self.assertEqual(props["date"], "2026-09-21")
         self.assertEqual(props["pointCount"], 3)
@@ -53,12 +53,26 @@ class TenHertzCsv(unittest.TestCase):
         )
         feature = magarrow.parse_10hz_csv(path, source_name="SRVY0-ACQU86 (1)-10Hz.csv")
         self.assertEqual(feature["properties"]["acquisition"], "SRVY0-ACQU86(1)")
-        self.assertEqual(feature["id"], "magarrow-actual-srvy0-acqu86-1")
+        self.assertEqual(feature["id"], "magarrow-actual-2026-09-18-srvy0-acqu86-1")
 
     def test_unrelated_csv_is_rejected(self):
         path = self.write_csv("Date,Time,Mag\n2026/09/21,01:00:00,58321\n")
         with self.assertRaisesRegex(ValueError, "latitude, longitude"):
             magarrow.parse_10hz_csv(path, source_name="SRVY0-ACQU122-10Hz.csv")
+
+    def test_generic_coordinate_csv_is_accepted(self):
+        path = self.write_csv(
+            "UTC,Lat,Lon\n"
+            "2026-10-25 01:00:00,49.1200,113.5400\n"
+            "2026-10-25 01:00:01,49.1201,113.5401\n"
+            "2026-10-25 01:00:02,49.1202,113.5402\n"
+        )
+        feature = magarrow.parse_coordinate_table(
+            path, source_name="SRVY0-ACQU46.csv", fallback_date="2026-10-25"
+        )
+        self.assertEqual(feature["properties"]["date"], "2026-10-25")
+        self.assertEqual(feature["properties"]["acquisition"], "SRVY0-ACQU46")
+        self.assertEqual(feature["id"], "magarrow-actual-2026-10-25-srvy0-acqu46")
 
 
 class DriveSourceNames(unittest.TestCase):
@@ -73,6 +87,12 @@ class DriveSourceNames(unittest.TestCase):
 
     def test_dotted_drive_folder_date_is_understood(self):
         self.assertEqual(sync.source_date_from_path("Raw data/2026.09.21/SRVY0-ACQU122.magdata"), "2026-09-21")
+
+    def test_reused_acquisition_names_remain_distinct_by_date(self):
+        first = sync.magarrow_session_key("2026-08-30", "SRVY0-ACQU27")
+        second = sync.magarrow_session_key("2026-10-21", "SRVY0-ACQU27")
+        self.assertNotEqual(first, second)
+        self.assertEqual(len({first, second}), 2)
 
     def test_transient_drive_error_is_retried(self):
         class Response:

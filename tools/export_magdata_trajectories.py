@@ -16,6 +16,8 @@ import math
 import re
 from pathlib import Path
 
+import coordinate_sources as cs
+
 
 GGA = re.compile(rb"\$[A-Z]{2}GGA,[^\x00\r\n$]{10,180}\*[0-9A-Fa-f]{2}")
 RMC = re.compile(rb"\$[A-Z]{2}RMC,[^\x00\r\n$]{10,180}\*[0-9A-Fa-f]{2}")
@@ -34,8 +36,9 @@ def acquisition_name(value: str) -> str:
     return match.group(0).upper().replace(" ", "") if match else Path(value).stem
 
 
-def feature_id(acquisition: str) -> str:
-    return f"magarrow-actual-{re.sub(r'[^a-z0-9]+', '-', acquisition.lower()).strip('-')}"
+def feature_id(acquisition: str, date_value: str | None = None) -> str:
+    identity = f"{date_value}-{acquisition}" if date_value else acquisition
+    return f"magarrow-actual-{re.sub(r'[^a-z0-9]+', '-', identity.lower()).strip('-')}"
 
 
 def nmea_coordinate(value: str, hemisphere: str, longitude: bool) -> float:
@@ -138,7 +141,7 @@ def parse_file(path: Path, output_dir: Path) -> Path:
     points, started, ended = extract_points(path, fallback_date)
     payload = {
         "type": "Feature",
-        "id": feature_id(acquisition),
+        "id": feature_id(acquisition, fallback_date),
         "properties": {
             "project": "Nergui Undur",
             "area": "Nergui Undur",
@@ -253,9 +256,71 @@ def parse_10hz_csv(
         properties["sourceFingerprint"] = source_fingerprint
     return {
         "type": "Feature",
-        "id": feature_id(acquisition),
+        "id": feature_id(acquisition, started.date().isoformat()),
         "properties": properties,
         "geometry": {"type": "LineString", "coordinates": coordinates},
+    }
+
+
+def parse_coordinate_table(
+    path: Path,
+    *,
+    source_name: str | None = None,
+    fallback_date: str | None = None,
+    source_fingerprint: str | None = None,
+) -> dict:
+    """Convert a coordinate-bearing CSV/TXT table into a MagArrow track.
+
+    The table must declare latitude/longitude columns in its own header. Static
+    point tables are rejected by ``coordinate_sources`` and spatial jumps are
+    never joined into an invented straight line.
+    """
+    original_name = source_name or path.name
+    parsed = cs.parse_table(path.read_text(encoding="utf-8-sig", errors="replace"))
+    points = cs.deduplicate_consecutive([
+        point for point in parsed.points
+        if 112.0 <= point.lon <= 115.0 and 47.0 <= point.lat <= 51.0
+    ])
+    if len(points) < 2:
+        raise ValueError(f"{original_name}: fewer than two Nergui Undur coordinate samples")
+    segments = cs.split_segments(points, time_gap_seconds=60.0, distance_gap_m=500.0, min_points=2)
+    if len(segments) != 1:
+        raise ValueError(f"{original_name}: coordinate table contains {len(segments)} disconnected tracks")
+    points = segments[0]
+    timestamps = [point.timestamp for point in points if point.timestamp is not None]
+    day = timestamps[0].date().isoformat() if timestamps else fallback_date
+    if not day:
+        raise ValueError(f"{original_name}: coordinate table has no verified date")
+    acquisition = acquisition_name(original_name)
+    display = cs.simplify(points, 2.5)
+    properties = {
+        "project": "Nergui Undur",
+        "area": "Nergui Undur",
+        "sensor": "MagArrow",
+        "acquisition": acquisition,
+        "dataType": "actual_flight_track",
+        "plannedActual": "actual",
+        "status": "confirmed_source",
+        "date": day,
+        "startTime": timestamps[0].isoformat() + "Z" if timestamps else None,
+        "endTime": timestamps[-1].isoformat() + "Z" if timestamps else None,
+        "sourceFile": original_name,
+        "sourceCrs": "EPSG:4326",
+        "displayCrs": "EPSG:4326",
+        "crsVerified": True,
+        "pointCount": len(points),
+        "nmeaSource": f"coordinate table ({parsed.timestamp_provenance})",
+    }
+    if source_fingerprint:
+        properties["sourceFingerprint"] = source_fingerprint
+    return {
+        "type": "Feature",
+        "id": feature_id(acquisition, day),
+        "properties": properties,
+        "geometry": {
+            "type": "LineString",
+            "coordinates": [[round(point.lon, 8), round(point.lat, 8)] for point in display],
+        },
     }
 
 
