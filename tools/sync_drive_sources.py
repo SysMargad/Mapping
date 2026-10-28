@@ -39,7 +39,7 @@ FOLDER_ID_RE = re.compile(r"/folders/([A-Za-z0-9_-]+)")
 DATE_COMPACT_RE = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
 DATE_DASH_RE = re.compile(r"(?<!\d)(20\d{2})[-./](\d{2})[-./](\d{2})(?!\d)")
 MAGARROW_SOURCE_RE = re.compile(
-    r"SRVY\d+-ACQU\d+(?:\s*\(\d+\))?(?:-10Hz)?\.(?:csv|magdata)$",
+    r"SRVY\d+-ACQU\d+(?:\s*\(\d+\))?(?:-10Hz)?\.(?:csv|txt|magdata)$",
     re.IGNORECASE,
 )
 DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
@@ -247,12 +247,11 @@ def discover_magarrow_archive_sources(service, settings: dict) -> dict:
             candidate = {**item, "relativePath": str(Path(relative) / name)}
             if suffix == ".kmz":
                 plans.append(candidate)
-            elif suffix == ".magdata" and magarrow_acquisition_key(name):
+            elif MAGARROW_SOURCE_RE.search(name):
+                # File content is validated after download. Restricting this
+                # archive fast path to explicit acquisition names avoids
+                # probing unrelated Proton/DJI text logs and extra Drive calls.
                 tracks.append(candidate)
-            elif suffix in {".csv", ".txt"}:
-                sample = probe_header_text(service, item)
-                if sample and cs.header_has_coordinates(sample):
-                    tracks.append(candidate)
     return {"plans": plans, "tracks": tracks}
 
 
@@ -371,7 +370,7 @@ def magarrow_source_fingerprint(item: dict) -> str:
 
 
 def find_nergui_magarrow_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
-    """Find verified MagArrow 10 Hz CSVs, with raw .magdata as a fallback."""
+    """Find named MagArrow CSV/TXT sources, with raw .magdata as fallback."""
     found = []
     queue = [(root_folder_id, "", 0)]
     visited = set()
@@ -1012,9 +1011,16 @@ def sync_nergui_magarrow(
                 f"(acquisition={acquisition}, error={type(error).__name__}, status={status})"
             )
 
-    if summary["failedCount"] or summary["skippedOversizeCount"]:
-        raise RuntimeError(
-            "Nergui Undur MagArrow sync could not import every selected acquisition "
+    summary["partialImport"] = bool(
+        summary["failedCount"] or summary["skippedOversizeCount"]
+    )
+    if summary["partialImport"]:
+        # Preserve and publish every successfully parsed acquisition. A
+        # transient Drive/download/parser failure must not discard an hour of
+        # valid work; missing sources have no fingerprint in the published
+        # layer and are retried automatically by the next scheduled run.
+        print(
+            "::warning::Nergui Undur MagArrow sync completed partially "
             f"(failed={summary['failedCount']}, oversize={summary['skippedOversizeCount']})"
         )
 
@@ -1421,7 +1427,7 @@ def step_summary(summary: dict) -> str:
             "discoveredSourceCount", "chosenAcquisitionCount", "csvSourceCount", "textSourceCount",
             "magdataSourceCount", "retainedCount", "downloadedCount", "importedCount",
             "updatedCount", "skippedOversizeCount", "failedCount",
-            "publishedAcquisitionCount", "publishedDateCount", "dateFrom", "dateTo",
+            "partialImport", "publishedAcquisitionCount", "publishedDateCount", "dateFrom", "dateTo",
         ):
             lines.append(f"- {key}: `{nergui.get(key)}`")
     else:

@@ -80,6 +80,7 @@ class DriveSourceNames(unittest.TestCase):
         for name in (
             "SRVY0-ACQU70-10Hz.csv",
             "SRVY0-ACQU86 (1)-10Hz.csv",
+            "SRVY0-ACQU122.txt",
             "SRVY0-ACQU122.magdata",
         ):
             with self.subTest(name=name):
@@ -244,7 +245,12 @@ class IncrementalSync(unittest.TestCase):
                 "md5Checksum": "checksum", "modifiedTime": "2026-09-22T09:24:52Z",
                 "relativePath": "Raw data/2026.09.21/SRVY0-ACQU151.magdata",
             }
-            sync.find_nergui_magarrow_sources = lambda *_args: [item]
+            failed_item = {
+                "id": "failed-drive-id", "name": "SRVY0-ACQU152.magdata", "size": "10",
+                "md5Checksum": "failed", "modifiedTime": "2026-09-22T09:24:53Z",
+                "relativePath": "Raw data/2026.09.21/SRVY0-ACQU152.magdata",
+            }
+            sync.find_nergui_magarrow_sources = lambda *_args: [item, failed_item]
             sync.download_file = lambda _service, _item, target: target.write_bytes(b"raw")
 
             feature = {
@@ -259,6 +265,8 @@ class IncrementalSync(unittest.TestCase):
             }
 
             def parse_file(_source, output_dir):
+                if "ACQU152" in _source.name:
+                    raise ValueError("deliberately unreadable fixture")
                 self.assertEqual(output_dir.name, "nergui-magarrow-raw-staging")
                 target = output_dir / "intermediate.json"
                 target.write_text(json.dumps(feature), encoding="utf-8")
@@ -272,6 +280,8 @@ class IncrementalSync(unittest.TestCase):
             magarrow.build = build
             summary = sync.sync_nergui_magarrow(None, "root", repo, workspace, 8, 1024)
             self.assertEqual(summary["publishedAcquisitionCount"], 1)
+            self.assertEqual(summary["failedCount"], 1)
+            self.assertTrue(summary["partialImport"])
 
 
 if __name__ == "__main__":
