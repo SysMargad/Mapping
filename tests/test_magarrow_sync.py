@@ -575,3 +575,52 @@ class LicenceAttribution(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GapAwareCoverage(unittest.TestCase):
+    """Long straight survey lines count; lines across a recording gap do not."""
+
+    def line(self, seconds):
+        # ~3 km due north at 1 Hz-ish spacing, straight enough to simplify to one segment.
+        return [[113.5, 49.1 + index * 0.0003] for index in range(len(seconds))]
+
+    def test_straight_line_simplifies_without_inventing_a_gap(self):
+        seconds = [float(index) for index in range(100)]
+        coordinates, gaps = magarrow.simplify_with_gaps(self.line(seconds), seconds)
+        self.assertEqual(len(coordinates), 2)
+        self.assertEqual(gaps, [])
+
+    def test_recording_pause_is_kept_as_a_gap_segment(self):
+        seconds = [float(index) for index in range(50)] + [float(index + 300) for index in range(50)]
+        coordinates, gaps = magarrow.simplify_with_gaps(self.line(seconds), seconds)
+        self.assertEqual(len(coordinates), 4)
+        self.assertEqual(gaps, [1])
+
+    def feature(self, **properties):
+        return {"type": "Feature", "properties": {"date": "2026-10-27", **properties},
+                "geometry": {"type": "LineString", "coordinates": [[113.5, 49.1], [113.5, 49.13]]}}
+
+    def test_long_segment_counts_when_recording_was_continuous(self):
+        continuous = self.feature(startTime="2026-10-27T01:00:00Z", endTime="2026-10-27T01:16:39Z", pointCount=1000)
+        self.assertGreater(len(magarrow.coverage_cells(continuous)), 0)
+        self.assertGreater(len(magarrow.coverage_cells(self.feature(gapSegments=[]))), 0)
+
+    def test_long_segment_is_skipped_across_a_gap(self):
+        self.assertEqual(magarrow.coverage_cells(self.feature(gapSegments=[0])), set())
+        interrupted = self.feature(startTime="2026-10-27T01:00:00Z", endTime="2026-10-27T03:00:00Z", pointCount=1000)
+        self.assertEqual(magarrow.coverage_cells(interrupted), set())
+        self.assertEqual(magarrow.coverage_cells(self.feature()), set())
+
+    def test_csv_parser_records_gap_segments(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "gap.csv"
+            path.write_text(
+                "Date,Time,Latitude,Longitude\n"
+                "2026/10/27,01:00:00.000,49.1000,113.5000\n"
+                "2026/10/27,01:00:01.000,49.1001,113.5000\n"
+                "2026/10/27,01:05:00.000,49.1200,113.5000\n"
+                "2026/10/27,01:05:01.000,49.1201,113.5000\n",
+                encoding="utf-8",
+            )
+            feature = magarrow.parse_10hz_csv(path, source_name="SRVY0-ACQU9-10Hz.csv")
+        self.assertEqual(feature["properties"]["gapSegments"], [1])

@@ -513,8 +513,11 @@ def remember_magarrow_source(feature: dict, fingerprint: str | None, id_hash: st
     props["sourceIdHashes"] = _unique([*feature_id_hashes(feature), id_hash])
 
 
+# gapSegments indexes the geometry, so it always travels with it (or is
+# dropped, which makes coverage fall back to the legacy continuity check).
 MAGARROW_SOURCE_KEYS = (
     "startTime", "endTime", "sourceFile", "sourceFingerprint", "sourceIdHash", "pointCount", "nmeaSource",
+    "gapSegments",
 )
 
 
@@ -702,7 +705,10 @@ def project_magarrow_feature(feature: dict, project: dict) -> dict:
     return {
         "type": "Feature",
         "id": f"magarrow-{project['key']}-{slug}",
-        "properties": {key: value for key, value in published.items() if value not in (None, [])},
+        "properties": {
+            **{key: value for key, value in published.items() if value not in (None, [])},
+            **({"gapSegments": props["gapSegments"]} if props.get("gapSegments") is not None else {}),
+        },
         "geometry": feature["geometry"],
     }
 

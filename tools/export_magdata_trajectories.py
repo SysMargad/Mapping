@@ -43,6 +43,74 @@ def valid_position(lon: float, lat: float) -> bool:
     return MIN_LON <= lon <= MAX_LON and MIN_LAT <= lat <= MAX_LAT
 
 
+# A pause in 1 Hz navigation longer than this is a recording gap: the line
+# across it was never flown and must not count as covered ground.
+GAP_SECONDS = 10.0
+# Only for trajectories published before gaps were recorded: a simplified
+# segment longer than this is trusted only when the recording was continuous.
+LEGACY_MAX_SEGMENT_M = 2_000.0
+
+
+def _iso_seconds(value) -> float | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def simplify_with_gaps(
+    points: list[list[float]], seconds: list[float | None], tolerance_m: float = 2.5,
+) -> tuple[list[list[float]], list[int]]:
+    """Simplify each continuous run separately and report the gap segments.
+
+    Returns the display coordinates and the indices ``i`` of the segments
+    ``(i, i + 1)`` that bridge a recording gap. Both ends of every gap are
+    kept, so a straight survey line can be simplified to one long segment
+    without being mistaken for a gap.
+    """
+    if not points:
+        return [], []
+    runs: list[list[list[float]]] = [[points[0]]]
+    for index in range(1, len(points)):
+        before, after = seconds[index - 1], seconds[index]
+        if before is not None and after is not None and after - before > GAP_SECONDS:
+            runs.append([])
+        runs[-1].append(points[index])
+    coordinates: list[list[float]] = []
+    gaps: list[int] = []
+    for run in runs:
+        if coordinates:
+            gaps.append(len(coordinates) - 1)
+        coordinates.extend(rdp(run, tolerance_m) if len(run) > 1 else run)
+    return coordinates, gaps
+
+
+def recorded_continuously(properties: dict) -> bool:
+    """Legacy check: 1 Hz samples account for the whole flight duration."""
+    started = _iso_seconds(properties.get("startTime"))
+    ended = _iso_seconds(properties.get("endTime"))
+    try:
+        count = int(properties.get("pointCount") or 0)
+    except (TypeError, ValueError):
+        return False
+    if started is None or ended is None or count < 2:
+        return False
+    return ended - started <= (count - 1) * 1.25 + 5
+
+
+def skip_coverage_segment(feature: dict, index: int, length_m: float) -> bool:
+    """Whether segment ``index`` of a trajectory bridges a recording gap."""
+    properties = feature.get("properties", {})
+    gaps = properties.get("gapSegments")
+    if gaps is not None:
+        return index in set(gaps)
+    if length_m <= LEGACY_MAX_SEGMENT_M:
+        return False
+    return not recorded_continuously(properties)
+
+
 def acquisition_name(value: str) -> str:
     match = ACQUISITION.search(value)
     return match.group(0).upper().replace(" ", "") if match else Path(value).stem
@@ -82,6 +150,11 @@ def magdata_date(path: Path) -> str | None:
 
 
 def extract_points(path: Path, fallback_date: str) -> tuple[list[list[float]], str, str]:
+    points, timestamps = extract_samples(path, fallback_date)
+    return points, timestamps[0], timestamps[-1]
+
+
+def extract_samples(path: Path, fallback_date: str) -> tuple[list[list[float]], list[str]]:
     data = path.read_bytes()
     dates = rmc_dates(data)
     points = []
@@ -107,7 +180,7 @@ def extract_points(path: Path, fallback_date: str) -> tuple[list[list[float]], s
             timestamps.append(canonical)
     if len(points) < 2:
         raise ValueError(f"{path.name}: fewer than two valid NMEA GGA points")
-    return points, timestamps[0], timestamps[-1]
+    return points, timestamps
 
 
 def project(point: list[float]) -> tuple[float, float]:
@@ -156,7 +229,9 @@ def parse_file(path: Path, output_dir: Path) -> Path:
         raise ValueError(f"{path.name}: expected YYYY-MM-DD__ source prefix")
     fallback_date, source_name = match.groups()
     acquisition = acquisition_name(source_name)
-    points, started, ended = extract_points(path, fallback_date)
+    points, timestamps = extract_samples(path, fallback_date)
+    started, ended = timestamps[0], timestamps[-1]
+    coordinates, gaps = simplify_with_gaps(points, [_iso_seconds(value) for value in timestamps])
     payload = {
         "type": "Feature",
         "id": feature_id(acquisition, fallback_date),
@@ -177,8 +252,9 @@ def parse_file(path: Path, output_dir: Path) -> Path:
             "crsVerified": True,
             "pointCount": len(points),
             "nmeaSource": "embedded GGA/RMC",
+            "gapSegments": gaps,
         },
-        "geometry": {"type": "LineString", "coordinates": rdp(points)},
+        "geometry": {"type": "LineString", "coordinates": coordinates},
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / f"{path.stem}.json"
@@ -247,7 +323,9 @@ def parse_10hz_csv(
             last_second = second
     if len(sampled) < 2:
         raise ValueError(f"{original_name}: fewer than two 1 Hz coordinate samples")
-    coordinates = rdp([point for _, point in sampled])
+    coordinates, gaps = simplify_with_gaps(
+        [point for _, point in sampled], [when.timestamp() for when, _ in sampled],
+    )
     started = sampled[0][0]
     ended = sampled[-1][0]
     properties = {
@@ -267,6 +345,7 @@ def parse_10hz_csv(
         "crsVerified": True,
         "pointCount": len(sampled),
         "nmeaSource": "verified 10 Hz CSV",
+        "gapSegments": gaps,
     }
     if source_url:
         properties["sourceUrl"] = source_url
@@ -310,7 +389,14 @@ def parse_coordinate_table(
     if not day:
         raise ValueError(f"{original_name}: coordinate table has no verified date")
     acquisition = acquisition_name(original_name)
-    display = cs.simplify(points, 2.5)
+    timed = all(point.timestamp is not None for point in points)
+    if timed:
+        coordinates, gaps = simplify_with_gaps(
+            [[point.lon, point.lat] for point in points],
+            [point.timestamp.timestamp() for point in points],
+        )
+    else:
+        coordinates, gaps = [[point.lon, point.lat] for point in cs.simplify(points, 2.5)], None
     properties = {
         "project": "Nergui Undur",
         "area": "Nergui Undur",
@@ -329,6 +415,8 @@ def parse_coordinate_table(
         "pointCount": len(points),
         "nmeaSource": f"coordinate table ({parsed.timestamp_provenance})",
     }
+    if gaps is not None:
+        properties["gapSegments"] = gaps
     if source_fingerprint:
         properties["sourceFingerprint"] = source_fingerprint
     return {
@@ -337,7 +425,7 @@ def parse_coordinate_table(
         "properties": properties,
         "geometry": {
             "type": "LineString",
-            "coordinates": [[round(point.lon, 8), round(point.lat, 8)] for point in display],
+            "coordinates": [[round(lon, 8), round(lat, 8)] for lon, lat in coordinates],
         },
     }
 
@@ -376,9 +464,9 @@ def coverage_cells(feature: dict) -> set[tuple[int, int]]:
     points = [project(point) for point in feature["geometry"]["coordinates"]]
     cells: set[tuple[int, int]] = set()
     radius_cells = math.ceil(SWATH_RADIUS / CELL_SIZE)
-    for start, end in zip(points, points[1:]):
+    for index, (start, end) in enumerate(zip(points, points[1:])):
         distance = math.dist(start, end)
-        if distance > 2_000:
+        if skip_coverage_segment(feature, index, distance):
             continue
         steps = max(1, math.ceil(distance / (CELL_SIZE / 2)))
         for step in range(steps + 1):
@@ -430,7 +518,10 @@ def build(parsed_dir: Path, licence_path: Path, uchastik_path: Path, tracks_outp
         (str(feature["id"]), feature) for feature in uchastiks
     ]
     stats = {
-        "method": "Actual GNSS trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to selected polygon.",
+        "method": (
+            "Actual GNSS trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to selected polygon. "
+            "Segments across a recording gap longer than 10 s are not counted."
+        ),
         "cellSizeM": CELL_SIZE,
         "swathWidthM": SWATH_RADIUS * 2,
         "dates": sorted(daily_cells),

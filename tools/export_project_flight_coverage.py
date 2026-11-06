@@ -5,7 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from export_magdata_trajectories import skip_coverage_segment  # noqa: E402
 
 
 CELL_SIZE = 10.0
@@ -64,9 +68,9 @@ def coverage_cells(feature, lon0, lat0):
     points = [local_project(point, lon0, lat0) for point in feature["geometry"]["coordinates"]]
     cells = set()
     radius_cells = math.ceil(SWATH_RADIUS / CELL_SIZE)
-    for start, end in zip(points, points[1:]):
+    for index, (start, end) in enumerate(zip(points, points[1:])):
         distance = math.dist(start, end)
-        if distance > 2_000:
+        if skip_coverage_segment(feature, index, distance):
             continue
         steps = max(1, math.ceil(distance / (CELL_SIZE / 2)))
         for step in range(steps + 1):
@@ -91,7 +95,10 @@ def build(tracks_path: Path, licences_path: Path, output: Path) -> None:
         "project": "Multi-project operations",
         "scope": "project_operations",
         "dataType": "actual_coverage_summary",
-        "method": "Verified flight trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to each project licence polygon.",
+        "method": (
+            "Verified flight trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to each project "
+            "licence polygon. Segments across a recording gap longer than 10 s are not counted."
+        ),
         "cellSizeM": CELL_SIZE,
         "swathWidthM": SWATH_RADIUS * 2,
         "projects": {},
