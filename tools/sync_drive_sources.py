@@ -1150,7 +1150,6 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         mismatched = []
         stage = {
             "missionFoldersScanned": 0,
-            "missionFoldersSkippedForRootIndex": 0,
             "missionFoldersUnreadable": 0,
             "candidateFilesFound": 0,
             "sourcesChosen": 0,
@@ -1164,9 +1163,12 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             reasons[code] = reasons.get(code, 0) + 1
 
         for row in rows:
-            if project["key"] in project_root_sources:
-                stage["missionFoldersSkippedForRootIndex"] += 1
-                continue
+            # Project-root discovery is an additional inventory, not a
+            # replacement for the exact mission folder linked by the tracker.
+            # Root trees commonly contain only processed/campaign branches,
+            # while the newest DJI/P1/L2/L3 coordinate source remains behind
+            # the row hyperlink. Skipping these links made a successful daily
+            # workflow silently publish stale trajectories.
             candidates = seen_folders.get(row["folderId"])
             if candidates is None:
                 try:
@@ -1399,6 +1401,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "projectRootDroneSources": project_root_summaries,
         "secretsConfigured": {
             "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
+            "BUDUUNKHAD_ROOT_FOLDER_ID": bool(os.environ.get("BUDUUNKHAD_ROOT_FOLDER_ID", "").strip()),
             "HETSUU_HUTUL_ROOT_FOLDER_ID": bool(os.environ.get("HETSUU_HUTUL_ROOT_FOLDER_ID", "").strip()),
             "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": bool(raw_root_folder_id),
             "DJI_API_KEY": bool(os.environ.get("DJI_API_KEY", "").strip()),

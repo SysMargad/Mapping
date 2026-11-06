@@ -69,6 +69,7 @@ jobs:
           NERGUI_UNDUR_RAW_ROOT_FOLDER_ID: ${{ secrets.NERGUI_UNDUR_RAW_ROOT_FOLDER_ID }}
           HETSUU_HUTUL_ROOT_FOLDER_ID: ${{ secrets.HETSUU_HUTUL_ROOT_FOLDER_ID }}
           ARTSAT_ROOT_FOLDER_ID: ${{ secrets.ARTSAT_ROOT_FOLDER_ID }}
+          BUDUUNKHAD_ROOT_FOLDER_ID: ${{ secrets.BUDUUNKHAD_ROOT_FOLDER_ID }}
           DJI_API_KEY: ${{ secrets.DJI_API_KEY }}
         run: |
           python tools/sync_drive_sources.py \

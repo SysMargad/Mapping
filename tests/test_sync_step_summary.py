@@ -12,6 +12,7 @@ import sync_drive_sources as sync  # noqa: E402
 
 SUMMARY = {
     "secretsConfigured": {
+        "BUDUUNKHAD_ROOT_FOLDER_ID": False,
         "HETSUU_HUTUL_ROOT_FOLDER_ID": False,
         "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": True,
     },
@@ -75,6 +76,7 @@ class StepSummary(unittest.TestCase):
 
     def test_missing_secret_is_called_out(self):
         self.assertIn("`HETSUU_HUTUL_ROOT_FOLDER_ID` | **no**", self.text)
+        self.assertIn("`BUDUUNKHAD_ROOT_FOLDER_ID` | **no**", self.text)
         self.assertIn("`NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` | yes", self.text)
 
     def test_discovery_counters_are_reported(self):
