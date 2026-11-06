@@ -146,24 +146,46 @@ class RawDataDiscovery(unittest.TestCase):
 
     def test_linked_mission_prefers_existing_metadata_csv(self):
         original_children = sync.list_children
+        original_named = sync.list_named_children
         original_resolve = sync.resolve_shortcut
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
+        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
-        sync.list_children = lambda *_: [{
+        sync.list_named_children = lambda *_: [{
             "id": "metadata-id", "name": "metadata.csv", "mimeType": "text/csv"
+        }]
+        sync.list_children = lambda *_: self.fail("image listing must not run when metadata.csv exists")
+        sync.resolve_shortcut = lambda _service, item: item
+        sources = sync.find_sources(None, "mission-folder-id", 2)
+        self.assertEqual([item["id"] for item in sources], ["metadata-id"])
+
+    def test_linked_mission_falls_back_when_metadata_csv_is_missing(self):
+        original_children = sync.list_children
+        original_named = sync.list_named_children
+        original_resolve = sync.resolve_shortcut
+        self.addCleanup(lambda: setattr(sync, "list_children", original_children))
+        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
+        self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
+        sync.list_named_children = lambda *_: []
+        sync.list_children = lambda *_: [{
+            "id": "mrk-id", "name": "DJI_202610081311_001_Timestamp.MRK",
+            "mimeType": "application/octet-stream",
         }, {
             "id": "image-id", "name": "DJI_20260823100001_0001.JPG", "mimeType": "image/jpeg",
             "imageMediaMetadata": {"location": {"latitude": 46.1, "longitude": 92.3}},
         }]
         sync.resolve_shortcut = lambda _service, item: item
         sources = sync.find_sources(None, "mission-folder-id", 2)
-        self.assertEqual([item["id"] for item in sources], ["metadata-id"])
+        self.assertEqual([item["id"] for item in sources], ["mrk-id"])
 
     def test_linked_mission_builds_csv_from_drive_image_gps_metadata(self):
         original_children = sync.list_children
+        original_named = sync.list_named_children
         original_resolve = sync.resolve_shortcut
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
+        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
+        sync.list_named_children = lambda *_: []
         sync.list_children = lambda _service, parent: [
             {
                 "id": "image-2", "name": "DJI_20260823100002_0002.JPG", "mimeType": "image/jpeg",
@@ -197,9 +219,12 @@ class RawDataDiscovery(unittest.TestCase):
 
     def test_image_metadata_without_two_gps_points_is_not_a_track(self):
         original_children = sync.list_children
+        original_named = sync.list_named_children
         original_resolve = sync.resolve_shortcut
         self.addCleanup(lambda: setattr(sync, "list_children", original_children))
+        self.addCleanup(lambda: setattr(sync, "list_named_children", original_named))
         self.addCleanup(lambda: setattr(sync, "resolve_shortcut", original_resolve))
+        sync.list_named_children = lambda *_: []
         sync.list_children = lambda *_: [{
             "id": "image-1", "name": "DJI_20260823100001_0001.JPG", "mimeType": "image/jpeg",
             "imageMediaMetadata": {"location": {"latitude": 46.1, "longitude": 92.3}},

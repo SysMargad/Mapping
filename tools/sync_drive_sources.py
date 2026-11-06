@@ -340,10 +340,22 @@ def resolve_shortcut(service, item: dict) -> dict:
 
 
 def find_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
-    # Enumerate a linked mission once. Most folders have no metadata.csv, so a
-    # separate exact-name query followed by an image listing doubles the Drive
-    # round trips. When metadata.csv is present it remains the preferred source;
-    # otherwise the same listing supplies image EXIF GPS for the fallback CSV.
+    # Recent linked missions commonly contain thousands of images alongside a
+    # generated metadata.csv. Query that exact lightweight sidecar first so a
+    # daily sync does not enumerate every photo merely to rediscover it.
+    metadata_sources = [
+        resolve_shortcut(service, item)
+        for item in list_named_children(service, root_folder_id, DJI_METADATA_FILE)
+    ]
+    metadata_sources = [
+        item for item in metadata_sources
+        if item.get("mimeType") != FOLDER_MIME
+    ]
+    if metadata_sources:
+        return metadata_sources
+
+    # Older/unprocessed folders may lack metadata.csv. Enumerate those once so
+    # MRK/KML sources or image EXIF GPS can still provide a verified fallback.
     found = []
     image_points = []
     queue = [(root_folder_id, 0)]
