@@ -252,6 +252,23 @@ def list_named_children(service, parent_id: str, name: str) -> list[dict]:
     return execute_with_retry(request).get("files", [])
 
 
+def list_coordinate_children(service, parent_id: str) -> list[dict]:
+    """Find lightweight coordinate sidecars without listing mission imagery."""
+    request = service.files().list(
+        q=(
+            f"'{parent_id}' in parents and trashed = false and ("
+            "name = 'metadata.csv' or name contains 'Timestamp.MRK' or "
+            "name contains 'DJIFlightRecord')"
+        ),
+        fields="files(id,name,mimeType,size,modifiedTime,md5Checksum,shortcutDetails,webViewLink)",
+        pageSize=100,
+        spaces="drive",
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True,
+    )
+    return execute_with_retry(request).get("files", [])
+
+
 def discover_magarrow_archive_sources(service, settings: dict) -> dict:
     """Find MagArrow plans and actual coordinate sources in one Drive archive."""
     root_folder_id = clean(settings.get("folderId"))
@@ -532,7 +549,13 @@ def find_drone_source_roots(service, root_folder_id: str, max_depth: int = 5) ->
     return found
 
 
-def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, scan_depth: int = 8) -> tuple[list[dict], dict]:
+def find_drone_sources(
+    service,
+    root_folder_id: str,
+    discovery_depth: int = 5,
+    scan_depth: int = 8,
+    mission_lookback_days: int = 21,
+) -> tuple[list[dict], dict]:
     """Return strong coordinate-source candidates without exposing private paths in the summary."""
     roots = find_drone_source_roots(service, root_folder_id, discovery_depth)
     found = []
@@ -541,6 +564,7 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
     inspected_files = 0
     probe_budget = [MAX_HEADER_PROBES]
     discovery_reasons: dict[str, int] = {}
+    mission_folders: list[dict] = []
 
     def consider(item: dict, path: str) -> None:
         nonlocal inspected_files
@@ -580,14 +604,43 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
                 if item.get("mimeType") == FOLDER_MIME:
                     if DJI_MISSION_FOLDER_RE.search(item.get("name", "")):
                         # Mission directories often hold thousands of images.
-                        # Tracker-linked discovery handles their direct files;
-                        # root discovery only needs sibling Metadata folders.
-                        scanned_folders += 1
+                        # Keep their identity now, then query only lightweight
+                        # coordinate sidecars for the latest rolling window.
+                        mission_folders.append({**item, "relativePath": path})
                         continue
                     if depth < scan_depth:
                         queue.append((item["id"], path, depth + 1))
                     continue
                 consider(item, path)
+
+    mission_dates = [
+        source_date_from_path(item.get("relativePath", ""))
+        for item in mission_folders
+    ]
+    mission_dates = [value for value in mission_dates if value]
+    mission_cutoff = None
+    if mission_dates and mission_lookback_days >= 0:
+        latest = datetime.strptime(max(mission_dates), "%Y-%m-%d").date()
+        mission_cutoff = (latest - timedelta(days=mission_lookback_days)).isoformat()
+    recent_missions = []
+    for mission in mission_folders:
+        mission_date = source_date_from_path(mission.get("relativePath", ""))
+        if mission_cutoff and mission_date and mission_date < mission_cutoff:
+            continue
+        recent_missions.append(mission)
+        direct = list_coordinate_children(service, mission["id"])
+        for raw_item in direct:
+            item = resolve_shortcut(service, raw_item)
+            consider(item, f"{mission['relativePath']}/{item.get('name', '')}")
+        for metadata_folder in list_named_children(service, mission["id"], "Metadata"):
+            if metadata_folder.get("mimeType") != FOLDER_MIME:
+                continue
+            for raw_item in list_coordinate_children(service, metadata_folder["id"]):
+                item = resolve_shortcut(service, raw_item)
+                consider(
+                    item,
+                    f"{mission['relativePath']}/Metadata/{item.get('name', '')}",
+                )
     dated = sorted(item["sourceDate"] for item in found if item.get("sourceDate"))
     suffix_counts = {}
     for item in found:
@@ -599,6 +652,8 @@ def find_drone_sources(service, root_folder_id: str, discovery_depth: int = 5, s
         "inspectedFileCount": inspected_files,
         "headerProbesUsed": MAX_HEADER_PROBES - probe_budget[0],
         "coordinateSourceCount": len(found),
+        "recentMissionFolderCount": len(recent_missions),
+        "missionFolderCutoff": mission_cutoff,
         "sourceCountByType": dict(sorted(suffix_counts.items())),
         "discoveryDecisions": dict(sorted(discovery_reasons.items())),
         "dateFrom": dated[0] if dated else None,
@@ -757,12 +812,23 @@ def choose_source(
     # is available, before applying the format preference.
     mission_key = comparable_name(mission)
     named_matches = [item for item in eligible if mission_key and mission_key in comparable_name(item.get("name", ""))]
-    if named_matches:
+    metadata_matches = [
+        item for item in eligible
+        if Path(item.get("name", "")).name.lower() == DJI_METADATA_FILE
+    ]
+    if metadata_matches:
+        # metadata.csv is generated inside one already-linked mission folder;
+        # its generic filename therefore does not need the mission token.
+        eligible = metadata_matches
+    elif named_matches:
         eligible = named_matches
 
     # Prefer a newly modified file within the best supported source type.
     eligible.sort(key=lambda item: item.get("modifiedTime", ""), reverse=True)
-    eligible.sort(key=lambda item: SOURCE_PRIORITY.get(Path(item.get("name", "")).suffix.lower(), 99))
+    eligible.sort(key=lambda item: (
+        0 if Path(item.get("name", "")).name.lower() == DJI_METADATA_FILE else 1,
+        SOURCE_PRIORITY.get(Path(item.get("name", "")).suffix.lower(), 99),
+    ))
     return eligible[0]
 
 
@@ -1140,6 +1206,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 root_folder_id,
                 int(config.get("projectRootDiscoveryDepth", 5)),
                 int(config.get("projectRootScanDepth", 8)),
+                int(config.get("rootMissionLookbackDays", 21)),
             )
             project_root_sources[project_key] = sources
             project_root_summaries[project_key] = discovery
@@ -1483,7 +1550,8 @@ def step_summary(summary: dict) -> str:
         for project_key, discovery in sorted(discoveries.items()):
             lines.append(f"#### {project_key}")
             for key in ("matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
-                        "headerProbesUsed", "coordinateSourceCount", "dateFrom", "dateTo"):
+                        "headerProbesUsed", "coordinateSourceCount", "recentMissionFolderCount",
+                        "missionFolderCutoff", "dateFrom", "dateTo"):
                 lines.append(f"- {key}: `{discovery.get(key)}`")
             for label in ("sourceCountByType", "discoveryDecisions"):
                 if discovery.get(label):

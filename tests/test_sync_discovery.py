@@ -108,6 +108,14 @@ class HeaderProbeDiscovery(unittest.TestCase):
 
 
 class RawDataDiscovery(unittest.TestCase):
+    def test_metadata_csv_is_preferred_over_timestamp_mrk(self):
+        items = [
+            {"id": "mrk", "name": "DJI_202610081311_001_Timestamp.MRK", "size": 100},
+            {"id": "csv", "name": "metadata.csv", "size": 200},
+        ]
+        chosen = sync.choose_source(items, "2026-10-08", "DJI_202610081311_001", 1000, set())
+        self.assertEqual(chosen["id"], "csv")
+
     def test_linked_folder_scan_uses_tracker_relative_lookback(self):
         rows = [
             {"trackerId": "p:1", "date": "2026-09-01"},

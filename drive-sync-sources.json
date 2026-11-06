@@ -30,6 +30,7 @@
   "nerguiMagArrowScanDepth": 8,
   "projectRootDiscoveryDepth": 5,
   "projectRootScanDepth": 8,
+  "rootMissionLookbackDays": 21,
   "maxSourceSizeBytes": 104857600,
   "magArrowLineArchive": {
     "folderId": "1s_-chplx5_9nkvh1Fs2Zj8AUiTKm3mOi",
