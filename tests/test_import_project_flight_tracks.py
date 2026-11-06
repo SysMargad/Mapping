@@ -217,3 +217,23 @@ class Idempotency(ImporterCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealDjiMrkFormat(unittest.TestCase):
+    """DJI writes antenna offsets as "541,N -456,E" and the position as "...,Lat"."""
+
+    ROWS = (
+        "1\t288469.046026\t[2435]\t   541,N\t  -456,E\t   258,V\t49.24304063,Lat\t113.48149235,Lon\t845.161,Ellh\t0.017199, 0.011916, 0.029180\t52,Q\n"
+        "2\t288471.096841\t[2435]\t   546,N\t  -454,E\t   250,V\t49.24314122,Lat\t113.48159396,Lon\t845.160,Ellh\t0.017235, 0.011942, 0.029226\t52,Q\n"
+    )
+
+    def test_position_comes_from_lat_lon_fields_not_offsets(self):
+        points = ipft.parse_mrk(self.ROWS)
+        self.assertEqual(points, [[113.48149235, 49.24304063], [113.48159396, 49.24314122]])
+
+    def test_ellipsoid_height_is_read_before_its_label(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "DJI_202609091544_010_Timestamp.MRK"
+            path.write_text(self.ROWS, encoding="utf-8")
+            stats = ipft.source_altitude_stats(path)
+        self.assertAlmostEqual(stats["sourceAltitudeMeanM"], 845.16, places=1)

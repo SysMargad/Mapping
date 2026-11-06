@@ -37,6 +37,7 @@
   "rootMissionLookbackDays": 21,
   "maxSourceSizeBytes": 104857600,
   "magArrowDriveSearch": true,
+  "djiSidecarDriveSearch": true,
   "magArrowLineArchive": {
     "folderId": "1s_-chplx5_9nkvh1Fs2Zj8AUiTKm3mOi",
     "scanDepth": 2

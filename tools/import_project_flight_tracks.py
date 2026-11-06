@@ -150,25 +150,46 @@ def parse_delimited_text(text: str) -> list[list[float]]:
     return [[point.lon, point.lat] for point in table.points]
 
 
+MRK_LAT_RE = re.compile(r"([+-]?\d{1,3}\.\d+)\s*,\s*Lat\b", re.IGNORECASE)
+MRK_LON_RE = re.compile(r"([+-]?\d{1,3}\.\d+)\s*,\s*Lon\b", re.IGNORECASE)
+MRK_ELLH_RE = re.compile(r"([+-]?\d+(?:\.\d+)?)\s*,\s*Ellh\b", re.IGNORECASE)
+
+
+def _plausible_position(lat: float | None, lon: float | None) -> bool:
+    # Mongolia with margin. DJI MRK rows also carry "541,N  -456,E" antenna
+    # offsets in millimetres; those must never be read as degrees.
+    return lat is not None and lon is not None and 41 <= lat <= 53 and 87 <= lon <= 121
+
+
 def parse_mrk(text: str) -> list[list[float]]:
+    """Read camera-event positions from a DJI ``*_Timestamp.MRK``.
+
+    A real DJI row is ``idx  gpsSeconds  [week]  541,N  -456,E  258,V
+    49.24304063,Lat  113.48149235,Lon  845.161,Ellh ...``: the N/E/V fields are
+    millimetre offsets, the position is in the ``Lat``/``Lon`` fields.
+    """
     points = []
     hemisphere = re.compile(r"([+-]?\d{1,3}(?:\.\d+)?)\s*[, ]?\s*([NSEW])\b", re.IGNORECASE)
     decimal = re.compile(r"[+-]?\d{1,3}\.\d+")
     for line in text.splitlines():
-        lat = lon = None
-        for raw, direction in hemisphere.findall(line):
-            value = float(raw)
-            if direction.upper() in {"S", "W"}:
-                value *= -1
-            if direction.upper() in {"N", "S"}:
-                lat = value
-            else:
-                lon = value
-        if lat is None or lon is None:
+        lat_match, lon_match = MRK_LAT_RE.search(line), MRK_LON_RE.search(line)
+        lat = float(lat_match.group(1)) if lat_match else None
+        lon = float(lon_match.group(1)) if lon_match else None
+        if not _plausible_position(lat, lon):
+            lat = lon = None
+            for raw, direction in hemisphere.findall(line):
+                value = float(raw)
+                if direction.upper() in {"S", "W"}:
+                    value *= -1
+                if direction.upper() in {"N", "S"}:
+                    lat = value
+                else:
+                    lon = value
+        if not _plausible_position(lat, lon):
             values = [float(value) for value in decimal.findall(line)]
-            lat = next((value for value in values if 40 <= value <= 55), None)
-            lon = next((value for value in values if 90 <= value <= 110), None)
-        if lat is not None and lon is not None:
+            lat = next((value for value in values if 41 <= value <= 53), None)
+            lon = next((value for value in values if 87 <= value <= 121), None)
+        if _plausible_position(lat, lon):
             points.append([lon, lat])
     if len(points) < 2:
         raise ValueError("fewer than two MRK positions")
@@ -314,7 +335,8 @@ def source_altitude_stats(path: Path) -> dict:
             values = []
             pattern = re.compile(r"(?:ellh|alt(?:itude)?|height)\s*[:=,\t ]+([+-]?\d+(?:\.\d+)?)", re.IGNORECASE)
             for line in text.splitlines():
-                match = pattern.search(line)
+                # DJI writes the value before its label ("845.161,Ellh").
+                match = MRK_ELLH_RE.search(line) or pattern.search(line)
                 if match:
                     values.append(float(match.group(1)))
             return rounded_stats(values, "sourceAltitude", "MRK altitude", "MRK source altitude")

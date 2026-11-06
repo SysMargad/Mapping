@@ -119,7 +119,12 @@ def comparable_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
-def tracker_rows(path: Path, project_key: str) -> list[dict]:
+def tracker_rows(path: Path, project_key: str, include_unlinked: bool = False) -> list[dict]:
+    """Checklist mission rows; by default only those with a folder hyperlink.
+
+    Most crews stop filling the Link column after the first weeks, so the
+    Drive-wide sidecar search needs every mission row (``include_unlinked``).
+    """
     # Imported here so the discovery and matching helpers stay importable (and
     # testable) on a runner that has no Drive/Excel dependencies installed.
     from openpyxl import load_workbook
@@ -136,7 +141,7 @@ def tracker_rows(path: Path, project_key: str) -> list[dict]:
         link_cell = sheet.cell(row_number, 26)
         link = link_cell.hyperlink.target if link_cell.hyperlink else clean(link_cell.value)
         linked_folder = folder_id(link)
-        if not linked_folder:
+        if not linked_folder and not include_unlinked:
             continue
         rows.append({
             "trackerId": f"{project_key}:{row_number}",
@@ -790,6 +795,87 @@ def drive_search_magarrow_sources(service, path_depth: int = 4) -> tuple[list[di
         "incompleteSearch": incomplete,
     }
     return found, summary
+
+
+DJI_TIMESTAMP_MRK_RE = re.compile(r"^(?P<mission>.+?)[_ -]Timestamp\.MRK$", re.IGNORECASE)
+
+
+def dji_mission_key(value: str | None) -> str:
+    return comparable_name(clean(value))
+
+
+def drive_search_dji_sidecars(service) -> tuple[dict[str, list[dict]], dict]:
+    """Index every readable DJI ``<mission>_Timestamp.MRK`` by its mission name.
+
+    DJI names the camera-event log after the mission, so it is matched to a
+    tracker row by name alone, wherever the crew stored it: another shared
+    drive, a row without a folder link, or a mission older than any lookback.
+    """
+    index: dict[str, list[dict]] = {}
+    token = None
+    count = 0
+    incomplete = False
+    while True:
+        request = service.files().list(
+            q=f"name contains 'Timestamp' and trashed = false and mimeType != '{FOLDER_MIME}'",
+            fields="nextPageToken,incompleteSearch,files(id,name,mimeType,size,modifiedTime,md5Checksum,parents)",
+            pageSize=1000,
+            pageToken=token,
+            corpora="allDrives",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+        )
+        response = execute_with_retry(request)
+        incomplete = incomplete or bool(response.get("incompleteSearch"))
+        for item in response.get("files", []):
+            match = DJI_TIMESTAMP_MRK_RE.match(item.get("name", ""))
+            if not match:
+                continue
+            key = dji_mission_key(match.group("mission"))
+            if key:
+                index.setdefault(key, []).append({**item, "discoveredBy": "drive-search"})
+                count += 1
+        token = response.get("nextPageToken")
+        if not token:
+            break
+    return index, {"sourceCount": count, "missionCount": len(index), "incompleteSearch": incomplete}
+
+
+def choose_dji_sidecar(service, candidates: list[dict], folder_names: dict[str, str]) -> dict:
+    """Pick one MRK when a mission was copied to several folders.
+
+    Copies left in a folder marked for deletion are only used as a last resort.
+    """
+    def parent_name(item: dict) -> str:
+        parents = item.get("parents") or []
+        if not parents:
+            return ""
+        parent = parents[0]
+        if parent not in folder_names:
+            try:
+                folder_names[parent] = execute_with_retry(service.files().get(
+                    fileId=parent, fields="id,name", supportsAllDrives=True,
+                )).get("name", "")
+            except Exception:
+                folder_names[parent] = ""
+        return folder_names[parent]
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    def size(item: dict) -> int:
+        try:
+            return int(item.get("size") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    # Newest first, then (stable) prefer kept folders and the fuller log.
+    ordered = sorted(candidates, key=lambda item: (item.get("modifiedTime", ""), item.get("id", "")), reverse=True)
+    ordered.sort(key=lambda item: (
+        bool(re.search(r"delet|устга|trash", parent_name(item), re.IGNORECASE)),
+        -size(item),
+    ))
+    return ordered[0]
 
 
 def source_date_from_path(value: str) -> str | None:
@@ -1787,6 +1873,25 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         nergui_magarrow_summary["driveSearch"] = magarrow_search_summary
         print("MagArrow sync (all licences):")
         print(json.dumps(nergui_magarrow_summary, ensure_ascii=False, indent=2))
+    dji_sidecars: dict[str, list[dict]] = {}
+    dji_search_summary = None
+    if config.get("djiSidecarDriveSearch", True):
+        try:
+            dji_sidecars, dji_search_summary = drive_search_dji_sidecars(service)
+            print("DJI Timestamp.MRK Drive-wide search:")
+            print(json.dumps(dji_search_summary, ensure_ascii=False, indent=2))
+        except Exception as error:
+            print(f"::warning::DJI sidecar Drive-wide search skipped ({type(error).__name__})")
+    published_tracks_path = repo / "dist" / "data" / "context" / "project-flight-tracks.geojson"
+    published_tracker_ids = {
+        feature.get("properties", {}).get("trackerId")
+        for feature in (
+            json.loads(published_tracks_path.read_text(encoding="utf-8")).get("features", [])
+            if published_tracks_path.exists() else []
+        )
+        if feature.get("properties", {}).get("trackerId")
+    }
+    sidecar_parent_names: dict[str, str] = {}
     campaigns = config.get("campaigns", [])
     workbook_paths = []
     project_results = {}
@@ -1796,8 +1901,8 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         workbook_path = workbooks_dir / project["workbookName"]
         download_file(service, tracker_item, workbook_path)
         workbook_paths.append(workbook_path)
-        rows = tracker_rows(workbook_path, project["key"])
-        linked_rows = recent_tracker_rows(rows, mission_lookback_days)
+        rows = tracker_rows(workbook_path, project["key"], include_unlinked=True)
+        linked_rows = recent_tracker_rows([row for row in rows if row.get("folderId")], mission_lookback_days)
         project_source_dir = sources_dir / project["key"]
         project_source_dir.mkdir(parents=True)
         mapping_entries = []
@@ -1815,6 +1920,9 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             "sourcesDownloaded": 0,
             "downloadFailures": 0,
             "flightRecordsAwaitingApiKey": 0,
+            "trackerRowsWithoutFolderLink": sum(1 for row in rows if not row.get("folderId")),
+            "searchSidecarsMatched": 0,
+            "searchSidecarsDownloaded": 0,
         }
         reasons: dict[str, int] = {}
 
@@ -1863,6 +1971,37 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 note(cs.ACCESS_DENIED)
                 print(f"::warning::{project['key']} source download failed ({type(error).__name__})")
                 continue
+            stage["sourcesDownloaded"] += 1
+            mapping_entries.append({
+                "file": local_name,
+                "trackerId": row["trackerId"],
+                "mission": row["mission"],
+            })
+            mapped_tracker_ids.add(row["trackerId"])
+        # Every tracker row without a published trajectory is matched by its
+        # mission name to a DJI Timestamp.MRK found anywhere in Drive. This is
+        # independent of folder links, lookback windows and per-project roots.
+        for row in rows:
+            if row["trackerId"] in mapped_tracker_ids or row["trackerId"] in published_tracker_ids:
+                continue
+            candidates = [
+                item for item in dji_sidecars.get(dji_mission_key(row.get("mission")), [])
+                if item.get("id") not in used_source_ids
+            ]
+            if not candidates:
+                continue
+            stage["searchSidecarsMatched"] += 1
+            chosen = choose_dji_sidecar(service, candidates, sidecar_parent_names)
+            used_source_ids.add(chosen["id"])
+            local_name = f"search__{row['trackerId'].split(':')[-1].zfill(4)}__{safe_filename(chosen['name'])}"
+            try:
+                download_file(service, chosen, project_source_dir / local_name)
+            except Exception as error:
+                stage["downloadFailures"] += 1
+                note(cs.ACCESS_DENIED)
+                print(f"::warning::{project['key']} searched sidecar download failed ({type(error).__name__})")
+                continue
+            stage["searchSidecarsDownloaded"] += 1
             stage["sourcesDownloaded"] += 1
             mapping_entries.append({
                 "file": local_name,
@@ -1970,7 +2109,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         mapping_path.write_text(json.dumps({"sources": mapping_entries}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         project_results[project["key"]] = {
             "trackerMissionRows": len(rows),
-            "trackerRowsWithFolders": len(rows),
+            "trackerRowsWithFolders": sum(1 for row in rows if row.get("folderId")),
             "stages": stage,
             "reasons": dict(sorted(reasons.items())),
             "coordinateSources": len(mapping_entries),
@@ -2058,6 +2197,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         "nerguiUndurMagArrow": nergui_magarrow_summary,
         "nerguiUndurMagArrowArchive": magarrow_archive_summary,
         "projectRootDroneSources": project_root_summaries,
+        "djiSidecarSearch": dji_search_summary,
         "secretsConfigured": {
             "ARTSAT_ROOT_FOLDER_ID": bool(os.environ.get("ARTSAT_ROOT_FOLDER_ID", "").strip()),
             "BUDUUNKHAD_ROOT_FOLDER_ID": bool(os.environ.get("BUDUUNKHAD_ROOT_FOLDER_ID", "").strip()),
@@ -2114,6 +2254,15 @@ def step_summary(summary: dict) -> str:
             lines.append(f"- {key}: `{archive_summary.get(key)}`")
     else:
         lines.append("- not updated; the previously published asset was preserved")
+    dji = summary.get("djiSidecarSearch")
+    lines += ["", "### DJI Timestamp.MRK search (all drives)", ""]
+    if dji:
+        lines.append(
+            f"- sources `{dji.get('sourceCount')}`, missions `{dji.get('missionCount')}`, "
+            f"incompleteSearch `{dji.get('incompleteSearch')}`"
+        )
+    else:
+        lines.append("- not run")
     lines += ["", "### Project-root discovery", ""]
     discoveries = summary.get("projectRootDroneSources", {})
     if discoveries:
@@ -2129,15 +2278,16 @@ def step_summary(summary: dict) -> str:
     else:
         lines.append("- not run (no configured root was readable)")
     lines += ["", "### Per project", "",
-              "| Project | Tracker rows | Folders scanned | Unreadable | Candidates | Downloaded | Tracker tracks | Campaign segments |",
-              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+              "| Project | Tracker rows | Folders scanned | Unreadable | Candidates | Downloaded | Tracker tracks | Campaign segments | Rows without link | MRK matched by name |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for key, result in sorted(summary.get("projects", {}).items()):
         stage = result.get("stages", {})
         lines.append(
             f"| {key} | {result.get('trackerMissionRows', 0)} | {stage.get('missionFoldersScanned', 0)} "
             f"| {stage.get('missionFoldersUnreadable', 0)} | {stage.get('candidateFilesFound', 0)} "
             f"| {stage.get('sourcesDownloaded', 0)} | {result.get('importReport', {}).get('imported', 0)} "
-            f"| {result.get('campaignImportReport', {}).get('segments', 0)} |"
+            f"| {result.get('campaignImportReport', {}).get('segments', 0)} "
+            f"| {stage.get('trackerRowsWithoutFolderLink', 0)} | {stage.get('searchSidecarsMatched', 0)} |"
         )
     lines += ["", "### Reason codes", ""]
     for key, result in sorted(summary.get("projects", {}).items()):
