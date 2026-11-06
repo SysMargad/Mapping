@@ -672,6 +672,28 @@ def magarrow_project_for_licence(licence: dict, config_projects: list[dict] | No
     return {"key": f"licence-{slug}", "project": licence["name"], "area": licence["label"], "licence": code}
 
 
+def campaign_claims_magarrow(
+    campaigns: list[dict] | None, source_name: str, day: str | None, project_key: str | None = None,
+) -> bool:
+    """Whether a declared survey campaign already publishes this acquisition.
+
+    A campaign (e.g. the 2025 Hetsuu hutul magnetic survey) is its own
+    register; the same SRVY/ACQU files must not reappear as MagArrow tracks.
+    """
+    year = (day or "")[:4]
+    for campaign in campaigns or []:
+        if project_key and campaign.get("projectKey") != project_key:
+            continue
+        if not year or str(campaign.get("campaignYear") or "") != year:
+            continue
+        patterns = list(campaign.get("acquisitionFilePatterns") or []) + list(
+            (campaign.get("match") or {}).get("fileNamePatterns") or []
+        )
+        if any(re.search(pattern, source_name or "", re.IGNORECASE) for pattern in patterns):
+            return True
+    return False
+
+
 def is_standalone_magarrow(feature: dict) -> bool:
     props = feature.get("properties", {})
     return props.get("sensor") == "MagArrow" and not props.get("trackerId")
@@ -1533,6 +1555,7 @@ def sync_magarrow_tracks(
     workspace: Path,
     max_size: int,
     config_projects: list[dict] | None = None,
+    campaigns: list[dict] | None = None,
 ) -> dict:
     """Import MagArrow trajectories from every licence and publish them per project.
 
@@ -1556,12 +1579,16 @@ def sync_magarrow_tracks(
         if project_tracks_path.exists() else None
     )
     entries = [{"feature": feature, "collection": "nergui"} for feature in nergui_payload.get("features", [])]
+    campaign_claimed = 0
     if project_payload:
-        entries.extend(
-            {"feature": feature, "collection": "project"}
-            for feature in project_payload.get("features", [])
-            if is_standalone_magarrow(feature)
-        )
+        for feature in project_payload.get("features", []):
+            if not is_standalone_magarrow(feature):
+                continue
+            props = feature.get("properties", {})
+            if campaign_claims_magarrow(campaigns, props.get("sourceFile"), props.get("date"), props.get("projectKey")):
+                campaign_claimed += 1
+                continue
+            entries.append({"feature": feature, "collection": "project"})
     entries, collapsed = collapse_magarrow_duplicates(entries)
     known_fingerprints = {fp for entry in entries for fp in feature_fingerprints(entry["feature"])}
     owner_by_id_hash = {
@@ -1591,6 +1618,7 @@ def sync_magarrow_tracks(
         "unassignedCount": 0,
         "pathDateOverruledCount": 0,
         "duplicateCollapsedCount": collapsed,
+        "campaignClaimedCount": campaign_claimed,
         "licenceIndexCount": len(licences),
     }
 
@@ -1614,6 +1642,9 @@ def sync_magarrow_tracks(
         id_hash = magarrow_source_id_hash(item)
         priority = magarrow_priority(source_name)
         path_day = nearest_path_date(item.get("relativePath", ""))
+        if campaign_claims_magarrow(campaigns, source_name, path_day):
+            summary["campaignClaimedCount"] += 1
+            continue
         owner = owner_by_id_hash.get(id_hash)
         if owner is None and path_day:
             twins = [
@@ -1685,6 +1716,9 @@ def sync_magarrow_tracks(
             entry = {"feature": feature, "collection": "nergui"}
         else:
             project = magarrow_project_for_licence(licence, config_projects)
+            if campaign_claims_magarrow(campaigns, source_name, feature["properties"].get("date"), project["key"]):
+                summary["campaignClaimedCount"] += 1
+                continue
             entry = {"feature": project_magarrow_feature(feature, project), "collection": "project"}
         entries.append(entry)
         owner_by_id_hash[id_hash] = entry
@@ -1770,11 +1804,12 @@ def sync_nergui_magarrow(
     max_size: int,
     additional_sources: list[dict] | None = None,
     config_projects: list[dict] | None = None,
+    campaigns: list[dict] | None = None,
 ) -> dict:
     """Tree-scan the configured Nergui root, then sync MagArrow for all licences."""
     sources = find_nergui_magarrow_sources(service, root_folder_id, max_depth) if root_folder_id else []
     sources.extend(additional_sources or [])
-    return sync_magarrow_tracks(service, sources, repo, workspace, max_size, config_projects)
+    return sync_magarrow_tracks(service, sources, repo, workspace, max_size, config_projects, campaigns)
 
 
 def run(command: list[str], cwd: Path) -> None:
@@ -1875,6 +1910,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             max_size,
             magarrow_sources,
             projects,
+            config.get("campaigns", []),
         )
         nergui_magarrow_summary["driveSearch"] = magarrow_search_summary
         print("MagArrow sync (all licences):")
@@ -2241,7 +2277,7 @@ def step_summary(summary: dict) -> str:
             "discoveredSourceCount", "chosenAcquisitionCount", "csvSourceCount", "textSourceCount",
             "magdataSourceCount", "retainedCount", "alternateSourceCount", "downloadedCount",
             "importedCount", "updatedCount", "skippedOversizeCount", "failedCount",
-            "unassignedCount", "pathDateOverruledCount", "duplicateCollapsedCount",
+            "unassignedCount", "pathDateOverruledCount", "duplicateCollapsedCount", "campaignClaimedCount",
             "partialImport", "publishedAcquisitionCount", "publishedDateCount", "dateFrom", "dateTo",
         ):
             if key in nergui:

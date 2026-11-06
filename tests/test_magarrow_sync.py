@@ -624,3 +624,20 @@ class GapAwareCoverage(unittest.TestCase):
             )
             feature = magarrow.parse_10hz_csv(path, source_name="SRVY0-ACQU9-10Hz.csv")
         self.assertEqual(feature["properties"]["gapSegments"], [1])
+
+
+class CampaignOwnership(unittest.TestCase):
+    CAMPAIGNS = [{
+        "id": "hetsuu-hutul-2025-magnetic", "projectKey": "hetsuu-hutul", "campaignYear": 2025,
+        "acquisitionFilePatterns": ["SRVY\d+[-_]ACQU\d+"],
+    }]
+
+    def test_campaign_year_acquisitions_are_not_magarrow_tracks(self):
+        self.assertTrue(sync.campaign_claims_magarrow(self.CAMPAIGNS, "SRVY0-ACQU0 (4).magdata", "2025-09-22"))
+        self.assertTrue(sync.campaign_claims_magarrow(
+            self.CAMPAIGNS, "SRVY0-ACQU1 (1)-10Hz.csv", "2025-09-24", "hetsuu-hutul"))
+
+    def test_other_years_and_projects_stay_magarrow_tracks(self):
+        self.assertFalse(sync.campaign_claims_magarrow(self.CAMPAIGNS, "SRVY0-ACQU60.magdata", "2026-11-04"))
+        self.assertFalse(sync.campaign_claims_magarrow(self.CAMPAIGNS, "SRVY0-ACQU0.magdata", "2025-09-22", "artsat"))
+        self.assertFalse(sync.campaign_claims_magarrow(self.CAMPAIGNS, "SRVY0-ACQU0.magdata", None))
