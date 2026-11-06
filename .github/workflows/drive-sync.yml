@@ -9,6 +9,7 @@ on:
       - "tools/coordinate_sources.py"
       - "tools/export_magdata_trajectories.py"
       - "tools/export_magarrow_planned_lines.py"
+      - "tools/export_project_flight_coverage.py"
       - "tools/export_project_trackers.py"
       - "tools/import_campaign_tracks.py"
       - "tools/import_project_flight_tracks.py"

@@ -59,7 +59,7 @@ class Registry(unittest.TestCase):
 
     def test_app_script_cache_key_is_current(self):
         index = (DIST / "index.html").read_text(encoding="utf-8")
-        self.assertIn('app.js?v=2026-10-28.1', index)
+        self.assertIn('app.js?v=2026-11-06.1', index)
         self.assertIn('styles.css?v=2026-10-03.3', index)
 
     def test_map_view_switch_has_osm_and_satellite_modes(self):
@@ -104,7 +104,9 @@ class Registry(unittest.TestCase):
     def test_every_published_project_track_sensor_has_a_color(self):
         tracks = load("context/project-flight-tracks.geojson")
         sensors = {feature["properties"]["sensor"] for feature in tracks["features"]}
-        self.assertEqual(sensors, {"Medusa", "L2", "L3", "P1"})
+        # MagArrow joins this layer once the sync finds it on a non-Nergui licence.
+        self.assertTrue({"Medusa", "L2", "L3", "P1"}.issubset(sensors))
+        self.assertTrue(sensors.issubset({"MagArrow", "Medusa", "L2", "L3", "P1"}), sensors)
 
     def test_fit_map_includes_filtered_campaign_tracks(self):
         app = (DIST / "app.js").read_text(encoding="utf-8")
@@ -169,7 +171,20 @@ class ExistingProjectsUnaffected(unittest.TestCase):
     def test_hetsuu_has_no_fabricated_coverage(self):
         # A verified trajectory is not enough to infer a flown footprint. Raw
         # DJI metadata has no verified swath width, so it remains "Тооцоогүй".
-        self.assertNotIn("hetsuu-hutul", self.coverage["projects"])
+        # Only MagArrow, with its documented 50 m swath model, may add coverage.
+        sensors = self.coverage["projects"].get("hetsuu-hutul", {}).get("sensors", {})
+        self.assertEqual(set(sensors) - {"MagArrow"}, set())
+
+    def test_magarrow_project_tracks_are_attributed_and_calculable(self):
+        for feature in self.tracks["features"]:
+            props = feature["properties"]
+            if props["sensor"] != "MagArrow":
+                continue
+            self.assertNotIn("trackerId", props)
+            self.assertTrue(props.get("licence"))
+            self.assertEqual(props.get("coverageStatus"), "calculated")
+            self.assertIn(props["projectKey"], self.coverage["projects"])
+            self.assertIn("MagArrow", self.coverage["projects"][props["projectKey"]]["sensors"])
 
     def test_current_cad_and_mission_layers_are_intact(self):
         self.assertGreater(len(load("magarrow/mission-plans.geojson")["features"]), 0)

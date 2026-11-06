@@ -568,6 +568,11 @@
 
   const trackerProjectForLicence = (feature) => {
     const licence = feature?.properties?.LICENSE;
+    if (!licence) return null;
+    // Includes licences whose only data is auto-discovered MagArrow tracks.
+    const project = Object.values(state.trackerData?.projects || {})
+      .find((item) => item?.licence === licence);
+    if (project?.key) return project.key;
     return ({
       "XV-022905": "hetsuu-hutul",
       "XV-021395": "artsat",
@@ -1010,8 +1015,11 @@
         <div class="tracker-sensors">${campaignRows}</div>
         <p class="truth-note">Эдгээр нь tracker бүртгэлээс тусдаа acquisition campaign. Огноо, sensor, mission-ийг 2026 оны бүртгэлтэй холбоогүй. Хамрах талбайг тооцоогүй.</p>
       </details>` : "";
+    const sourceLink = project.url
+      ? `<a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`
+      : `<p class="truth-note">Tracker бүртгэлгүй лиценз: MagArrow trajectory-г координатаар нь энэ лицензэд автоматаар оноосон.</p>`;
     ui.projectTrackerPanel.innerHTML = `
-      <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge survey">ACTUAL RECORDS</span></div>
+      <div class="tracker-heading"><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.licence)} · ${escapeHtml(project.dateFrom)} → ${escapeHtml(project.dateTo)}</span></div><span class="status-badge ${project.autoDiscovered ? "available" : "survey"}">${project.autoDiscovered ? "AUTO TRACKS" : "ACTUAL RECORDS"}</span></div>
       <div class="tracker-kpis">
         <div><span>Нислэгийн бүртгэл</span><strong>${formatCount(project.records)}</strong></div>
         <div><span>Баталгаажсан trajectory</span><strong>${formatCount(trackerGeometry.length)}</strong></div>
@@ -1031,7 +1039,7 @@
         <div class="tracker-daily">${dailyRows}</div>
       </details>
       <p class="truth-note">Actual flight register: ${formatCount(project.records)} бүртгэл. Баталгаажсан trajectory geometry: ${formatCount(trackerGeometry.length)}. ${missingSource ? `${formatCount(missingSource)} бүртгэлд GPS замын эх файл импортлогдоогүй.` : ""} Geometry байхгүй бүртгэлийг шугам болгон таамаглаагүй.</p>
-      <a class="tracker-source" href="${escapeHtml(project.url)}" target="_blank" rel="noopener noreferrer">Эх tracker нээх ↗</a>`;
+      ${sourceLink}`;
     for (const button of ui.projectTrackerPanel.querySelectorAll("[data-tracker-sensor]")) {
       button.addEventListener("click", () => selectSensor(button.dataset.trackerSensor));
     }
@@ -1121,6 +1129,53 @@
         onEachFeature(itemFeature, item) { item.bindPopup(projectFlightPopup(itemFeature)); },
       });
       state.projectFlightLayers.set(feature.id, layer);
+    }
+  };
+
+  // A licence without its own tracker workbook can still receive MagArrow
+  // trajectories, attributed by their coordinates during the Drive sync. Give
+  // it a minimal project entry built from those trajectories alone: it has no
+  // flight register, so no register records are invented.
+  const ensureAutoProjects = () => {
+    if (!state.projectFlightData) return;
+    if (!state.trackerData) state.trackerData = { projects: {}, records: [] };
+    if (!state.trackerData.projects) state.trackerData.projects = {};
+    const groups = new Map();
+    for (const feature of state.projectFlightData.features || []) {
+      const props = feature.properties || {};
+      if (!props.projectKey || state.trackerData.projects[props.projectKey]) continue;
+      const group = groups.get(props.projectKey) || { props, features: [] };
+      group.features.push(feature);
+      groups.set(props.projectKey, group);
+    }
+    for (const [key, { props, features }] of groups) {
+      const dates = [...new Set(features.map((feature) => feature.properties?.date).filter(Boolean))].sort();
+      const daily = [...dates].reverse().map((date) => {
+        const sameDay = features.filter((feature) => feature.properties?.date === date);
+        const sensors = {};
+        for (const feature of sameDay) {
+          const sensor = feature.properties?.sensor || "Unknown";
+          sensors[sensor] = (sensors[sensor] || 0) + 1;
+        }
+        return { date, records: sameDay.length, images: 0, sensors };
+      });
+      state.trackerData.projects[key] = {
+        key,
+        project: props.project,
+        label: props.area || props.project || key,
+        licence: props.licence || "",
+        url: null,
+        autoDiscovered: true,
+        records: 0,
+        flightDays: dates.length,
+        images: 0,
+        dateFrom: dates[0] || "—",
+        dateTo: dates[dates.length - 1] || "—",
+        fileCopy: {},
+        qaqc: {},
+        sensors: {},
+        daily,
+      };
     }
   };
 
@@ -1868,7 +1923,11 @@
     }
     state.selectedCampaignId = null;
     syncCampaignVisibility();
-    if (project?.sensors?.[sensor]) {
+    // A sensor can have trajectories without tracker register rows (MagArrow
+    // on Artsat); it must open this project's panel, not Nergui Undur's.
+    const projectHasGeometry = Boolean(project)
+      && projectFlightFeatures(state.selectedTrackerProject, sensor, "all").length > 0;
+    if (project?.sensors?.[sensor] || projectHasGeometry) {
       state.selectedTrackerSensor = sensor;
       state.selectedTrackerDate = "all";
       renderSensorButtons();
@@ -2039,6 +2098,7 @@
           else addWarning(job.label.toLowerCase().replaceAll(" ", "-"), `${job.label}: ${result.reason.message}`);
         }
       });
+      ensureAutoProjects();
       renderSensorButtons();
       selectSensor(state.activeSensor);
       const defaultLicence = state.licenceData?.features?.[0];

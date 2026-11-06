@@ -21,6 +21,17 @@ def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def licence_project_names() -> set[str]:
+    """Licence names that auto-discovered MagArrow tracks may be published under."""
+    path = DATA / "context" / "licenses.geojson"
+    if not path.exists():
+        return set()
+    return {
+        str(feature.get("properties", {}).get("AREANAME") or "").strip()
+        for feature in load(path).get("features", [])
+    } - {""}
+
+
 def validate_geojson(
     path: Path,
     expected_project: str = "Nergui Undur",
@@ -32,6 +43,7 @@ def validate_geojson(
     data = load(path)
     if data.get("type") != "FeatureCollection":
         errors.append(f"{path}: expected FeatureCollection")
+    licence_names = licence_project_names() if project_operations else set()
     ids = set()
     for index, feature in enumerate(data.get("features", [])):
         fid = feature.get("id")
@@ -43,7 +55,12 @@ def validate_geojson(
             errors.append(f"{path}:{index}: unsupported geometry {geometry.get('type')}")
         props = feature.get("properties") or {}
         project = props.get("project") or data.get("project")
-        if project_operations and project not in PROJECT_OPERATION_NAMES:
+        auto_licence_project = (
+            str(props.get("projectKey") or "").startswith("licence-")
+            and props.get("autoDiscovered") is True
+            and project in licence_names
+        )
+        if project_operations and project not in PROJECT_OPERATION_NAMES and not auto_licence_project:
             errors.append(f"{path}:{fid}: unsupported project operations project {project!r}")
         elif not project_operations and project != expected_project:
             errors.append(f"{path}:{fid}: project must be {expected_project!r}, got {project!r}")

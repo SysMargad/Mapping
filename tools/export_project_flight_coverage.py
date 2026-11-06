@@ -91,12 +91,21 @@ def build(tracks_path: Path, licences_path: Path, output: Path) -> None:
         "project": "Multi-project operations",
         "scope": "project_operations",
         "dataType": "actual_coverage_summary",
-        "method": "Verified DJI flight trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to each project licence polygon.",
+        "method": "Verified flight trajectory buffered by 25 m (50 m swath), 10 m grid, clipped to each project licence polygon.",
         "cellSizeM": CELL_SIZE,
         "swathWidthM": SWATH_RADIUS * 2,
         "projects": {},
     }
-    for project_key, licence_id in PROJECT_LICENCES.items():
+    # Tracker projects have fixed licences; MagArrow tracks discovered on any
+    # other licence carry their own licence code from coordinate attribution.
+    project_licences = dict(PROJECT_LICENCES)
+    for feature in tracks:
+        props = feature.get("properties", {})
+        if props.get("projectKey") and props.get("licence") and props["projectKey"] not in project_licences:
+            project_licences[props["projectKey"]] = props["licence"]
+    for project_key, licence_id in project_licences.items():
+        if licence_id not in licences:
+            continue
         project_tracks = [
             feature for feature in tracks
             if feature.get("properties", {}).get("projectKey") == project_key

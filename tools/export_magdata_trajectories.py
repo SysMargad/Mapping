@@ -4,6 +4,10 @@ The proprietary container embeds intact NMEA GGA/RMC sentences.  This tool
 only reads those navigation sentences; it does not decode or alter magnetic
 measurements.  Coverage is an explicitly labelled 50 m swath estimate,
 calculated on a 10 m grid and clipped to the licence/uchastik polygons.
+
+The parsers accept any position inside Mongolia: the same MagArrow flies over
+several licences, and the sync assigns each trajectory to a licence from its
+own coordinates afterwards.
 """
 
 from __future__ import annotations
@@ -29,6 +33,14 @@ METRES_PER_DEGREE = 111_320.0
 COS_LAT0 = math.cos(math.radians(LAT0))
 CELL_SIZE = 10.0
 SWATH_RADIUS = 25.0
+# Mongolia's extent with a small margin. Anything outside is a GNSS fault
+# (e.g. 0,0 before fix), not a survey position.
+MIN_LON, MAX_LON = 87.0, 120.5
+MIN_LAT, MAX_LAT = 41.0, 52.5
+
+
+def valid_position(lon: float, lat: float) -> bool:
+    return MIN_LON <= lon <= MAX_LON and MIN_LAT <= lat <= MAX_LAT
 
 
 def acquisition_name(value: str) -> str:
@@ -63,6 +75,12 @@ def rmc_dates(data: bytes) -> dict[str, str]:
     return dates
 
 
+def magdata_date(path: Path) -> str | None:
+    """Return the earliest RMC date in a raw container, for undated Drive folders."""
+    dates = rmc_dates(path.read_bytes())
+    return min(dates.values()) if dates else None
+
+
 def extract_points(path: Path, fallback_date: str) -> tuple[list[list[float]], str, str]:
     data = path.read_bytes()
     dates = rmc_dates(data)
@@ -79,7 +97,7 @@ def extract_points(path: Path, fallback_date: str) -> tuple[list[list[float]], s
             lon = nmea_coordinate(fields[4], fields[5], True)
         except (ValueError, IndexError):
             continue
-        if not (112.0 <= lon <= 115.0 and 47.0 <= lat <= 51.0):
+        if not valid_position(lon, lat):
             continue
         time_value = fields[1]
         date_value = dates.get(time_value[:6], fallback_date)
@@ -220,8 +238,8 @@ def parse_10hz_csv(
                 lon = float(row[required["longitude"]])
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"{original_name}:{row_number}: {error}") from error
-            if not (112.0 <= lon <= 115.0 and 47.0 <= lat <= 51.0):
-                raise ValueError(f"{original_name}:{row_number}: invalid Nergui Undur coordinate {lat}, {lon}")
+            if not valid_position(lon, lat):
+                raise ValueError(f"{original_name}:{row_number}: coordinate outside Mongolia {lat}, {lon}")
             second = when.replace(microsecond=0)
             if second == last_second:
                 continue
@@ -279,10 +297,10 @@ def parse_coordinate_table(
     parsed = cs.parse_table(path.read_text(encoding="utf-8-sig", errors="replace"))
     points = cs.deduplicate_consecutive([
         point for point in parsed.points
-        if 112.0 <= point.lon <= 115.0 and 47.0 <= point.lat <= 51.0
+        if valid_position(point.lon, point.lat)
     ])
     if len(points) < 2:
-        raise ValueError(f"{original_name}: fewer than two Nergui Undur coordinate samples")
+        raise ValueError(f"{original_name}: fewer than two valid coordinate samples")
     segments = cs.split_segments(points, time_gap_seconds=60.0, distance_gap_m=500.0, min_points=2)
     if len(segments) != 1:
         raise ValueError(f"{original_name}: coordinate table contains {len(segments)} disconnected tracks")

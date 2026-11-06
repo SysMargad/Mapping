@@ -13,6 +13,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coordinate_sources as cs  # noqa: E402
 import export_magdata_trajectories as magarrow  # noqa: E402
 import export_magarrow_planned_lines as magarrow_plans  # noqa: E402
+import import_project_flight_tracks as tracker_import  # noqa: E402
 
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -38,10 +40,22 @@ SOURCE_PRIORITY = {".kmz": 0, ".mrk": 1, ".kml": 2, ".csv": 3, ".txt": 4}
 FOLDER_ID_RE = re.compile(r"/folders/([A-Za-z0-9_-]+)")
 DATE_COMPACT_RE = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
 DATE_DASH_RE = re.compile(r"(?<!\d)(20\d{2})[-./](\d{2})[-./](\d{2})(?!\d)")
+# Converted exports appear as both "SRVY0-ACQU44-10Hz.csv" and
+# "SRVY0-ACQU10_10Hz.csv" depending on who ran the MagArrow converter.
 MAGARROW_SOURCE_RE = re.compile(
-    r"SRVY\d+-ACQU\d+(?:\s*\(\d+\))?(?:-10Hz)?\.(?:csv|txt|magdata)$",
+    r"SRVY\d+-ACQU\d+(?:\s*\(\d+\))?(?:[-_ ]?10\s*Hz)?\.(?:csv|txt|magdata)$",
     re.IGNORECASE,
 )
+MAGARROW_SOURCE_PRIORITY = {".csv": 0, ".txt": 1, ".magdata": 2}
+# A converted CSV and its raw .magdata start within a second of each other.
+# Distinct flights that reuse an acquisition number start minutes apart.
+MAGARROW_SAME_FLIGHT_SECONDS = 300
+# A trajectory that touches no licence polygon is still attributed to the
+# nearest licence when it lies this close (tie lines, turn-arounds).
+MAGARROW_LICENCE_MAX_DISTANCE_M = 10_000
+MAGARROW_SWATH_WIDTH_M = 50
+NERGUI_LICENCE = "XV-023099"
+METRES_PER_DEGREE = 111_320.0
 DJI_FILE_RE = re.compile(r"^DJI(?:[_\-\s]|$)", re.IGNORECASE)
 DJI_MISSION_FOLDER_RE = re.compile(r"^DJI[_-]20\d{6}", re.IGNORECASE)
 DJI_MISSION_TIME_RE = re.compile(r"DJI[_-]?(20\d{10})", re.IGNORECASE)
@@ -429,6 +443,265 @@ def magarrow_source_fingerprint(item: dict) -> str:
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
 
 
+def magarrow_source_id_hash(item: dict) -> str:
+    """Non-reversible identity of one Drive file that survives content edits."""
+    return hashlib.sha256(f"drive-file:{item.get('id') or ''}".encode("utf-8")).hexdigest()[:24]
+
+
+def magarrow_priority(name: str | None) -> int:
+    return MAGARROW_SOURCE_PRIORITY.get(Path(name or "").suffix.lower(), 9)
+
+
+def base_acquisition(value: str | None) -> str:
+    """Acquisition name without a Drive copy suffix such as "(1)"."""
+    return re.sub(r"\s*\(\d+\)$", "", clean(value)).upper()
+
+
+def parse_iso_time(value) -> datetime | None:
+    text = clean(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def same_magarrow_flight(left: dict, right: dict) -> bool:
+    """Whether two trajectories are copies of one MagArrow acquisition.
+
+    Acquisition numbers restart and Drive appends "(1)" to re-uploads, so the
+    name alone is not identity: the flights must also start together.
+    """
+    left_props = left.get("properties", {})
+    right_props = right.get("properties", {})
+    if base_acquisition(left_props.get("acquisition")) != base_acquisition(right_props.get("acquisition")):
+        return False
+    left_start = parse_iso_time(left_props.get("startTime"))
+    right_start = parse_iso_time(right_props.get("startTime"))
+    if left_start and right_start:
+        try:
+            return abs((left_start - right_start).total_seconds()) <= MAGARROW_SAME_FLIGHT_SECONDS
+        except TypeError:
+            pass
+    return clean(left_props.get("date")) == clean(right_props.get("date"))
+
+
+def _unique(values) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def feature_fingerprints(feature: dict) -> list[str]:
+    props = feature.get("properties", {})
+    return _unique([props.get("sourceFingerprint"), *(props.get("sourceFingerprints") or [])])
+
+
+def feature_id_hashes(feature: dict) -> list[str]:
+    props = feature.get("properties", {})
+    return _unique([props.get("sourceIdHash"), *(props.get("sourceIdHashes") or [])])
+
+
+def remember_magarrow_source(feature: dict, fingerprint: str | None, id_hash: str | None) -> None:
+    """Record an alternative copy of the same flight so it is never re-downloaded."""
+    props = feature.setdefault("properties", {})
+    props["sourceFingerprints"] = _unique([*feature_fingerprints(feature), fingerprint])
+    props["sourceIdHashes"] = _unique([*feature_id_hashes(feature), id_hash])
+
+
+MAGARROW_SOURCE_KEYS = (
+    "startTime", "endTime", "sourceFile", "sourceFingerprint", "sourceIdHash", "pointCount", "nmeaSource",
+)
+
+
+def adopt_magarrow_source(target: dict, source: dict) -> None:
+    """Give ``target`` the geometry and provenance of a better copy of its flight.
+
+    The published identity (id, date, acquisition, project) is kept, so a map
+    link or coverage date never jumps because a CSV replaced a raw container.
+    """
+    fingerprints = _unique([*feature_fingerprints(target), *feature_fingerprints(source)])
+    id_hashes = _unique([*feature_id_hashes(target), *feature_id_hashes(source)])
+    target["geometry"] = source["geometry"]
+    target_props = target.setdefault("properties", {})
+    source_props = source.get("properties", {})
+    for key in MAGARROW_SOURCE_KEYS:
+        if source_props.get(key) is not None:
+            target_props[key] = source_props[key]
+        else:
+            target_props.pop(key, None)
+    target_props["sourceFingerprints"] = fingerprints
+    target_props["sourceIdHashes"] = id_hashes
+    if target_props.get("projectKey"):
+        target_props["sourceKind"] = magarrow_source_kind(target_props.get("sourceFile"))
+
+
+def magarrow_source_kind(source_file: str | None) -> str:
+    return {
+        ".csv": "MagArrow 10 Hz CSV",
+        ".txt": "MagArrow coordinate table",
+        ".magdata": "MagArrow raw .magdata (embedded NMEA)",
+    }.get(Path(source_file or "").suffix.lower(), "MagArrow trajectory")
+
+
+def nearest_path_date(path: str | None) -> str | None:
+    """Date of the deepest dated folder, so a dated child beats a ranged parent."""
+    parts = [part for part in re.split(r"[/\\]+", path or "") if part]
+    for part in reversed(parts[:-1]):
+        found = source_date(part)
+        if found:
+            return found
+    return source_date_from_path(path or "")
+
+
+def settle_magarrow_date(feature: dict, path_day: str | None) -> bool:
+    """Use the local field-folder date when it agrees with the GNSS date.
+
+    MagArrow timestamps are UTC while Drive folders use the local survey day,
+    so a one-day difference is expected for early-morning flights. A larger
+    gap means the file was filed under the wrong day; the GNSS date wins.
+    Returns True when the folder date had to be overruled.
+    """
+    props = feature.setdefault("properties", {})
+    started = parse_iso_time(props.get("startTime"))
+    content_day = started.date().isoformat() if started else clean(props.get("date")) or None
+    chosen, overruled = content_day or path_day, False
+    if path_day and content_day:
+        try:
+            gap = abs((date.fromisoformat(path_day) - date.fromisoformat(content_day)).days)
+        except ValueError:
+            gap = 0
+        if gap <= 1:
+            chosen = path_day
+        else:
+            overruled = True
+    if not chosen:
+        raise ValueError("MagArrow source has no verified date")
+    if chosen != props.get("date"):
+        props["date"] = chosen
+        feature["id"] = magarrow.feature_id(props.get("acquisition") or "magarrow", chosen)
+    return overruled
+
+
+def load_licence_index(path: Path) -> list[dict]:
+    """Licence polygons used to attribute a trajectory to a project."""
+    if not path.exists():
+        return []
+    licences = []
+    for feature in json.loads(path.read_text(encoding="utf-8")).get("features", []):
+        props = feature.get("properties") or {}
+        geometry = feature.get("geometry") or {}
+        code = clean(props.get("LICENSE"))
+        points = list(tracker_import.iter_coordinate_pairs(geometry.get("coordinates")))
+        if not code or not points or geometry.get("type") not in {"Polygon", "MultiPolygon"}:
+            continue
+        name = clean(props.get("AREANAME")) or code
+        licences.append({
+            "code": code,
+            "name": name,
+            "label": clean(props.get("AREANAME_L")) or name,
+            "geometry": geometry,
+            "bbox": (
+                min(point[0] for point in points), min(point[1] for point in points),
+                max(point[0] for point in points), max(point[1] for point in points),
+            ),
+        })
+    return licences
+
+
+def _distance_to_bbox_m(point: tuple[float, float], bbox) -> float:
+    lon, lat = point
+    west, south, east, north = bbox
+    nearest_lon = min(max(lon, west), east)
+    nearest_lat = min(max(lat, south), north)
+    dx = (lon - nearest_lon) * METRES_PER_DEGREE * math.cos(math.radians(lat))
+    dy = (lat - nearest_lat) * METRES_PER_DEGREE
+    return math.hypot(dx, dy)
+
+
+def assign_licence(coordinates: list, licences: list[dict]) -> dict | None:
+    """Attribute a trajectory to the licence holding most of its positions.
+
+    Survey lines often overrun the licence boundary, so a majority is not
+    required; a track outside every polygon falls back to the nearest licence
+    within MAGARROW_LICENCE_MAX_DISTANCE_M, and is otherwise unassigned.
+    """
+    points = [(float(point[0]), float(point[1])) for point in coordinates or [] if len(point) >= 2]
+    if not points or not licences:
+        return None
+    best, best_inside = None, 0
+    for licence in licences:
+        west, south, east, north = licence["bbox"]
+        inside = sum(
+            1 for lon, lat in points
+            if west <= lon <= east and south <= lat <= north
+            and magarrow.point_in_geometry((lon, lat), licence["geometry"])
+        )
+        if inside > best_inside:
+            best, best_inside = licence, inside
+    if best:
+        return best
+    centre = (sum(lon for lon, _ in points) / len(points), sum(lat for _, lat in points) / len(points))
+    nearest = min(licences, key=lambda licence: _distance_to_bbox_m(centre, licence["bbox"]))
+    return nearest if _distance_to_bbox_m(centre, nearest["bbox"]) <= MAGARROW_LICENCE_MAX_DISTANCE_M else None
+
+
+def magarrow_project_for_licence(licence: dict, config_projects: list[dict] | None = None) -> dict:
+    """Project identity for a licence: a configured tracker project, else the licence itself."""
+    code = licence["code"]
+    for project in config_projects or []:
+        if clean(project.get("licence")) == code and project.get("key"):
+            known = tracker_import.PROJECTS.get(project["key"], {})
+            return {
+                "key": project["key"],
+                "project": clean(project.get("projectName")) or known.get("project") or licence["name"],
+                "area": clean(project.get("area")) or known.get("area") or licence["label"],
+                "licence": code,
+            }
+    for key, value in tracker_import.PROJECTS.items():
+        if value["licence"] == code:
+            return {"key": key, "project": value["project"], "area": value["area"], "licence": code}
+    slug = re.sub(r"[^a-z0-9]+", "-", code.lower()).strip("-")
+    return {"key": f"licence-{slug}", "project": licence["name"], "area": licence["label"], "licence": code}
+
+
+def is_standalone_magarrow(feature: dict) -> bool:
+    props = feature.get("properties", {})
+    return props.get("sensor") == "MagArrow" and not props.get("trackerId")
+
+
+def project_magarrow_feature(feature: dict, project: dict) -> dict:
+    """Publish a non-Nergui MagArrow trajectory in the multi-project track layer."""
+    props = feature.get("properties", {})
+    acquisition = props.get("acquisition") or "MagArrow"
+    day = props.get("date")
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{day}-{acquisition}".lower()).strip("-")
+    published = {
+        "project": project["project"], "projectKey": project["key"],
+        "area": project["area"], "licence": project["licence"],
+        "sensor": "MagArrow", "mission": acquisition, "acquisition": acquisition, "date": day,
+        "startTime": props.get("startTime"), "endTime": props.get("endTime"),
+        "dataType": "actual_flight_track", "plannedActual": "actual", "status": "confirmed_source",
+        "contextOnly": True, "trajectoryAvailable": True, "autoDiscovered": True,
+        "licenceAssignment": "trajectory coordinates",
+        "sourceFile": props.get("sourceFile"), "sourceKind": magarrow_source_kind(props.get("sourceFile")),
+        "nmeaSource": props.get("nmeaSource"),
+        "sourceCrs": "EPSG:4326", "displayCrs": "EPSG:4326", "crsVerified": True,
+        "pointCount": props.get("pointCount"),
+        "coverageStatus": "calculated", "coverageSwathWidthM": MAGARROW_SWATH_WIDTH_M,
+        "coverageNote": "MagArrow trajectory-г 50 м зурвасаар тооцов (Нэргүй өндөртэй ижил аргачлал).",
+        "sourceFingerprint": props.get("sourceFingerprint"),
+        "sourceFingerprints": feature_fingerprints(feature),
+        "sourceIdHash": props.get("sourceIdHash"),
+        "sourceIdHashes": feature_id_hashes(feature),
+    }
+    return {
+        "type": "Feature",
+        "id": f"magarrow-{project['key']}-{slug}",
+        "properties": {key: value for key, value in published.items() if value not in (None, [])},
+        "geometry": feature["geometry"],
+    }
+
+
 def find_nergui_magarrow_sources(service, root_folder_id: str, max_depth: int) -> list[dict]:
     """Find named MagArrow CSV/TXT sources, with raw .magdata as fallback."""
     found = []
@@ -450,6 +723,73 @@ def find_nergui_magarrow_sources(service, root_folder_id: str, max_depth: int) -
             if MAGARROW_SOURCE_RE.search(name):
                 found.append({**item, "relativePath": item_relative})
     return found
+
+
+def drive_search_magarrow_sources(service, path_depth: int = 4) -> tuple[list[dict], dict]:
+    """Find MagArrow sources anywhere the service account can read.
+
+    The MagArrow moves between licences and each crew files its data under a
+    different project tree, so a configured root per licence goes stale. A
+    name search across every readable drive finds new areas without setup.
+    Only the nearest ``path_depth`` folder names are read, to recover the
+    field-day folder date; they never leave the private job log.
+    """
+    found: list[dict] = []
+    token = None
+    incomplete = False
+    while True:
+        request = service.files().list(
+            q=f"name contains 'SRVY' and trashed = false and mimeType != '{FOLDER_MIME}'",
+            fields="nextPageToken,incompleteSearch,files(id,name,mimeType,size,modifiedTime,md5Checksum,parents)",
+            pageSize=1000,
+            pageToken=token,
+            corpora="allDrives",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+        )
+        response = execute_with_retry(request)
+        incomplete = incomplete or bool(response.get("incompleteSearch"))
+        found.extend(
+            item for item in response.get("files", [])
+            if MAGARROW_SOURCE_RE.search(item.get("name", ""))
+        )
+        token = response.get("nextPageToken")
+        if not token:
+            break
+
+    folders: dict[str, tuple[str | None, str | None]] = {}
+
+    def ancestor_names(folder_id: str | None) -> list[str]:
+        names = []
+        current = folder_id
+        for _ in range(path_depth):
+            if not current:
+                break
+            if current not in folders:
+                try:
+                    meta = execute_with_retry(service.files().get(
+                        fileId=current, fields="id,name,parents", supportsAllDrives=True,
+                    ))
+                    folders[current] = (meta.get("name", ""), (meta.get("parents") or [None])[0])
+                except Exception:
+                    folders[current] = (None, None)
+            name, parent = folders[current]
+            if name is None:
+                break
+            names.append(name)
+            current = parent
+        return list(reversed(names))
+
+    for item in found:
+        parents = item.get("parents") or []
+        item["relativePath"] = "/".join([*ancestor_names(parents[0] if parents else None), item.get("name", "")])
+        item["discoveredBy"] = "drive-search"
+    summary = {
+        "sourceCount": len(found),
+        "folderLookups": len(folders),
+        "incompleteSearch": incomplete,
+    }
+    return found, summary
 
 
 def source_date_from_path(value: str) -> str | None:
@@ -567,8 +907,14 @@ def find_drone_sources(
     discovery_depth: int = 5,
     scan_depth: int = 8,
     mission_lookback_days: int = 21,
+    magarrow_sink: list[dict] | None = None,
 ) -> tuple[list[dict], dict]:
-    """Return strong coordinate-source candidates without exposing private paths in the summary."""
+    """Return strong coordinate-source candidates without exposing private paths in the summary.
+
+    MagArrow acquisitions met during the scan are also appended to
+    ``magarrow_sink`` so the all-licence MagArrow sync can use them even when
+    the Drive-wide search cannot see this root.
+    """
     roots = find_drone_source_roots(service, root_folder_id, discovery_depth)
     found = []
     seen_files = set()
@@ -583,6 +929,8 @@ def find_drone_sources(
         if item.get("id") in seen_files:
             return
         inspected_files += 1
+        if magarrow_sink is not None and MAGARROW_SOURCE_RE.search(item.get("name", "")):
+            magarrow_sink.append({**item, "relativePath": path, "discoveredBy": "project-root"})
         if Path(item.get("name", "")).name.lower() == DJI_METADATA_FILE:
             # DJI mission exports place one coordinate-bearing metadata table
             # beside the images. The full parser still validates its header and
@@ -979,6 +1327,348 @@ def update_nergui_registry(registry_path: Path, acquisition_count: int, date_cou
     registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def parse_magarrow_source(
+    item: dict,
+    local_path: Path,
+    source_dir: Path,
+    raw_parsed_dir: Path,
+    path_day: str | None,
+    fingerprint: str,
+) -> dict:
+    """Parse one downloaded MagArrow source into a trajectory feature."""
+    source_name = item.get("name", "")
+    lower = source_name.lower()
+    if lower.endswith(".csv"):
+        try:
+            return magarrow.parse_10hz_csv(
+                local_path,
+                source_name=source_name,
+                source_fingerprint=fingerprint,
+            )
+        except ValueError:
+            return magarrow.parse_coordinate_table(
+                local_path,
+                source_name=source_name,
+                fallback_date=path_day,
+                source_fingerprint=fingerprint,
+            )
+    if lower.endswith(".txt"):
+        return magarrow.parse_coordinate_table(
+            local_path,
+            source_name=source_name,
+            fallback_date=path_day,
+            source_fingerprint=fingerprint,
+        )
+    day = path_day or magarrow.magdata_date(local_path)
+    if not day:
+        raise ValueError("raw MagArrow source has no verified date")
+    dated_path = source_dir / f"{day}__{safe_filename(source_name)}"
+    local_path.replace(dated_path)
+    # parse_file writes its intermediate JSON. Keep that staging output
+    # separate from the final parsed directory, which holds exactly one
+    # canonical feature per flight; mixing them duplicates raw acquisitions.
+    parsed_path = magarrow.parse_file(dated_path, raw_parsed_dir)
+    feature = json.loads(parsed_path.read_text(encoding="utf-8"))
+    feature.setdefault("properties", {}).update({
+        "sourceFile": source_name,
+        "sourceFingerprint": fingerprint,
+    })
+    return feature
+
+
+def _identity_rank(entry: dict) -> int:
+    """Lower is a better published identity for a flight with several copies.
+
+    A copy filed under another day's folder carries that wrong date, so the
+    copy whose date agrees with its own GNSS start wins first; then the name
+    without a Drive "(1)" suffix; then the canonical dated feature id.
+    """
+    feature = entry["feature"]
+    props = feature.get("properties", {})
+    rank = 0
+    started = parse_iso_time(props.get("startTime"))
+    try:
+        if started and abs((date.fromisoformat(clean(props.get("date"))) - started.date()).days) > 1:
+            rank += 4
+    except ValueError:
+        rank += 4
+    acquisition = clean(props.get("acquisition")).upper()
+    if base_acquisition(acquisition) != acquisition:
+        rank += 2
+    if feature.get("id") != magarrow.feature_id(props.get("acquisition") or "", props.get("date")):
+        rank += 1
+    return rank
+
+
+def collapse_magarrow_duplicates(entries: list[dict]) -> tuple[list[dict], int]:
+    """Merge published copies of one flight (raw container + converted CSV)."""
+    kept: list[dict] = []
+    collapsed = 0
+    for entry in entries:
+        index = next(
+            (position for position, item in enumerate(kept)
+             if same_magarrow_flight(item["feature"], entry["feature"])),
+            None,
+        )
+        if index is None:
+            kept.append(entry)
+            continue
+        collapsed += 1
+        keep, other = kept[index], entry
+        if _identity_rank(other) < _identity_rank(keep):
+            keep, other = other, keep
+        kept[index] = keep
+        other_feature = other["feature"]
+        if magarrow_priority(other_feature.get("properties", {}).get("sourceFile")) < magarrow_priority(
+            keep["feature"].get("properties", {}).get("sourceFile")
+        ):
+            adopt_magarrow_source(keep["feature"], other_feature)
+        else:
+            props = keep["feature"].setdefault("properties", {})
+            props["sourceFingerprints"] = _unique([
+                *feature_fingerprints(keep["feature"]), *feature_fingerprints(other_feature),
+            ])
+            props["sourceIdHashes"] = _unique([
+                *feature_id_hashes(keep["feature"]), *feature_id_hashes(other_feature),
+            ])
+    return kept, collapsed
+
+
+def sync_magarrow_tracks(
+    service,
+    sources: list[dict],
+    repo: Path,
+    workspace: Path,
+    max_size: int,
+    config_projects: list[dict] | None = None,
+) -> dict:
+    """Import MagArrow trajectories from every licence and publish them per project.
+
+    Each Drive file is downloaded at most once: every published trajectory
+    remembers the hashed fingerprints of all copies of its flight. A new
+    trajectory is attributed to a licence from its own coordinates. Nergui
+    Undur keeps its dedicated layer and uchastik coverage; every other licence
+    is published in the multi-project track layer with the MagArrow sensor.
+    """
+    sources = list({item["id"]: item for item in sources if item.get("id")}.values())
+    data_dir = repo / "dist" / "data"
+    tracks_path = data_dir / "magarrow" / "actual-tracks.geojson"
+    coverage_path = data_dir / "magarrow" / "coverage-stats.json"
+    registry_path = data_dir / "datasets.json"
+    project_tracks_path = data_dir / "context" / "project-flight-tracks.geojson"
+    licences = load_licence_index(data_dir / "context" / "licenses.geojson")
+
+    nergui_payload = json.loads(tracks_path.read_text(encoding="utf-8"))
+    project_payload = (
+        json.loads(project_tracks_path.read_text(encoding="utf-8"))
+        if project_tracks_path.exists() else None
+    )
+    entries = [{"feature": feature, "collection": "nergui"} for feature in nergui_payload.get("features", [])]
+    if project_payload:
+        entries.extend(
+            {"feature": feature, "collection": "project"}
+            for feature in project_payload.get("features", [])
+            if is_standalone_magarrow(feature)
+        )
+    entries, collapsed = collapse_magarrow_duplicates(entries)
+    known_fingerprints = {fp for entry in entries for fp in feature_fingerprints(entry["feature"])}
+    owner_by_id_hash = {
+        id_hash: entry for entry in entries for id_hash in feature_id_hashes(entry["feature"])
+    }
+
+    source_dir = workspace / "magarrow-sources"
+    parsed_dir = workspace / "nergui-magarrow-parsed"
+    raw_parsed_dir = workspace / "nergui-magarrow-raw-staging"
+    for folder in (source_dir, parsed_dir, raw_parsed_dir):
+        folder.mkdir(parents=True, exist_ok=True)
+
+    candidates = [item for item in sources if magarrow_acquisition_key(item.get("name", ""))]
+    summary = {
+        "discoveredSourceCount": len(sources),
+        "chosenAcquisitionCount": len(candidates),
+        "csvSourceCount": sum(1 for item in candidates if item.get("name", "").lower().endswith(".csv")),
+        "textSourceCount": sum(1 for item in candidates if item.get("name", "").lower().endswith(".txt")),
+        "magdataSourceCount": sum(1 for item in candidates if item.get("name", "").lower().endswith(".magdata")),
+        "retainedCount": 0,
+        "alternateSourceCount": 0,
+        "downloadedCount": 0,
+        "importedCount": 0,
+        "updatedCount": 0,
+        "skippedOversizeCount": 0,
+        "failedCount": 0,
+        "unassignedCount": 0,
+        "pathDateOverruledCount": 0,
+        "duplicateCollapsedCount": collapsed,
+        "licenceIndexCount": len(licences),
+    }
+
+    def entry_priority(entry: dict) -> int:
+        return magarrow_priority(entry["feature"].get("properties", {}).get("sourceFile"))
+
+    # Converted CSVs first: once a flight has its preferred source, the raw
+    # container of the same flight can be recognised without downloading it.
+    ordered = sorted(candidates, key=lambda item: (
+        magarrow_priority(item.get("name")),
+        nearest_path_date(item.get("relativePath", "")) or "9999-99-99",
+        item.get("relativePath", item.get("name", "")),
+    ))
+    for item in ordered:
+        source_name = item.get("name", "")
+        acquisition = magarrow_acquisition_key(source_name)
+        fingerprint = magarrow_source_fingerprint(item)
+        if fingerprint in known_fingerprints:
+            summary["retainedCount"] += 1
+            continue
+        id_hash = magarrow_source_id_hash(item)
+        priority = magarrow_priority(source_name)
+        path_day = nearest_path_date(item.get("relativePath", ""))
+        owner = owner_by_id_hash.get(id_hash)
+        if owner is None and path_day:
+            twins = [
+                entry for entry in entries
+                if clean(entry["feature"].get("properties", {}).get("date")) == path_day
+                and clean(entry["feature"].get("properties", {}).get("acquisition")).upper() == acquisition
+            ]
+            if twins and all(
+                feature_id_hashes(entry["feature"]) and entry_priority(entry) <= priority
+                for entry in twins
+            ):
+                remember_magarrow_source(twins[0]["feature"], fingerprint, id_hash)
+                known_fingerprints.add(fingerprint)
+                owner_by_id_hash[id_hash] = twins[0]
+                summary["alternateSourceCount"] += 1
+                continue
+        try:
+            size = int(item.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if size > max_size:
+            summary["skippedOversizeCount"] += 1
+            continue
+        local_path = source_dir / f"{item['id']}__{safe_filename(source_name)}"
+        try:
+            download_file(service, item, local_path)
+            summary["downloadedCount"] += 1
+            feature = parse_magarrow_source(item, local_path, source_dir, raw_parsed_dir, path_day, fingerprint)
+            feature.setdefault("properties", {})["sourceIdHash"] = id_hash
+            if settle_magarrow_date(feature, path_day):
+                summary["pathDateOverruledCount"] += 1
+        except Exception as error:
+            summary["failedCount"] += 1
+            status = getattr(getattr(error, "resp", None), "status", None)
+            print(
+                "::warning::MagArrow source import failed "
+                f"(acquisition={acquisition}, error={type(error).__name__}, status={status})"
+            )
+            continue
+        known_fingerprints.add(fingerprint)
+        match = owner or next(
+            (entry for entry in entries if same_magarrow_flight(entry["feature"], feature)),
+            None,
+        )
+        if match is not None:
+            match_props = match["feature"].get("properties", {})
+            legacy = not match_props.get("sourceIdHash")
+            replaces = (
+                priority < entry_priority(match)
+                or match_props.get("sourceIdHash") == id_hash
+                or (legacy and priority <= entry_priority(match))
+            )
+            if replaces:
+                adopt_magarrow_source(match["feature"], feature)
+                summary["updatedCount"] += 1
+            else:
+                remember_magarrow_source(match["feature"], fingerprint, id_hash)
+                summary["alternateSourceCount"] += 1
+            owner_by_id_hash[id_hash] = match
+            continue
+        feature["properties"]["sourceFingerprints"] = [fingerprint]
+        feature["properties"]["sourceIdHashes"] = [id_hash]
+        licence = assign_licence(feature.get("geometry", {}).get("coordinates"), licences)
+        if licences and licence is None:
+            summary["unassignedCount"] += 1
+            print(f"::notice::MagArrow acquisition {acquisition} lies outside every known licence; not published")
+            continue
+        if licence is None or licence["code"] == NERGUI_LICENCE:
+            entry = {"feature": feature, "collection": "nergui"}
+        else:
+            project = magarrow_project_for_licence(licence, config_projects)
+            entry = {"feature": project_magarrow_feature(feature, project), "collection": "project"}
+        entries.append(entry)
+        owner_by_id_hash[id_hash] = entry
+        summary["importedCount"] += 1
+
+    summary["partialImport"] = bool(summary["failedCount"] or summary["skippedOversizeCount"])
+    if summary["partialImport"]:
+        # Publish every successfully parsed acquisition. A transient Drive,
+        # download or parser failure must not discard the rest; sources that
+        # failed have no remembered fingerprint and are retried next run.
+        print(
+            "::warning::MagArrow sync completed partially "
+            f"(failed={summary['failedCount']}, oversize={summary['skippedOversizeCount']})"
+        )
+
+    nergui_features = [entry["feature"] for entry in entries if entry["collection"] == "nergui"]
+    for feature in nergui_features:
+        feature.get("properties", {}).pop("sourceUrl", None)
+        magarrow.write_feature(feature, parsed_dir)
+    # The published base layers use plural filenames. Keep these paths aligned
+    # with the repository rather than the singular names used by early fixtures.
+    magarrow.build(
+        parsed_dir,
+        data_dir / "base" / "licenses.geojson",
+        data_dir / "base" / "uchastics.geojson",
+        tracks_path,
+        coverage_path,
+    )
+
+    project_features = sorted(
+        (entry["feature"] for entry in entries if entry["collection"] == "project"),
+        key=lambda feature: (
+            feature["properties"].get("projectKey", ""),
+            feature["properties"].get("date", ""),
+            feature["id"],
+        ),
+    )
+    if project_payload is not None or project_features:
+        payload = project_payload or {
+            "type": "FeatureCollection", "name": "Verified project flight trajectories",
+            "project": "Multi-project operations", "scope": "project_operations",
+            "dataType": "actual_flight_track", "featureCount": 0, "features": [],
+        }
+        payload["features"] = [
+            feature for feature in payload.get("features", []) if not is_standalone_magarrow(feature)
+        ] + project_features
+        payload["featureCount"] = len(payload["features"])
+        project_tracks_path.parent.mkdir(parents=True, exist_ok=True)
+        project_tracks_path.write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8",
+        )
+
+    nergui_dates = sorted({
+        feature.get("properties", {}).get("date")
+        for feature in nergui_features
+        if feature.get("properties", {}).get("date")
+    })
+    by_project: dict[str, dict] = {}
+    for entry in entries:
+        props = entry["feature"].get("properties", {})
+        key = "nergui-undur" if entry["collection"] == "nergui" else props.get("projectKey", "unknown")
+        stats = by_project.setdefault(key, {"acquisitionCount": 0, "dateTo": None})
+        stats["acquisitionCount"] += 1
+        if props.get("date") and (stats["dateTo"] is None or props["date"] > stats["dateTo"]):
+            stats["dateTo"] = props["date"]
+    summary.update({
+        "publishedAcquisitionCount": len(nergui_features),
+        "publishedDateCount": len(nergui_dates),
+        "dateFrom": nergui_dates[0] if nergui_dates else None,
+        "dateTo": nergui_dates[-1] if nergui_dates else None,
+        "publishedByProject": dict(sorted(by_project.items())),
+    })
+    update_nergui_registry(registry_path, len(nergui_features), len(nergui_dates))
+    return summary
+
+
 def sync_nergui_magarrow(
     service,
     root_folder_id: str | None,
@@ -987,173 +1677,12 @@ def sync_nergui_magarrow(
     max_depth: int,
     max_size: int,
     additional_sources: list[dict] | None = None,
+    config_projects: list[dict] | None = None,
 ) -> dict:
+    """Tree-scan the configured Nergui root, then sync MagArrow for all licences."""
     sources = find_nergui_magarrow_sources(service, root_folder_id, max_depth) if root_folder_id else []
     sources.extend(additional_sources or [])
-    sources = list({item["id"]: item for item in sources}.values())
-    by_session: dict[tuple[str, str], dict] = {}
-    for item in sources:
-        acquisition = magarrow_acquisition_key(item.get("name", ""))
-        if not acquisition:
-            continue
-        source_day = source_date_from_path(item.get("relativePath", "")) or ""
-        session = (source_day, acquisition)
-        current = by_session.get(session)
-        suffix = Path(item.get("name", "")).suffix.lower()
-        candidate_priority = {".csv": 0, ".txt": 1, ".magdata": 2}.get(suffix, 9)
-        current_priority = (
-            {".csv": 0, ".txt": 1, ".magdata": 2}.get(
-                Path(current.get("name", "")).suffix.lower(), 9
-            ) if current else 9
-        )
-        if current is None or candidate_priority < current_priority or (
-            candidate_priority == current_priority
-            and item.get("modifiedTime", "") > current.get("modifiedTime", "")
-        ):
-            by_session[session] = item
-
-    tracks_path = repo / "dist" / "data" / "magarrow" / "actual-tracks.geojson"
-    coverage_path = repo / "dist" / "data" / "magarrow" / "coverage-stats.json"
-    registry_path = repo / "dist" / "data" / "datasets.json"
-    current_payload = json.loads(tracks_path.read_text(encoding="utf-8"))
-    features_by_session = {
-        magarrow_session_key(
-            feature.get("properties", {}).get("date"),
-            feature.get("properties", {}).get("acquisition", ""),
-        ): feature
-        for feature in current_payload.get("features", [])
-        if magarrow_session_key(
-            feature.get("properties", {}).get("date"),
-            feature.get("properties", {}).get("acquisition", ""),
-        )
-    }
-    source_dir = workspace / "nergui-magarrow-sources"
-    parsed_dir = workspace / "nergui-magarrow-parsed"
-    raw_parsed_dir = workspace / "nergui-magarrow-raw-staging"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    parsed_dir.mkdir(parents=True, exist_ok=True)
-    raw_parsed_dir.mkdir(parents=True, exist_ok=True)
-    summary = {
-        "discoveredSourceCount": len(sources),
-        "chosenAcquisitionCount": len(by_session),
-        "csvSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".csv")),
-        "textSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".txt")),
-        "magdataSourceCount": sum(1 for item in by_session.values() if item.get("name", "").lower().endswith(".magdata")),
-        "retainedCount": 0,
-        "downloadedCount": 0,
-        "importedCount": 0,
-        "updatedCount": 0,
-        "skippedOversizeCount": 0,
-        "failedCount": 0,
-    }
-    for session, item in sorted(by_session.items()):
-        source_day, acquisition = session
-        existing = features_by_session.get(session)
-        properties = existing.get("properties", {}) if existing else {}
-        fingerprint = magarrow_source_fingerprint(item)
-        same_source = properties.get("sourceFingerprint") == fingerprint
-        if existing and (same_source or not properties.get("sourceFingerprint")):
-            summary["retainedCount"] += 1
-            continue
-        try:
-            size = int(item.get("size") or 0)
-        except (TypeError, ValueError):
-            size = 0
-        if size > max_size:
-            summary["skippedOversizeCount"] += 1
-            continue
-        source_name = item.get("name", "")
-        local_name = f"{item['id']}__{safe_filename(source_name)}"
-        local_path = source_dir / local_name
-        try:
-            download_file(service, item, local_path)
-            summary["downloadedCount"] += 1
-            if source_name.lower().endswith(".csv"):
-                try:
-                    feature = magarrow.parse_10hz_csv(
-                        local_path,
-                        source_name=source_name,
-                        source_fingerprint=fingerprint,
-                    )
-                except ValueError:
-                    feature = magarrow.parse_coordinate_table(
-                        local_path,
-                        source_name=source_name,
-                        fallback_date=source_day or None,
-                        source_fingerprint=fingerprint,
-                    )
-            elif source_name.lower().endswith(".txt"):
-                feature = magarrow.parse_coordinate_table(
-                    local_path,
-                    source_name=source_name,
-                    fallback_date=source_day or None,
-                    source_fingerprint=fingerprint,
-                )
-            else:
-                source_date_value = source_day or source_date_from_path(item.get("relativePath", ""))
-                if not source_date_value:
-                    raise ValueError("raw MagArrow source has no verified date")
-                dated_path = source_dir / f"{source_date_value}__{safe_filename(source_name)}"
-                local_path.replace(dated_path)
-                # parse_file writes its intermediate JSON. Keep that staging
-                # output separate from parsed_dir, which is rebuilt below with
-                # exactly one canonical feature per acquisition. Mixing the
-                # two directories duplicates every raw .magdata acquisition.
-                parsed_path = magarrow.parse_file(dated_path, raw_parsed_dir)
-                feature = json.loads(parsed_path.read_text(encoding="utf-8"))
-                feature["properties"].update({
-                    "sourceFile": source_name,
-                    "sourceFingerprint": fingerprint,
-                })
-            actual_session = magarrow_session_key(
-                feature.get("properties", {}).get("date"), acquisition
-            )
-            if actual_session != session and source_day:
-                raise ValueError("source path date does not match trajectory date")
-            features_by_session[actual_session or session] = feature
-            summary["updatedCount" if existing else "importedCount"] += 1
-        except Exception as error:
-            summary["failedCount"] += 1
-            status = getattr(getattr(error, "resp", None), "status", None)
-            print(
-                "::warning::Nergui Undur MagArrow source import failed "
-                f"(acquisition={acquisition}, error={type(error).__name__}, status={status})"
-            )
-
-    summary["partialImport"] = bool(
-        summary["failedCount"] or summary["skippedOversizeCount"]
-    )
-    if summary["partialImport"]:
-        # Preserve and publish every successfully parsed acquisition. A
-        # transient Drive/download/parser failure must not discard an hour of
-        # valid work; missing sources have no fingerprint in the published
-        # layer and are retried automatically by the next scheduled run.
-        print(
-            "::warning::Nergui Undur MagArrow sync completed partially "
-            f"(failed={summary['failedCount']}, oversize={summary['skippedOversizeCount']})"
-        )
-
-    for feature in features_by_session.values():
-        feature.get("properties", {}).pop("sourceUrl", None)
-        magarrow.write_feature(feature, parsed_dir)
-    # The published base layers use plural filenames. Keep these paths aligned
-    # with the repository rather than the singular names used by early fixtures.
-    licence_path = repo / "dist" / "data" / "base" / "licenses.geojson"
-    uchastik_path = repo / "dist" / "data" / "base" / "uchastics.geojson"
-    magarrow.build(parsed_dir, licence_path, uchastik_path, tracks_path, coverage_path)
-    dates = sorted({
-        feature.get("properties", {}).get("date")
-        for feature in features_by_session.values()
-        if feature.get("properties", {}).get("date")
-    })
-    summary.update({
-        "publishedAcquisitionCount": len(features_by_session),
-        "publishedDateCount": len(dates),
-        "dateFrom": dates[0] if dates else None,
-        "dateTo": dates[-1] if dates else None,
-    })
-    update_nergui_registry(registry_path, len(features_by_session), len(dates))
-    return summary
+    return sync_magarrow_tracks(service, sources, repo, workspace, max_size, config_projects)
 
 
 def run(command: list[str], cwd: Path) -> None:
@@ -1165,8 +1694,8 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     projects = config.get("projects", [])
     required_keys = {"hetsuu-hutul", "artsat", "buduunkhad", "nergui-undur"}
-    if {item.get("key") for item in projects} != required_keys:
-        raise ValueError("drive-sync-sources.json must configure exactly the four project trackers")
+    if not required_keys.issubset({item.get("key") for item in projects}):
+        raise ValueError("drive-sync-sources.json must configure the four core project trackers")
     if workspace.exists():
         shutil.rmtree(workspace)
     workbooks_dir = workspace / "workbooks"
@@ -1205,6 +1734,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         print("::notice::NERGUI_UNDUR_RAW_ROOT_FOLDER_ID is not configured; Raw Data sensor classification skipped.")
     project_root_sources: dict[str, list[dict]] = {}
     project_root_summaries: dict[str, dict] = {}
+    root_magarrow_sources: list[dict] = []
     for project in projects:
         project_key = project["key"]
         env_name = project.get("rootEnvVar") or f"{project_key.upper().replace('-', '_')}_ROOT_FOLDER_ID"
@@ -1219,6 +1749,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 int(config.get("projectRootDiscoveryDepth", 5)),
                 int(config.get("projectRootScanDepth", 8)),
                 int(config.get("rootMissionLookbackDays", 21)),
+                root_magarrow_sources,
             )
             project_root_sources[project_key] = sources
             project_root_summaries[project_key] = discovery
@@ -1229,8 +1760,20 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     max_depth = int(config.get("folderScanDepth", 2))
     mission_lookback_days = int(config.get("missionFolderLookbackDays", 21))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
+    magarrow_sources = list(magarrow_archive_tracks) + root_magarrow_sources
+    magarrow_search_summary = None
+    if config.get("magArrowDriveSearch", True):
+        try:
+            searched, magarrow_search_summary = drive_search_magarrow_sources(service)
+            magarrow_sources.extend(searched)
+            print("MagArrow Drive-wide source search:")
+            print(json.dumps(magarrow_search_summary, ensure_ascii=False, indent=2))
+            if magarrow_search_summary.get("incompleteSearch"):
+                print("::warning::MagArrow Drive search reported incompleteSearch; some drives were not searched")
+        except Exception as error:
+            print(f"::warning::MagArrow Drive-wide search skipped ({type(error).__name__})")
     nergui_magarrow_summary = None
-    if raw_root_folder_id or magarrow_archive_tracks:
+    if raw_root_folder_id or magarrow_sources:
         nergui_magarrow_summary = sync_nergui_magarrow(
             service,
             raw_root_folder_id or None,
@@ -1238,9 +1781,11 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             workspace,
             int(config.get("nerguiMagArrowScanDepth", 8)),
             max_size,
-            magarrow_archive_tracks,
+            magarrow_sources,
+            projects,
         )
-        print("Nergui Undur MagArrow sync:")
+        nergui_magarrow_summary["driveSearch"] = magarrow_search_summary
+        print("MagArrow sync (all licences):")
         print(json.dumps(nergui_magarrow_summary, ensure_ascii=False, indent=2))
     campaigns = config.get("campaigns", [])
     workbook_paths = []
@@ -1538,15 +2083,28 @@ def step_summary(summary: dict) -> str:
     for name, present in sorted(secrets.items()):
         lines.append(f"| `{name}` | {'yes' if present else '**no**'} |")
     nergui = summary.get("nerguiUndurMagArrow")
-    lines += ["", "### Nergui Undur MagArrow", ""]
+    lines += ["", "### MagArrow (all licences)", ""]
     if nergui:
+        search = nergui.get("driveSearch") or {}
+        if search:
+            lines.append(
+                f"- driveSearch: sources `{search.get('sourceCount')}`, "
+                f"incompleteSearch `{search.get('incompleteSearch')}`"
+            )
         for key in (
             "discoveredSourceCount", "chosenAcquisitionCount", "csvSourceCount", "textSourceCount",
-            "magdataSourceCount", "retainedCount", "downloadedCount", "importedCount",
-            "updatedCount", "skippedOversizeCount", "failedCount",
+            "magdataSourceCount", "retainedCount", "alternateSourceCount", "downloadedCount",
+            "importedCount", "updatedCount", "skippedOversizeCount", "failedCount",
+            "unassignedCount", "pathDateOverruledCount", "duplicateCollapsedCount",
             "partialImport", "publishedAcquisitionCount", "publishedDateCount", "dateFrom", "dateTo",
         ):
-            lines.append(f"- {key}: `{nergui.get(key)}`")
+            if key in nergui:
+                lines.append(f"- {key}: `{nergui.get(key)}`")
+        by_project = nergui.get("publishedByProject") or {}
+        if by_project:
+            lines += ["", "| Project | MagArrow acquisitions | Latest date |", "| --- | --- | --- |"]
+            for project_key, stats in sorted(by_project.items()):
+                lines.append(f"| {project_key} | {stats.get('acquisitionCount', 0)} | {stats.get('dateTo') or '—'} |")
     else:
         lines.append("- not run (secret missing or discovery failed)")
     archive_summary = summary.get("nerguiUndurMagArrowArchive")
