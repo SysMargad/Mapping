@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -132,6 +132,37 @@ def tracker_rows(path: Path, project_key: str) -> list[dict]:
             "folderId": linked_folder,
         })
     return rows
+
+
+def recent_tracker_rows(rows: list[dict], lookback_days: int) -> list[dict]:
+    """Keep the latest rolling window for expensive linked-folder scans.
+
+    Project-root discovery still inventories historical coordinate sources.
+    The tracker hyperlinks are the reliable incremental path for new missions,
+    so the window is anchored to each tracker workbook's newest date rather
+    than to today's date (important for seasonal projects).
+    """
+    dated = []
+    for row in rows:
+        try:
+            dated.append(datetime.strptime(row.get("date") or "", "%Y-%m-%d").date())
+        except ValueError:
+            continue
+    if not dated or lookback_days < 0:
+        return list(rows)
+    cutoff = max(dated) - timedelta(days=lookback_days)
+    selected = []
+    for row in rows:
+        try:
+            row_date = datetime.strptime(row.get("date") or "", "%Y-%m-%d").date()
+        except ValueError:
+            # An undated linked mission cannot be assigned to a safe rolling
+            # window, so retain it for explicit validation instead of hiding it.
+            selected.append(row)
+            continue
+        if row_date >= cutoff:
+            selected.append(row)
+    return selected
 
 
 def build_drive_service():
@@ -1117,6 +1148,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         except Exception as error:
             print(f"::warning::{project_key} project-root discovery skipped: {error}")
     max_depth = int(config.get("folderScanDepth", 2))
+    mission_lookback_days = int(config.get("missionFolderLookbackDays", 21))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
     nergui_magarrow_summary = None
     if raw_root_folder_id or magarrow_archive_tracks:
@@ -1141,6 +1173,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         download_file(service, tracker_item, workbook_path)
         workbook_paths.append(workbook_path)
         rows = tracker_rows(workbook_path, project["key"])
+        linked_rows = recent_tracker_rows(rows, mission_lookback_days)
         project_source_dir = sources_dir / project["key"]
         project_source_dir.mkdir(parents=True)
         mapping_entries = []
@@ -1149,6 +1182,8 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         used_source_ids: set[str] = set()
         mismatched = []
         stage = {
+            "missionRowsEligible": len(linked_rows),
+            "missionRowsSkippedByLookback": len(rows) - len(linked_rows),
             "missionFoldersScanned": 0,
             "missionFoldersUnreadable": 0,
             "candidateFilesFound": 0,
@@ -1162,7 +1197,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
         def note(code: str) -> None:
             reasons[code] = reasons.get(code, 0) + 1
 
-        for row in rows:
+        for row in linked_rows:
             # Project-root discovery is an additional inventory, not a
             # replacement for the exact mission folder linked by the tracker.
             # Root trees commonly contain only processed/campaign branches,

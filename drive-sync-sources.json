@@ -26,6 +26,7 @@
     }
   ],
   "folderScanDepth": 2,
+  "missionFolderLookbackDays": 21,
   "nerguiMagArrowScanDepth": 8,
   "projectRootDiscoveryDepth": 5,
   "projectRootScanDepth": 8,

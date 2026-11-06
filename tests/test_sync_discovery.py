@@ -108,6 +108,22 @@ class HeaderProbeDiscovery(unittest.TestCase):
 
 
 class RawDataDiscovery(unittest.TestCase):
+    def test_linked_folder_scan_uses_tracker_relative_lookback(self):
+        rows = [
+            {"trackerId": "p:1", "date": "2026-09-01"},
+            {"trackerId": "p:2", "date": "2026-10-10"},
+            {"trackerId": "p:3", "date": "2026-10-31"},
+        ]
+        selected = sync.recent_tracker_rows(rows, 21)
+        self.assertEqual([row["trackerId"] for row in selected], ["p:2", "p:3"])
+
+    def test_linked_folder_scan_keeps_undated_rows_for_validation(self):
+        rows = [
+            {"trackerId": "p:1", "date": None},
+            {"trackerId": "p:2", "date": "2026-11-01"},
+        ]
+        self.assertEqual(len(sync.recent_tracker_rows(rows, 21)), 2)
+
     def test_dji_metadata_name_is_case_insensitive(self):
         self.assertEqual(Path("MetaData.CSV").name.lower(), sync.DJI_METADATA_FILE)
 
