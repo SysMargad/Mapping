@@ -832,6 +832,30 @@ def dji_mission_key(value: str | None) -> str:
     return comparable_name(clean(value))
 
 
+def dji_sidecar_candidates(index: dict[str, list[dict]], mission: str | None) -> list[dict]:
+    """Return MRK files for a tracker mission, including DJI's export suffixes.
+
+    The Checklist commonly stores the base mission name (for example
+    ``DJI_202610081311_001``), while the camera writes a longer filename such as
+    ``DJI_202610081311_001_DEMO-AWarehouse-A31shurp_Timestamp.MRK``.  Requiring
+    the two normalized strings to be identical silently loses those flights.
+    A sidecar whose key starts with the complete tracker key is still an exact
+    DJI mission match; unrelated missions cannot share the timestamp/counter
+    prefix.
+    """
+    key = dji_mission_key(mission)
+    if not key:
+        return []
+    exact = list(index.get(key, []))
+    if exact:
+        return exact
+    matches = []
+    for sidecar_key, items in index.items():
+        if sidecar_key.startswith(key):
+            matches.extend(items)
+    return matches
+
+
 def drive_search_dji_sidecars(service) -> tuple[dict[str, list[dict]], dict]:
     """Index every readable DJI ``<mission>_Timestamp.MRK`` by its mission name.
 
@@ -2027,7 +2051,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             if row["trackerId"] in mapped_tracker_ids or row["trackerId"] in published_tracker_ids:
                 continue
             candidates = [
-                item for item in dji_sidecars.get(dji_mission_key(row.get("mission")), [])
+                item for item in dji_sidecar_candidates(dji_sidecars, row.get("mission"))
                 if item.get("id") not in used_source_ids
             ]
             if not candidates:

@@ -69,6 +69,26 @@ class SidecarSearch(unittest.TestCase):
         ]
         self.assertEqual(sync.choose_dji_sidecar(service, candidates, {})["id"], "y")
 
+    def test_tracker_base_name_matches_mrk_with_export_suffix(self):
+        index = {
+            sync.dji_mission_key("DJI_202610081311_001_DEMO-AWarehouse-A31shurp"): [
+                {"id": "artsat", "name": "DJI_202610081311_001_DEMO-AWarehouse-A31shurp_Timestamp.MRK"}
+            ],
+            sync.dji_mission_key("DJI_202610081312_002_OTHER"): [
+                {"id": "other", "name": "DJI_202610081312_002_OTHER_Timestamp.MRK"}
+            ],
+        }
+        matches = sync.dji_sidecar_candidates(index, "DJI_202610081311_001")
+        self.assertEqual([item["id"] for item in matches], ["artsat"])
+
+    def test_exact_sidecar_match_wins_over_longer_prefix_copy(self):
+        key = sync.dji_mission_key("DJI_202611011528_043_URTIINGOLL3BWAYPOINTDRAFTHOLD")
+        index = {
+            key: [{"id": "exact"}],
+            key + "copy": [{"id": "copy"}],
+        }
+        self.assertEqual(sync.dji_sidecar_candidates(index, key), [{"id": "exact"}])
+
     @unittest.skipUnless(HAS_OPENPYXL, "openpyxl is not installed")
     def test_unlinked_tracker_rows_are_available_to_the_search(self):
         from openpyxl import Workbook
