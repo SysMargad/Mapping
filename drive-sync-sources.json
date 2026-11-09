@@ -5,28 +5,32 @@
       "licence": "XV-022905",
       "trackerFileId": "1XvKLs9QCgvIjHjQbXlV7thqPu0HdLIae",
       "workbookName": "Hetsuu_Hutul_Drone_Project_Tracker.xlsx",
-      "rootEnvVar": "HETSUU_HUTUL_ROOT_FOLDER_ID"
+      "rootEnvVar": "HETSUU_HUTUL_ROOT_FOLDER_ID",
+      "rootFolderId": "1Qm1HxsTCKGQAkdfVV5-TcoUlR46mFuDc"
     },
     {
       "key": "artsat",
       "licence": "XV-021395",
       "trackerFileId": "1dbk0R5iHgwgPfa8gT25wN-NhtOVLjQUZ",
       "workbookName": "Artsat_Drone_Project_Tracker.xlsx",
-      "rootEnvVar": "ARTSAT_ROOT_FOLDER_ID"
+      "rootEnvVar": "ARTSAT_ROOT_FOLDER_ID",
+      "rootFolderId": "1Z8oVhYl3tZESLbq9LOjmJVKT9NRbUtnJ"
     },
     {
       "key": "buduunkhad",
       "licence": "XV-023222",
       "trackerFileId": "1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz",
       "workbookName": "Buduunkhad_Drone_Project_Tracker.xlsx",
-      "rootEnvVar": "BUDUUNKHAD_ROOT_FOLDER_ID"
+      "rootEnvVar": "BUDUUNKHAD_ROOT_FOLDER_ID",
+      "rootFolderId": "1pEWWfa6vuT2Bd-LMizqm7VKGtFqNjbZH"
     },
     {
       "key": "nergui-undur",
       "licence": "XV-023099",
       "trackerFileId": "18zky2dhmLpBwOXWBLPFmHdT5QoqndiWk",
       "workbookName": "Nergui_undur_Drone_Project_Tracker.xlsx",
-      "rootEnvVar": "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID"
+      "rootEnvVar": "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID",
+      "rootFolderId": "1nJYGTJe4sHJ3ePQcvljJ4esGACxY6iNO"
     }
   ],
   "folderScanDepth": 2,
