@@ -1,6 +1,6 @@
 {
-  "version": "2026-11-10.89",
-  "updated": "2026-11-10",
+  "version": "2026-11-11.90",
+  "updated": "2026-11-11",
   "datasets": {
     "registry": "./data/datasets.json",
     "base-licence": "./data/base/licenses.geojson",
@@ -27,8 +27,8 @@
     "base-licence-context": "a66a54138766d058",
     "base-survey-boundaries": "d09a3752dd958ebd",
     "context-hetsuu-hutul-dwg": "368535dce5450557",
-    "context-project-trackers": "4f970badb48b3e2d",
-    "context-project-control-points": "35ad00326652130f",
+    "context-project-trackers": "828b0ea821f0ab6e",
+    "context-project-control-points": "a0f0ea57290743be",
     "context-project-flight-tracks": "229def1475ea2abc",
     "context-project-flight-coverage": "af8e59362873a533",
     "context-project-campaign-tracks": "29cb44aed2f0db68",
