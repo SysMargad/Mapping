@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-12.94",
+  "version": "2026-11-12.95",
   "updated": "2026-11-12",
   "datasets": {
     "registry": "./data/datasets.json",
@@ -27,10 +27,10 @@
     "base-licence-context": "a66a54138766d058",
     "base-survey-boundaries": "d09a3752dd958ebd",
     "context-hetsuu-hutul-dwg": "368535dce5450557",
-    "context-project-trackers": "a21a121e2b0d4155",
+    "context-project-trackers": "3a9ce718041a9306",
     "context-project-control-points": "4434eab51fe47e82",
-    "context-project-flight-tracks": "27558d163cf9519b",
-    "context-project-flight-coverage": "af8e59362873a533",
+    "context-project-flight-tracks": "3c494e0fc62369e7",
+    "context-project-flight-coverage": "129fd7bfec71fcd7",
     "context-project-campaign-tracks": "29cb44aed2f0db68",
     "magarrow-mission-plans": "c048af9d5e81c37d",
     "magarrow-actual-tracks": "eb51c063cbeed175",
