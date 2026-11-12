@@ -38,7 +38,7 @@
   "nerguiMagArrowScanDepth": 8,
   "projectRootDiscoveryDepth": 5,
   "projectRootScanDepth": 8,
-  "rootMissionLookbackDays": 21,
+  "rootMissionLookbackDays": 60,
   "maxSourceSizeBytes": 104857600,
   "magArrowDriveSearch": true,
   "djiSidecarDriveSearch": true,
