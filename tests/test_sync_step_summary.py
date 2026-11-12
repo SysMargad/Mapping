@@ -17,6 +17,9 @@ SUMMARY = {
         "NERGUI_UNDUR_RAW_ROOT_FOLDER_ID": True,
     },
     "projectRootDroneSources": {"hetsuu-hutul": {
+        "rootConfiguredBy": "config",
+        "rootReadable": True,
+        "rootIsFolder": True,
         "matchedBranchCount": 1,
         "scannedFolderCount": 39,
         "inspectedFileCount": 214,
@@ -80,9 +83,26 @@ class StepSummary(unittest.TestCase):
         self.assertIn("`NERGUI_UNDUR_RAW_ROOT_FOLDER_ID` | yes", self.text)
 
     def test_discovery_counters_are_reported(self):
-        for token in ("scannedFolderCount", "inspectedFileCount", "headerProbesUsed",
+        for token in ("rootConfiguredBy", "rootReadable", "rootIsFolder",
+                      "scannedFolderCount", "inspectedFileCount", "headerProbesUsed",
                       "coordinateSourceCount", "discoveryDecisions"):
             self.assertIn(token, self.text)
+
+    def test_root_access_failure_is_reported_without_folder_identity(self):
+        summary = {
+            "projectRootDroneSources": {
+                "artsat": {
+                    "rootConfiguredBy": "config",
+                    "rootReadable": False,
+                    "rootIsFolder": False,
+                    "rootAccessError": "HttpError",
+                }
+            }
+        }
+        text = sync.step_summary(summary)
+        self.assertIn("rootReadable: `False`", text)
+        self.assertIn("rootAccessError: `HttpError`", text)
+        self.assertNotIn("private-folder-id", text)
 
     def test_nergui_magarrow_import_counts_are_reported(self):
         for token in ("chosenAcquisitionCount", "downloadedCount", "importedCount",

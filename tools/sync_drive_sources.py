@@ -1889,9 +1889,36 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     for project in projects:
         project_key = project["key"]
         env_name = project.get("rootEnvVar") or f"{project_key.upper().replace('-', '_')}_ROOT_FOLDER_ID"
-        root_folder_id = os.environ.get(env_name, "").strip() or clean(project.get("rootFolderId"))
+        env_root_folder_id = os.environ.get(env_name, "").strip()
+        root_folder_id = env_root_folder_id or clean(project.get("rootFolderId"))
         if not root_folder_id:
             print(f"::notice::{project_key} has no project root configured; root discovery skipped.")
+            continue
+        root_status = {
+            "rootConfiguredBy": "environment" if env_root_folder_id else "config",
+            "rootReadable": False,
+            "rootIsFolder": False,
+        }
+        try:
+            # A Drive files.list query against a folder the service account
+            # cannot read may return an empty result instead of a useful error.
+            # Probe the configured root directly so a sharing gap cannot look
+            # like a legitimately empty survey tree in the Actions summary.
+            root_item = metadata(service, root_folder_id)
+            root_status["rootReadable"] = True
+            root_status["rootIsFolder"] = root_item.get("mimeType") == FOLDER_MIME
+        except Exception as error:
+            root_status["rootAccessError"] = type(error).__name__
+            project_root_summaries[project_key] = root_status
+            print(
+                f"::warning::{project_key} configured project root is not readable by "
+                f"the Drive service account ({type(error).__name__}); share the root/Shared Drive "
+                "with GOOGLE_SERVICE_ACCOUNT_JSON.client_email"
+            )
+            continue
+        if not root_status["rootIsFolder"]:
+            project_root_summaries[project_key] = root_status
+            print(f"::warning::{project_key} configured project root is not a Drive folder")
             continue
         try:
             sources, discovery = find_drone_sources(
@@ -1903,10 +1930,24 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
                 root_magarrow_sources,
             )
             project_root_sources[project_key] = sources
-            project_root_summaries[project_key] = discovery
+            project_root_summaries[project_key] = {**root_status, **discovery}
             print(f"{project_key} project-root coordinate source discovery:")
-            print(json.dumps(discovery, ensure_ascii=False, indent=2))
+            print(json.dumps(project_root_summaries[project_key], ensure_ascii=False, indent=2))
+            if not discovery.get("matchedBranchCount"):
+                print(
+                    f"::warning::{project_key} project root is readable, but no drone/raw-data "
+                    "branch was discovered; verify that the configured ID points at the project root"
+                )
+            elif not discovery.get("coordinateSourceCount"):
+                print(
+                    f"::notice::{project_key} project root is readable, but no coordinate-bearing "
+                    "source was found in the configured scan window"
+                )
         except Exception as error:
+            project_root_summaries[project_key] = {
+                **root_status,
+                "rootDiscoveryError": type(error).__name__,
+            }
             print(f"::warning::{project_key} project-root discovery skipped: {error}")
     max_depth = int(config.get("folderScanDepth", 2))
     mission_lookback_days = int(config.get("missionFolderLookbackDays", 21))
@@ -2334,7 +2375,9 @@ def step_summary(summary: dict) -> str:
     if discoveries:
         for project_key, discovery in sorted(discoveries.items()):
             lines.append(f"#### {project_key}")
-            for key in ("matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
+            for key in ("rootConfiguredBy", "rootReadable", "rootIsFolder",
+                        "rootAccessError", "rootDiscoveryError",
+                        "matchedBranchCount", "scannedFolderCount", "inspectedFileCount",
                         "headerProbesUsed", "coordinateSourceCount", "recentMissionFolderCount",
                         "missionFolderCutoff", "dateFrom", "dateTo"):
                 lines.append(f"- {key}: `{discovery.get(key)}`")
