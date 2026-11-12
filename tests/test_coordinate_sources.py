@@ -62,6 +62,15 @@ class DetectColumns(unittest.TestCase):
     def test_tab_separated_header(self):
         self.assertTrue(cs.header_has_coordinates("Latitude\tLongitude\tTime\n49.1\t113.5\t09:00:00\n"))
 
+    def test_classic_mac_cr_line_endings_are_supported(self):
+        text = (
+            "Latitude,Longitude,Date,Time\r"
+            "49.1501,113.5002,2025-11-03,09:00:00\r"
+            "49.1502,113.5003,2025-11-03,09:00:01\r"
+        )
+        self.assertTrue(cs.header_has_coordinates(text))
+        self.assertEqual(len(cs.parse_table(text).points), 2)
+
 
 class PointTableRejection(unittest.TestCase):
     def test_gcp_table_is_not_a_trajectory(self):

@@ -146,7 +146,10 @@ def sniff_delimiter(sample: str) -> str:
 def read_header(text: str) -> list[str] | None:
     """Read the first non-empty row of a delimited text sample as a header."""
     delimiter = sniff_delimiter(text[:8192])
-    for row in csv.reader(io.StringIO(text), delimiter=delimiter):
+    # csv.reader expects files to be opened with newline="". Drive archives
+    # still contain classic-Mac CR-only exports; StringIO's default newline
+    # handling makes those raise "new-line character seen in unquoted field".
+    for row in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter):
         if any(str(cell).strip() for cell in row):
             return [str(cell) for cell in row]
     return None
@@ -325,7 +328,7 @@ def _float(value) -> float | None:
 def parse_table(text: str) -> ParsedTable:
     """Parse a delimited coordinate table. Raises ValueError when unusable."""
     delimiter = sniff_delimiter(text[:8192])
-    rows = csv.reader(io.StringIO(text), delimiter=delimiter)
+    rows = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
     header = None
     for row in rows:
         if any(str(cell).strip() for cell in row):
