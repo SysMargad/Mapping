@@ -299,6 +299,43 @@ class IncrementalSync(unittest.TestCase):
             self.assertTrue(summary["partialImport"])
 
 
+class ConfiguredMagArrowRoots(unittest.TestCase):
+    def setUp(self):
+        silence_stdout(self)
+        self._list_children = sync.list_children
+        self.addCleanup(lambda: setattr(sync, "list_children", self._list_children))
+
+    def test_explicit_roots_find_csv_and_report_gpkg_reference(self):
+        children = {
+            "raw": [
+                {"id": "artsat", "name": "Artsat", "mimeType": sync.FOLDER_MIME},
+            ],
+            "artsat": [
+                {"id": "day", "name": "2026.11.05", "mimeType": sync.FOLDER_MIME},
+            ],
+            "day": [
+                {"id": "csv", "name": "SRVY0-ACQU63-10Hz.csv", "mimeType": "text/csv"},
+                {"id": "plan", "name": "Artsat-1.kmz", "mimeType": "application/vnd.google-earth.kmz"},
+            ],
+            "processed": [
+                {"id": "gpkg", "name": "Artsat_MagArrow_points.gpkg", "mimeType": "application/octet-stream"},
+            ],
+        }
+        sync.list_children = lambda _service, folder_id: children.get(folder_id, [])
+
+        found, summary = sync.discover_magarrow_source_roots(None, [
+            {"label": "Artsat raw", "folderId": "raw", "scanDepth": 3},
+            {"label": "Artsat processed", "folderId": "processed", "scanDepth": 1, "referenceOnly": True},
+        ])
+
+        self.assertEqual([item["id"] for item in found], ["csv"])
+        self.assertEqual(found[0]["relativePath"], "Artsat raw/Artsat/2026.11.05/SRVY0-ACQU63-10Hz.csv")
+        self.assertEqual(found[0]["discoveredBy"], "configured-magarrow-root")
+        self.assertEqual(summary["configuredRootCount"], 2)
+        self.assertEqual(summary["trajectorySourceCount"], 1)
+        self.assertEqual(summary["referenceFileCount"], 1)
+
+
 NERGUI_POLYGON = [[[113.4, 49.0], [113.7, 49.0], [113.7, 49.3], [113.4, 49.3], [113.4, 49.0]]]
 ARTSAT_POLYGON = [[[92.46, 46.13], [92.52, 46.13], [92.52, 46.19], [92.46, 46.19], [92.46, 46.13]]]
 OTHER_POLYGON = [[[96.09, 45.21], [96.23, 45.21], [96.23, 45.26], [96.09, 45.26], [96.09, 45.21]]]

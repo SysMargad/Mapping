@@ -41,6 +41,24 @@
   "rootMissionLookbackDays": 60,
   "maxSourceSizeBytes": 104857600,
   "magArrowDriveSearch": true,
+  "magArrowSourceRoots": [
+    {
+      "label": "Artsat MagArrow raw acquisitions",
+      "folderId": "1bEkYaYSvokovMoUBjuzreyp-ImnVgy-k",
+      "scanDepth": 3
+    },
+    {
+      "label": "Artsat MagArrow converted CSV",
+      "folderId": "1vrQU2BZXG9jWZm1qvPtRDZkPjouqz-PP",
+      "scanDepth": 1
+    },
+    {
+      "label": "Artsat MagArrow processed GPKG",
+      "folderId": "1_OsDlKaTwrBt2WjvLpINfVET1O4yMTC2",
+      "scanDepth": 1,
+      "referenceOnly": true
+    }
+  ],
   "djiSidecarDriveSearch": true,
   "magArrowLineArchive": {
     "folderId": "1s_-chplx5_9nkvh1Fs2Zj8AUiTKm3mOi",

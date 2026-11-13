@@ -322,6 +322,67 @@ def discover_magarrow_archive_sources(service, settings: dict) -> dict:
     return {"plans": plans, "tracks": tracks}
 
 
+def discover_magarrow_source_roots(service, settings: list[dict]) -> tuple[list[dict], dict]:
+    """Scan configured MagArrow folders without relying on Drive-wide search.
+
+    Project archives can be large enough for a Drive-wide search to time out or
+    return ``incompleteSearch``. Explicit roots keep the daily import reliable.
+    Coordinate-bearing CSV/TXT/MAGDATA files become trajectory candidates;
+    GPKG files are retained in the summary as processed reference products.
+    """
+    found: list[dict] = []
+    roots: list[dict] = []
+    for root in settings or []:
+        folder_id = clean(root.get("folderId"))
+        if not folder_id:
+            continue
+        label = clean(root.get("label")) or folder_id
+        max_depth = int(root.get("scanDepth", 2))
+        reference_only = bool(root.get("referenceOnly"))
+        queue = [(folder_id, "", 0)]
+        visited: set[str] = set()
+        source_count = 0
+        reference_files: list[str] = []
+        while queue:
+            current, relative, depth = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            for raw_item in list_children(service, current):
+                item = resolve_shortcut(service, raw_item)
+                name = clean(item.get("name"))
+                item_relative = f"{relative}/{name}".strip("/")
+                if item.get("mimeType") == FOLDER_MIME:
+                    if depth < max_depth:
+                        queue.append((item["id"], item_relative, depth + 1))
+                    continue
+                if Path(name).suffix.lower() == ".gpkg":
+                    reference_files.append(item_relative)
+                if reference_only or not MAGARROW_SOURCE_RE.search(name):
+                    continue
+                found.append({
+                    **item,
+                    "relativePath": f"{label}/{item_relative}",
+                    "discoveredBy": "configured-magarrow-root",
+                })
+                source_count += 1
+        roots.append({
+            "label": label,
+            "folderId": folder_id,
+            "scannedFolderCount": len(visited),
+            "trajectorySourceCount": source_count,
+            "referenceFileCount": len(reference_files),
+            "referenceFiles": reference_files,
+            "referenceOnly": reference_only,
+        })
+    return found, {
+        "configuredRootCount": len(roots),
+        "trajectorySourceCount": len(found),
+        "referenceFileCount": sum(root["referenceFileCount"] for root in roots),
+        "roots": roots,
+    }
+
+
 def sync_magarrow_archive_plans(
     service, plan_sources: list[dict], repo: Path, workspace: Path
 ) -> dict:
@@ -1952,7 +2013,22 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
     max_depth = int(config.get("folderScanDepth", 2))
     mission_lookback_days = int(config.get("missionFolderLookbackDays", 21))
     max_size = int(config.get("maxSourceSizeBytes", 100 * 1024 * 1024))
-    magarrow_sources = list(magarrow_archive_tracks) + root_magarrow_sources
+    explicit_magarrow_sources: list[dict] = []
+    explicit_magarrow_summary = None
+    if config.get("magArrowSourceRoots"):
+        try:
+            explicit_magarrow_sources, explicit_magarrow_summary = discover_magarrow_source_roots(
+                service, config["magArrowSourceRoots"]
+            )
+            print("Configured MagArrow source roots:")
+            print(json.dumps(explicit_magarrow_summary, ensure_ascii=False, indent=2))
+        except Exception as error:
+            print(f"::warning::Configured MagArrow source-root scan skipped ({type(error).__name__})")
+    magarrow_sources = (
+        list(magarrow_archive_tracks)
+        + root_magarrow_sources
+        + explicit_magarrow_sources
+    )
     magarrow_search_summary = None
     if config.get("magArrowDriveSearch", True):
         try:
@@ -1978,6 +2054,7 @@ def sync(config_path: Path, repo: Path, workspace: Path) -> dict:
             config.get("campaigns", []),
         )
         nergui_magarrow_summary["driveSearch"] = magarrow_search_summary
+        nergui_magarrow_summary["configuredSourceRoots"] = explicit_magarrow_summary
         print("MagArrow sync (all licences):")
         print(json.dumps(nergui_magarrow_summary, ensure_ascii=False, indent=2))
     dji_sidecars: dict[str, list[dict]] = {}
