@@ -1,23 +1,10 @@
 name: Sync Google Drive survey data
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/drive-sync.yml"
-      - "drive-sync-sources.json"
-      - "tools/coordinate_sources.py"
-      - "tools/export_magdata_trajectories.py"
-      - "tools/export_magarrow_planned_lines.py"
-      - "tools/export_project_flight_coverage.py"
-      - "tools/export_project_trackers.py"
-      - "tools/import_campaign_tracks.py"
-      - "tools/import_project_flight_tracks.py"
-      - "tools/sync_drive_sources.py"
-      - "tests/**"
-  schedule:
-    # GitHub cron is UTC. 00:00 UTC = 08:00 Asia/Shanghai.
-    - cron: "0 0 * * *"
+  # Daily sync now runs on the Windows workstation through
+  # tools/run_local_sync.ps1 and Google Drive for desktop. Keep this workflow
+  # only as an explicit fallback while GitHub-hosted runners experience TLS
+  # EOF failures when reading Drive.
   workflow_dispatch:
 
 permissions:

@@ -4,9 +4,29 @@ Nergui Undur төслийн суурь хил, sensor бүрийн баталг�
 
 Public URL: <https://sysmargad.github.io/Mapping/>
 
-## Өдөр тутмын Google Drive sync
+## Локал Google Drive sync
 
-`.github/workflows/drive-sync.yml` нь өдөр бүр **08:00 Asia/Shanghai** (`00:00 UTC`)-д GitHub Actions дээр ажиллана. OpenAI/Codex runtime ашиглахгүй. Workflow нь дөрвөн project tracker-ийг Drive API-аар read-only татаж, Checklist-ийн mission folder холбоосууд дотроос coordinate агуулсан `KMZ`, `MRK`, `KML`, `CSV`, `TXT` эх үүсвэрийг mission/огноотой нь шалгаад trajectory болон coverage asset-ийг шинэчилнэ. Өөрчлөлт гарсан үед л `main` руу commit хийж, Pages deployment-ийг өдөөдөг.
+Drive sync-ийг GitHub-hosted runner дээр биш, Google Drive for desktop суусан энэ Windows компьютер дээр ажиллуулна. Repository-н үндсэн хавтас дахь `RUN_LOCAL_SYNC.cmd`-ийг давхар товшиход `G:` drive дахь Арцатын хамгийн шинэ processed MagArrow GPKG-г уншиж, trajectory болон coverage-г шинэчилж, бүх test/validation-ийг ажиллуулаад өөрчлөлт байвал `main` руу нийтэлнэ. GitHub Pages deployment нь уг commit-оос автоматаар эхэлнэ.
+
+PowerShell-оос зөвхөн шалгаж, нийтлэхгүй ажиллуулах:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\run_local_sync.ps1
+```
+
+Шалгаж дуусаад шинэ дата байвал нийтлэх:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\run_local_sync.ps1 -Publish
+```
+
+Лог `%LOCALAPPDATA%\Mapping\logs` дотор хадгалагдана. Google Drive for desktop ажиллаж, `G:` drive бүрэн sync болсон байх шаардлагатай. `.github/workflows/drive-sync.yml` нь TLS EOF асуудал арилсны дараа хэрэглэх гараар асаах нөөц workflow бөгөөд schedule/push trigger-гүй.
+
+`INSTALL_LOCAL_SYNC_TASK.cmd`-ийг нэг удаа ажиллуулбал Windows Task Scheduler-д **Mapping Local Drive Sync** task үүсэж, өдөр бүр 08:00-д дээрх publish sync-ийг ажиллуулна. Тухайн цагт компьютер унтарсан байсан бол дараагийн боломжтой үед ажиллана; хэрэглэгч Windows-д нэвтэрсэн, Google Drive for desktop холбогдсон байх ёстой.
+
+## GitHub Actions нөөц sync
+
+Нөөц workflow нь дөрвөн project tracker-ийг Drive API-аар read-only татаж, Checklist-ийн mission folder холбоосууд дотроос coordinate агуулсан `KMZ`, `MRK`, `KML`, `CSV`, `TXT` эх үүсвэрийг mission/огноотой нь шалгаад trajectory болон coverage asset-ийг шинэчилнэ. Одоогоор зөвхөн `workflow_dispatch`-аар гараар ажиллана.
 
 Нэг удаагийн тохиргоо:
 
