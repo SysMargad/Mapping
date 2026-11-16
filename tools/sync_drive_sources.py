@@ -83,6 +83,17 @@ PROBE_BYTES = 64 * 1024
 MAX_HEADER_PROBES = 400
 TRANSIENT_DRIVE_STATUSES = {429, 500, 502, 503, 504}
 DRIVE_API_MAX_ATTEMPTS = 6
+TRANSIENT_NETWORK_ERROR_NAMES = {
+    "BrokenPipeError",
+    "ConnectionAbortedError",
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+    "ReadTimeoutError",
+    "RemoteDisconnected",
+    "ServerNotFoundError",
+    "SSLError",
+    "TimeoutError",
+}
 
 
 def clean(value) -> str:
@@ -202,6 +213,38 @@ def build_drive_service():
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
+def error_chain(error: BaseException):
+    """Yield an exception and its explicit/implicit causes once each."""
+    seen = set()
+    current = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+def is_transient_drive_error(error: BaseException) -> bool:
+    status = getattr(getattr(error, "resp", None), "status", None)
+    if status in TRANSIENT_DRIVE_STATUSES:
+        return True
+    if status is not None:
+        return False
+    return any(
+        isinstance(item, (ConnectionError, TimeoutError))
+        or type(item).__name__ in TRANSIENT_NETWORK_ERROR_NAMES
+        for item in error_chain(error)
+    )
+
+
+def public_error_message(error: BaseException) -> str:
+    """Return a bounded GitHub-annotation message without Drive IDs or URLs."""
+    message = clean(error) or "no exception message"
+    message = re.sub(r"https?://\S+", "<redacted-url>", message)
+    message = re.sub(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])", "<redacted-id>", message)
+    message = re.sub(r"[\r\n]+", " ", message)[:500]
+    return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def execute_with_retry(request, *, max_attempts: int = DRIVE_API_MAX_ATTEMPTS, sleep_fn=time.sleep):
     """Execute a Drive request, retrying quota and transient server failures."""
     for attempt in range(1, max_attempts + 1):
@@ -209,7 +252,7 @@ def execute_with_retry(request, *, max_attempts: int = DRIVE_API_MAX_ATTEMPTS, s
             return request.execute()
         except Exception as error:
             status = getattr(getattr(error, "resp", None), "status", None)
-            if status not in TRANSIENT_DRIVE_STATUSES or attempt == max_attempts:
+            if not is_transient_drive_error(error) or attempt == max_attempts:
                 raise
             delay = min(16, 2 ** (attempt - 1))
             print(
@@ -2494,7 +2537,15 @@ def main() -> None:
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--step-summary", type=Path, help="Write a counts-only markdown summary here.")
     args = parser.parse_args()
-    summary = sync(args.config.resolve(), args.repo.resolve(), args.workspace.resolve())
+    try:
+        summary = sync(args.config.resolve(), args.repo.resolve(), args.workspace.resolve())
+    except Exception as error:
+        status = getattr(getattr(error, "resp", None), "status", None)
+        print(
+            f"::error title=Drive sync failed::{type(error).__name__} "
+            f"(status={status}): {public_error_message(error)}"
+        )
+        raise
     if args.step_summary:
         with args.step_summary.open("a", encoding="utf-8") as handle:
             handle.write(step_summary(summary))

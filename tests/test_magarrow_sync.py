@@ -151,6 +151,33 @@ class DriveSourceNames(unittest.TestCase):
             sync.execute_with_retry(request, sleep_fn=lambda _delay: None)
         self.assertEqual(request.calls, 1)
 
+    def test_transient_network_error_is_retried(self):
+        class Request:
+            calls = 0
+
+            def execute(self):
+                self.calls += 1
+                if self.calls < 3:
+                    raise ConnectionResetError("connection reset by peer")
+                return {"files": []}
+
+        request = Request()
+        delays = []
+        result = sync.execute_with_retry(request, sleep_fn=delays.append)
+        self.assertEqual(result, {"files": []})
+        self.assertEqual(request.calls, 3)
+        self.assertEqual(delays, [1, 2])
+
+    def test_public_error_message_redacts_urls_and_drive_ids(self):
+        error = RuntimeError(
+            "failed https://drive.google.com/drive/folders/1pEWWfa6vuT2Bd-LMizqm7VKGtFqNjbZH\nnext"
+        )
+        message = sync.public_error_message(error)
+        self.assertNotIn("drive.google.com", message)
+        self.assertNotIn("1pEWWfa6vuT2Bd-LMizqm7VKGtFqNjbZH", message)
+        self.assertNotIn("\n", message)
+        self.assertIn("<redacted-url>", message)
+
     def test_media_chunks_use_the_drive_retry_budget(self):
         class Downloader:
             retries = None
