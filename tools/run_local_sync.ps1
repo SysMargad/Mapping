@@ -22,7 +22,7 @@ function Resolve-Python {
     if ($command) {
         return $command.Source
     }
-    throw "Python 3 олдсонгүй. Codex runtime эсвэл Python 3 суулгана уу."
+    throw "Python 3 was not found. Install Python 3 or the Codex runtime."
 }
 
 function Invoke-Checked {
@@ -44,7 +44,7 @@ try {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
     if (-not $gpkg) {
-        throw "MagArrow GPKG олдсонгүй: $ArtsatMagArrowFolder"
+        throw "MagArrow GPKG was not found: $ArtsatMagArrowFolder"
     }
 
     Push-Location $repo
@@ -53,7 +53,7 @@ try {
         if ($Publish) {
             $dirty = @(git -C $repo -c "safe.directory=$safeRepo" status --porcelain)
             if ($dirty.Count -gt 0) {
-                throw "Repository-д хадгалаагүй өөрчлөлт байна. Эхлээд commit эсвэл stash хийнэ үү."
+                throw "The repository has uncommitted changes. Commit or stash them before publishing."
             }
             Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" fetch origin main
             Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" rebase origin/main
@@ -71,7 +71,7 @@ try {
         & git -C $repo -c "safe.directory=$safeRepo" diff --quiet -- dist/data
         $dataChanged = $LASTEXITCODE -ne 0
         if (-not $dataChanged) {
-            Write-Host "Шинэ дата алга. Нийтлэх өөрчлөлт үүссэнгүй."
+            Write-Host "No new data. Nothing to publish."
             exit 0
         }
 
@@ -80,14 +80,14 @@ try {
         Invoke-Checked $python tools/validate_data.py
 
         if (-not $Publish) {
-            Write-Host "Local preview шинэчлэгдсэн. Нийтлэх бол -Publish сонголт ашиглана уу."
+            Write-Host "Local preview updated. Use -Publish to publish it."
             exit 0
         }
 
         Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" add -- dist/data
         Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" commit -m "Sync local Google Drive survey data"
         Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" push origin HEAD:main
-        Write-Host "Амжилттай нийтэллээ. GitHub Pages deploy автоматаар эхэлнэ."
+        Write-Host "Published successfully. GitHub Pages deployment will start automatically."
     }
     finally {
         Pop-Location

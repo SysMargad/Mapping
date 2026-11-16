@@ -10,7 +10,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $syncScript = Join-Path $PSScriptRoot "run_local_sync.ps1"
 
 if (-not (Test-Path -LiteralPath $syncScript)) {
-    throw "Sync script олдсонгүй: $syncScript"
+    throw "Sync script not found: $syncScript"
 }
 
 $action = New-ScheduledTaskAction `
@@ -34,10 +34,10 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Google Drive Desktop-оос Mapping trajectory-г шалгаж GitHub Pages-д нийтэлнэ." `
+    -Description "Sync Mapping trajectories from Google Drive Desktop and publish to GitHub Pages." `
     -Force | Out-Null
 
 $task = Get-ScheduledTask -TaskName $TaskName
 $info = Get-ScheduledTaskInfo -TaskName $TaskName
-Write-Host "Task суулгалаа: $($task.TaskName)"
-Write-Host "Дараагийн ажиллах цаг: $($info.NextRunTime)"
+Write-Host "Installed task: $($task.TaskName)"
+Write-Host "Next run: $($info.NextRunTime)"
