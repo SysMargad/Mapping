@@ -6,7 +6,7 @@ Public URL: <https://sysmargad.github.io/Mapping/>
 
 ## Локал Google Drive sync
 
-Drive sync-ийг GitHub-hosted runner дээр биш, Google Drive for desktop суусан энэ Windows компьютер дээр ажиллуулна. Repository-н үндсэн хавтас дахь `RUN_LOCAL_SYNC.cmd`-ийг давхар товшиход `G:` drive дахь Арцатын хамгийн шинэ processed MagArrow GPKG-г уншиж, trajectory болон coverage-г шинэчилж, бүх test/validation-ийг ажиллуулаад өөрчлөлт байвал `main` руу нийтэлнэ. GitHub Pages deployment нь уг commit-оос автоматаар эхэлнэ.
+Drive sync-ийг GitHub-hosted runner дээр биш, Google Drive for desktop суусан энэ Windows компьютер дээр ажиллуулна. Repository-н үндсэн хавтас дахь `RUN_LOCAL_SYNC.cmd`-ийг давхар товшиход `G:` drive дахь **Хэцүү хөтөл, Арцат, Бүдүүн хад, Нэргүй-Өндөр** төслийн root-уудыг уншина. Tracker mission-тэй яг таарсан `metadata.csv`, `Timestamp.MRK`, `DJIFlightRecord KMZ/KML`, координаттай CSV/TXT-ээс хамгийн сайн эх үүсвэрийг сонгож trajectory-г шинэчилнэ; зураг файлыг нээхгүй, хуулахгүй. Арцатын processed MagArrow GPKG-г мөн шинэчилж, coverage, бүх test/validation-ийг ажиллуулаад өөрчлөлт байвал `main` руу нийтэлнэ. GitHub Pages deployment нь уг commit-оос автоматаар эхэлнэ.
 
 PowerShell-оос зөвхөн шалгаж, нийтлэхгүй ажиллуулах:
 

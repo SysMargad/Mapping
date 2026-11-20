@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$Publish,
+    [string]$DriveShortcutRoot = "G:\.shortcut-targets-by-id",
     [string]$ArtsatMagArrowFolder = "G:\.shortcut-targets-by-id\1_OsDlKaTwrBt2WjvLpINfVET1O4yMTC2\MagArrow_TMI_RTP"
 )
 
@@ -40,7 +41,8 @@ function Invoke-Checked {
 Start-Transcript -Path $logPath | Out-Null
 try {
     $python = Resolve-Python
-    $gpkg = Get-ChildItem -LiteralPath $ArtsatMagArrowFolder -File -Filter "*_MagArrow_TMI_RTP_points.gpkg" |
+    $gpkg = Get-ChildItem -LiteralPath $ArtsatMagArrowFolder -Filter "*_MagArrow_TMI_RTP_points.gpkg" |
+        Where-Object { -not $_.PSIsContainer } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
     if (-not $gpkg) {
@@ -59,6 +61,26 @@ try {
             Invoke-Checked git -C $repo -c "safe.directory=$safeRepo" rebase origin/main
         }
 
+        $trackerFiles = @(
+            (Join-Path $DriveShortcutRoot "1XvKLs9QCgvIjHjQbXlV7thqPu0HdLIae\Hetsuu_Hutul_Drone_Project_Tracker.xlsx"),
+            (Join-Path $DriveShortcutRoot "1dbk0R5iHgwgPfa8gT25wN-NhtOVLjQUZ\Artsat_Drone_Project_Tracker.xlsx"),
+            (Join-Path $DriveShortcutRoot "1DwydImVmcQvj7s4loVRk_4K9-VQ7szXz\Buduunkhad_Drone_Project_Tracker.xlsx"),
+            (Join-Path $DriveShortcutRoot "18zky2dhmLpBwOXWBLPFmHdT5QoqndiWk\Nergui_undur_Drone_Project_Tracker.xlsx")
+        )
+        foreach ($trackerFile in $trackerFiles) {
+            if (-not (Test-Path -LiteralPath $trackerFile)) {
+                throw "Tracker workbook is unavailable: $trackerFile"
+            }
+        }
+        Invoke-Checked $python tools/export_project_trackers.py `
+            @trackerFiles `
+            --licences dist/data/context/licenses.geojson `
+            --summary-output dist/data/context/project-trackers.json `
+            --points-output dist/data/context/project-control-points.geojson
+        Invoke-Checked $python tools/sync_local_drive_sources.py `
+            --repo . `
+            --drive-root $DriveShortcutRoot `
+            --report-dir $logRoot
         Write-Host "Artsat MagArrow source: $($gpkg.FullName)"
         Invoke-Checked $python tools/import_magarrow_gpkg.py --gpkg $gpkg.FullName --repo . --project-key artsat
         Invoke-Checked $python tools/export_project_flight_coverage.py `
